@@ -19,6 +19,26 @@ Format:
 
 ---
 
+## 2026-05-15 — Claude (Opus 4.7) — Session handoff at v0.1.0 Task 4
+
+**Slice:** v0.1.0 (Tasks 1–4 complete, Tasks 5–16 pending)
+
+**Done in this session:** v0.0.0 scaffolding (docs, rules, memory) → v0.1.0 Tasks 1–4 (backend skeleton, domain models, GitHub client, base ingestion). All on branch `feat/v0.1.0-backend-mvp`. 5 commits ahead of `main`. 10/10 tests pass. Ruff clean. No co-author trailers anywhere. Backend host locked: Vercel Functions (Fluid Compute).
+
+**Handoff for the next session:**
+- Branch: `feat/v0.1.0-backend-mvp` (already checked out)
+- Resume from: **v0.1.0 Task 5 — Ingestion: languages, profile README, external PRs**
+- Plan file: `docs/superpowers/plans/2026-05-15-v0.1.0-backend-mvp.md` (has a progress table at the top showing Tasks 1–4 done with their commits)
+- Rules: read `AGENTS.md` first. No co-author trailers. Update this log + `CHANGELOG.md` before any version bump.
+- Tooling verified: `uv 0.11.12`, `gh 2.89` (auth'd as Shaan-alpha with `gist, read:org, repo, user, workflow`), `python 3.13` host, project pinned to 3.12 via uv.
+- Recommended workflow next session: keep using subagent-driven-development per task (the v0.0.0 docs are written so a cold agent has everything it needs).
+
+**Why we stopped here:** Continuing all 12 remaining tasks in one long thread would have re-sent growing conversation context on every turn — expensive coordination overhead on the user's plan. The scaffold's whole purpose was to make sessions resumable; using that capability is the cost-effective move.
+
+**Next:** v0.1.0 Task 5 — `app/github/client.py` gains `list_languages` / `get_profile_readme` / `search_external_prs`; `ingest_profile` is extended to populate `Profile.languages`, `Profile.profile_readme_chars`, `Profile.external_prs_merged`, `Profile.external_reviews`. The plan file has the full TDD steps.
+
+---
+
 ## 2026-05-15 — Claude (Opus 4.7) — v0.1.0 Task 4: Ingestion — assemble a Profile
 
 **Slice:** v0.1.0 Task 4
