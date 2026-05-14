@@ -19,6 +19,33 @@ Format:
 
 ---
 
+## 2026-05-15 — Claude (Opus 4.7) — v0.1.0 Task 3: GitHub client
+
+**Slice:** v0.1.0 Task 3
+
+**Done:**
+- Wrote `backend/tests/github/test_client.py` first (2 respx-mocked tests covering `get_user` happy path against a real `gh api users/octocat` fixture and 403 secondary-rate-limit retry → 200) → confirmed `ModuleNotFoundError: No module named 'app.github.client'` → wrote `backend/app/github/client.py` (`GitHubClient` async context manager with `get_user`, `list_repos`, `graphql` methods and an internal `_request` loop that sleeps on `Retry-After` for 403 + "rate limit" responses) → confirmed `2 passed`.
+- Wrote `backend/app/github/queries.py` holding the `PINNED_REPOS` GraphQL query (6 pinned repos, primary language, README size).
+- Captured real GitHub fixture at `backend/tests/fixtures/github_responses/user_octocat.json` via `gh api users/octocat` (login=octocat, id=583231, account from 2011).
+- Full backend suite (`test_health` + `test_models` + `test_client`) green: `8 passed in 0.32s`.
+- `uv run ruff check .` clean.
+
+**Decisions:**
+- **Kept `http2=True` and added `h2` to runtime deps** (`uv add h2` → `h2==4.3.0`, `hpack==4.1.0`, `hyperframe==6.1.0`). The plan offered an out (drop HTTP/2 if h2 install was clunky), but `uv add` was a one-liner and HTTP/2 multiplexes the parallel REST calls ingestion will fan out (`get_user` + `list_repos` + GraphQL `pinned`). GitHub's API supports HTTP/2 well; the only cost is three small pure-Python deps.
+- **Renamed the loop variable in `_request` from `attempt` to `_attempt`** to satisfy ruff's `B007` (unused loop variable) without adding a `noqa`. The plan's snippet would have triggered the warning under our ruff config.
+- **Did NOT wire `Settings.github_token` into the client constructor.** The token is passed explicitly by callers (and by the tests) — keeps the client decoupled from settings and trivially testable. Ingestion code in Task 4 will pull `settings.github_token` and pass it in.
+
+**Learned / surprises:**
+- httpx's `http2=True` fails loudly at `AsyncClient` construction time (not at first request) if `h2` is missing, so the failure mode is fast.
+- Ruff's `B007` fires on `for attempt in range(...)` when the variable is unused inside the body — the plan's literal snippet would not have passed `ruff check .` without the underscore prefix.
+
+**Blocked / open:** none.
+
+**Next:**
+- **v0.1.0 Task 4 — Ingestion pipeline.** Compose `GitHubClient` into an async `ingest_profile(username) -> Profile` that runs `get_user` + `list_repos` (and the pinned-repos GraphQL) concurrently, maps the raw payloads into our Pydantic `Profile` + `Repo` models, and returns the typed `Profile`. Fixture-driven tests; no live network.
+
+---
+
 ## 2026-05-15 — Claude (Opus 4.7) — v0.1.0 Task 2: Pydantic domain models
 
 **Slice:** v0.1.0 Task 2
