@@ -19,6 +19,32 @@ Format:
 
 ---
 
+## 2026-05-15 — Claude (Opus 4.7) — v0.1.0 Task 4: Ingestion — assemble a Profile
+
+**Slice:** v0.1.0 Task 4
+
+**Done:**
+- Captured a real GitHub fixture at `backend/tests/fixtures/github_responses/repos_octocat.json` via `gh api users/octocat/repos` (8 repos total, 6 non-forks).
+- Wrote `backend/tests/test_ingestion.py` first (2 respx-mocked tests: end-to-end `ingest_profile("octocat", gh)` against `user_octocat.json` + `repos_octocat.json` + empty pinned-items GraphQL response; pinned-repo tagging that pins the first non-fork from the fixture and asserts `"pinned" in repo.deployment_hints`) → confirmed `ModuleNotFoundError: No module named 'app.ingestion'` → wrote `backend/app/ingestion/__init__.py` (empty) and `backend/app/ingestion/profile.py` (`_parse_dt`, `_repo_from_rest`, async `ingest_profile`) → confirmed `2 passed`.
+- Full backend suite green: `10 passed in 0.40s` (1 health + 5 models + 2 client + 2 ingestion).
+- `uv run ruff check .` clean.
+
+**Decisions:**
+- **Moved `GitHubClient` import into a `TYPE_CHECKING` block** in `app/ingestion/profile.py`. The symbol is only used as a parameter annotation; with `from __future__ import annotations` at the top of the file, all annotations are stringized and never evaluated at runtime. Ruff `TC001` correctly flagged it. The `Profile`/`Repo` imports stay at runtime because they are *called* as constructors inside the function body, not just annotated.
+- **Skipped forks in the repos list** (`if not r.get("fork", False)`) per the plan's filter. Octocat's fixture has 2 forks and 6 originals, so this is exercised — the integration test gets 6 repos, not 8.
+- **Used `r.deployment_hints.append("pinned")` (the plan's primary approach)** rather than constructing the Repo with hints set from the start. Pydantic v2's `BaseModel` is not frozen by default, mutating the list attribute on the instance works, and the test passes. If a future change to `Repo` adds `model_config = ConfigDict(frozen=True)`, switch to the alternate approach noted in the plan.
+
+**Learned / surprises:**
+- The real `gh api users/octocat/repos` response *does* include forks (octocat has 2: `boysenberry-repo-1` and `Spoon-Knife`-style — actually different names, but `"fork": true`). The fork filter is load-bearing for octocat specifically, not just a defensive guard.
+- Ruff's `TC001` ("application import in type-checking block") and the project's `runtime-evaluated-base-classes = ["pydantic.BaseModel"]` Pydantic exemption are orthogonal: the Pydantic exemption applies only to *base class* imports of Pydantic models, not to parameter-type imports in plain functions. Two distinct mechanisms.
+
+**Blocked / open:** none.
+
+**Next:**
+- **v0.1.0 Task 5 — Ingestion enrichments.** Fill the four fields left as zero/empty in this task: `profile_readme_chars` (fetch `<username>/<username>` README), `languages` (sum from repo-level `/languages`), `external_prs_merged` + `external_reviews` (search API for cross-org PRs and reviews). Each of these is a separate respx-mocked test against a fixture; the bulk of `ingest_profile` already exists.
+
+---
+
 ## 2026-05-15 — Claude (Opus 4.7) — v0.1.0 Task 3: GitHub client
 
 **Slice:** v0.1.0 Task 3
