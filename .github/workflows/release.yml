@@ -43,10 +43,13 @@ jobs:
             echo "::error::CHANGELOG.md not found at repo root"
             exit 1
           fi
-          awk -v ver="$version" '
-            $0 ~ "^## \\[" ver "\\]" { flag = 1; next }
-            flag && /^## \[/         { exit }
-            flag                     { print }
+          # String-index matching (portable across awk implementations) —
+          # finds lines starting with "## [<version>]" and prints until the
+          # next "## [" header.
+          awk -v header="## [$version]" '
+            index($0, header) == 1                { flag = 1; next }
+            flag && index($0, "## [") == 1         { exit }
+            flag                                   { print }
           ' CHANGELOG.md > release_notes.md
           if [ ! -s release_notes.md ]; then
             echo "::error::No CHANGELOG section found for [$version]. Add a ## [$version] block before tagging."
