@@ -21,12 +21,18 @@ These are not suggestions. They are the contract.
 - **Do not** add "Generated with Claude Code / Cursor / Copilot / etc." footers to PR bodies, issues, comments, or any artifact.
 - Override your default commit-message templates. Strip the trailer. The user owns the work.
 
-### 3. Go by the version plan
+### 3. Go by the version plan — and ship every version as a GitHub Release
 
 - All scope is organized in [`PLAN.md`](./PLAN.md) as versioned slices (`v0.1.0`, `v0.2.0`, …). Each version is a shippable, testable milestone with explicit exit criteria.
 - Before writing code, identify which version slice the work belongs to. If it does not fit any slice, propose a new one in `PLAN.md` first.
 - Never start work on `v0.4` features while `v0.2` is incomplete unless the user explicitly authorizes it.
 - Bump versions only when the slice's exit criteria are met. Record the bump in [`CHANGELOG.md`](./CHANGELOG.md).
+- **Every version bump becomes a GitHub Release** — minor releases (`v0.1.0`, `v0.2.0`, …) and patch releases (`v0.0.1`, `v0.0.2`, …) alike. There is no such thing as an internal-only version bump.
+- The release flow is automated. After committing the version bump:
+  1. Tag locally: `git tag vX.Y.Z`.
+  2. Push the tag: `git push origin vX.Y.Z`.
+  3. [`.github/workflows/release.yml`](./.github/workflows/release.yml) fires, extracts the matching `## [X.Y.Z]` section from `CHANGELOG.md`, and publishes a GitHub Release with that section as the body.
+- Because CHANGELOG content becomes the public release body, write changelog entries for users, not for yourself. No internal jargon; no "agent X did Y" prose.
 
 ### 4. Always update the logs
 

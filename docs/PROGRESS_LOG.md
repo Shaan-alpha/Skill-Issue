@@ -19,6 +19,27 @@ Format:
 
 ---
 
+## 2026-05-15 — Claude (Opus 4.7) — v0.0.1: automated GitHub Release pipeline
+
+**Slice:** v0.0.1 (patch release, shipped from `main`)
+
+**Done:**
+- Added `.github/workflows/release.yml` — fires on `vX.Y.Z` tag push, extracts the matching `## [X.Y.Z]` section from `CHANGELOG.md`, publishes a GitHub Release with that section as the body. Prerelease tags (`v0.1.0-rc.1`) get the `--prerelease` flag automatically.
+- Extended `AGENTS.md` rule 3: every version bump (minor and patch alike) must ship as a GitHub Release. Changelog entries become public release notes — write them for users, not for agents.
+- Updated memory `feedback_version-planning` to encode the new release-with-version rule.
+- Bumped `CHANGELOG.md` to `[0.0.1]`; tagged `v0.0.1` on `main`.
+
+**Decisions:**
+- Workflow extracts the CHANGELOG section with `awk` between `## [<version>]` and the next `## [`. Single source of truth for release notes — no separate `RELEASES.md`, no manually-written GitHub Release bodies.
+- The workflow uses `${{ secrets.GITHUB_TOKEN }}` (the per-job ephemeral token), not a PAT. `permissions: contents: write` is scoped to this workflow only.
+- Tag pattern: `v[0-9]+.[0-9]+.[0-9]+` for stable, `v[0-9]+.[0-9]+.[0-9]+-*` for prereleases. Strict — no `latest`, no `vX.Y` shorthand.
+
+**Why now:** User asked for "with every push on github also release the version releases and patch releases". v0.0.1 installs the pipeline itself so v0.1.0 and beyond ship publicly without manual work.
+
+**Next:** v0.1.0 backend MVP continues on `feat/v0.1.0-backend-mvp` from Task 5. This merge commit brings the new rule + workflow into the feature branch.
+
+---
+
 ## 2026-05-15 — Claude (Opus 4.7) — Session handoff at v0.1.0 Task 4
 
 **Slice:** v0.1.0 (Tasks 1–4 complete, Tasks 5–16 pending)

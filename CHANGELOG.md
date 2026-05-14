@@ -14,6 +14,19 @@ Nothing yet. Next slice: **v0.1.0 — Backend MVP** (see [`PLAN.md`](./PLAN.md))
 
 ---
 
+## [0.0.1] — 2026-05-15
+
+### Added
+- Automated GitHub Release pipeline at [`.github/workflows/release.yml`](./.github/workflows/release.yml). Pushing a `vX.Y.Z` tag now extracts the matching CHANGELOG section and publishes it as a GitHub Release. Prerelease tags (e.g. `v0.1.0-rc.1`) are flagged as prereleases automatically.
+
+### Changed
+- [`AGENTS.md`](./AGENTS.md) rule 3 extended: every version bump — minor and patch alike — must ship as a GitHub Release. There are no internal-only version bumps. Changelog entries are now written as public release notes, not internal logs.
+
+### Notes
+- This is the first patch release. It exists to install the release pipeline itself, so future version bumps automatically produce public releases.
+
+---
+
 ## [0.0.0] — 2026-05-15
 
 ### Added

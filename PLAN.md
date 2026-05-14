@@ -17,7 +17,8 @@
 | Version | Slice | Status |
 | --- | --- | --- |
 | **v0.0.0** | Repo + docs scaffolding | ✅ shipped |
-| **v0.1.0** | Backend MVP — GitHub ingestion + deterministic scoring | ⏳ next |
+| **v0.0.1** | Automated GitHub Release pipeline | ✅ shipped |
+| **v0.1.0** | Backend MVP — GitHub ingestion + deterministic scoring | ⏳ in progress (Tasks 1–4 done on `feat/v0.1.0-backend-mvp`) |
 | **v0.2.0** | Frontend shell — landing page + analyze flow + results page (static) | pending |
 | **v0.3.0** | AI narrative layer — Roast Mode + Mentor Mode | pending |
 | **v0.4.0** | Auth + persistence — GitHub OAuth + Neon Postgres | pending |
