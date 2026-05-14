@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 from typing import Any, Self
 
 import httpx
@@ -51,6 +52,20 @@ class GitHubClient:
         )
         resp.raise_for_status()
         return resp.json()
+
+    async def list_languages(self, owner: str, repo: str) -> dict[str, int]:
+        resp = await self._request("GET", f"{API_BASE}/repos/{owner}/{repo}/languages")
+        resp.raise_for_status()
+        return resp.json()
+
+    async def get_profile_readme(self, username: str) -> str | None:
+        resp = await self._request("GET", f"{API_BASE}/repos/{username}/{username}/readme")
+        if resp.status_code == 404:
+            return None
+        resp.raise_for_status()
+
+        content = resp.json().get("content", "")
+        return base64.b64decode(content).decode("utf-8", errors="ignore")
 
     async def graphql(self, query: str, variables: dict[str, Any]) -> dict[str, Any]:
         resp = await self._request(

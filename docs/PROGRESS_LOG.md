@@ -19,6 +19,32 @@ Format:
 
 ---
 
+## 2026-05-15 — Codex — v0.1.0 Task 5: ingestion enrichments
+
+**Slice:** v0.1.0 Task 5
+
+**Done:**
+- Pushed `feat/v0.1.0-backend-mvp` to GitHub so completed Tasks 1–4 are backed up remotely.
+- Extended `GitHubClient` with `list_languages()` and `get_profile_readme()`.
+- Added `EXTERNAL_PRS` GraphQL query for merged PR totals and PR review contribution totals.
+- Extended `ingest_profile()` to populate `Profile.languages`, `Profile.profile_readme_chars`, `Profile.external_prs_merged`, and `Profile.external_reviews`.
+- Expanded `backend/tests/test_ingestion.py` with a focused fixture that proves language bytes are summed across two repos, profile README content is decoded and counted, and external PR/review counts are mapped into the profile.
+- Verified: `uv run pytest -v` → 11 passed; `uv run ruff check .` → clean; `uv run ruff format --check .` → clean.
+
+**Decisions:**
+- Kept external contribution counts in GraphQL rather than REST search. Reason: Task 5 only needs totals, and GraphQL gives merged PR count plus review contribution count in one typed response shape.
+- Aggregated languages over the first 20 non-fork repos, matching the plan's API-bound cap. This keeps v0.1.0 polite to GitHub while still covering the meaningful project surface for most profiles.
+- Treated a missing profile README as `None` and therefore `0` chars, not an error. A user without a profile README should still be analyzable.
+
+**Learned / surprises:**
+- Adding Task 5 data means every ingestion test must now mock language, README, and external-count calls. The test file now has shared helpers so future ingestion work can add signals without duplicating fixture setup.
+
+**Blocked / open:** none.
+
+**Next:** v0.1.0 Task 6 — add the scoring base helper, then start Task 7 (`repo_quality`) with fixture profiles.
+
+---
+
 ## 2026-05-15 — Claude (Opus 4.7) — v0.0.1: automated GitHub Release pipeline
 
 **Slice:** v0.0.1 (patch release, shipped from `main`)

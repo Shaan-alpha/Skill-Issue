@@ -19,3 +19,18 @@ query PinnedRepos($login: String!) {
   }
 }
 """
+
+EXTERNAL_PRS = """
+query ExternalPRs($login: String!) {
+  user(login: $login) {
+    pullRequests(states: MERGED, first: 1) {
+      totalCount
+    }
+    contributionsCollection {
+      pullRequestReviewContributions(first: 1) {
+        totalCount
+      }
+    }
+  }
+}
+"""
