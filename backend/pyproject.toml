@@ -1,0 +1,32 @@
+[project]
+name = "skill-issue-backend"
+version = "0.1.0"
+description = "Skill Issue backend — FastAPI service that ingests a GitHub profile and returns a deterministic engineering report."
+readme = "README.md"
+authors = [
+    { name = "Shaan Satsangi", email = "shaansatsangi@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.136.1",
+    "httpx>=0.28.1",
+    "pydantic>=2",
+    "pydantic-settings>=2.14.1",
+    "uvicorn[standard]>=0.47.0",
+]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.3.0",
+    "respx>=0.23.1",
+    "ruff>=0.15.13",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]

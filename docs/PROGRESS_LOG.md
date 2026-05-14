@@ -19,6 +19,36 @@ Format:
 
 ---
 
+## 2026-05-15 — Claude (Opus 4.7) — v0.1.0 Task 1: backend skeleton
+
+**Slice:** v0.1.0 Task 1
+
+**Done:**
+- Scaffolded `backend/` with `uv init --package skill-issue-backend --python 3.12`, then flattened the layout: dropped the generated `src/skill_issue_backend/` package, removed `[project.scripts]` + `[build-system]`, and pinned `tool.uv.package = false` so the backend is an application (not a wheel) with code under `backend/app/`.
+- Added runtime deps via `uv add`: `fastapi` 0.136, `pydantic` 2.13, `pydantic-settings` 2.14, `httpx` 0.28, `uvicorn[standard]` 0.47.
+- Added dev deps: `pytest` 9, `pytest-asyncio` 1.3, `respx` 0.23, `ruff` 0.15.13, `httpx`.
+- Wrote `ruff.toml` (py312, line-length 100, E/F/I/UP/B/SIM/TCH/RUF, ignore E501, double quotes).
+- TDD loop: wrote `tests/test_health.py` first → confirmed failure (`ModuleNotFoundError: No module named 'app.main'`) → wrote `app/settings.py` (Pydantic `BaseSettings`, `.env` loader, `version = "0.1.0"`) + `app/main.py` (FastAPI app with `GET /health`) → confirmed pass (`1 passed in 0.79s`).
+- Configured `[tool.pytest.ini_options]` with `asyncio_mode = "auto"` and `pythonpath = ["."]` so `from app.main import app` resolves from the `backend/` root.
+- Smoke-tested live server: `uv run uvicorn app.main:app --port 8000` boots cleanly; `curl http://localhost:8000/health` returns `{"status":"ok","version":"0.1.0"}`.
+- `uv run ruff check .` clean.
+
+**Decisions:**
+- **Flat `app/` layout over the `src/skill_issue_backend/` layout** that `uv init --package` generates. Rationale: the application is deployed (to Vercel Functions), not distributed as a wheel; the shorter import path (`app.main` vs `skill_issue_backend.main`) matches FastAPI convention and keeps the scoring/client/route modules in one obvious place. `tool.uv.package = false` tells uv to skip building the project.
+- **Pytest discovery via `pythonpath = ["."]` in `pyproject.toml`**, not a `conftest.py` hack. Cleaner; one source of truth.
+- **`asyncio_mode = "auto"`** so async test functions don't need explicit `@pytest.mark.asyncio` everywhere — the test in this task keeps the marker for readability, but future tests can drop it.
+
+**Learned / surprises:**
+- `uv init --package` always emits a `src/` layout — there is no flag to force a flat layout. The fix is to delete the `src/` tree and the `[project.scripts]` + `[build-system]` blocks after init, then set `tool.uv.package = false`. Worth keeping in mind for future Python services in this repo.
+- On Windows + uv-managed Python, `VIRTUAL_ENV` from the host shell can spuriously point at a Python 3.14 install; uv warns and falls back to `.venv` correctly. No action needed.
+
+**Blocked / open:** none for this task.
+
+**Next:**
+- **v0.1.0 Task 2 — Pydantic domain models.** Define the typed contracts (`ProfileInput`, `GitHubProfile`, `GitHubRepo`, `ScoreBreakdown`, `EngineeringReport`) in `app/models.py` with fixture-driven tests. These are the spine the scoring code and the route handler will both depend on.
+
+---
+
 ## 2026-05-15 — Claude (Opus 4.7) — v0.0.0 scaffolding shipped
 
 **Slice:** scaffolding → v0.0.0
