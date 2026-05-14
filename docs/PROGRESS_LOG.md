@@ -45,7 +45,13 @@ Format:
 **Blocked / open:** none for this task.
 
 **Next:**
-- **v0.1.0 Task 2 — Pydantic domain models.** Define the typed contracts (`ProfileInput`, `GitHubProfile`, `GitHubRepo`, `ScoreBreakdown`, `EngineeringReport`) in `app/models.py` with fixture-driven tests. These are the spine the scoring code and the route handler will both depend on.
+- **v0.1.0 Task 2 — Pydantic domain models.** Define `Evidence`, `ScoreResult`, `Repo`, `Profile`, `ScoreBreakdown`, and `Report` in `app/models.py` with fixture-driven tests. These are the typed contract that scoring and the route handler both depend on.
+
+**Follow-up fixes (post-review):**
+- Removed duplicate `httpx` from dev deps (was already a runtime dep).
+- Added empty `backend/tests/conftest.py` to match the plan's Task 1 file list.
+- Promoted `version` from a `BaseSettings` field to a module constant `VERSION` to prevent silent env-var override (`VERSION=...` was readable on the settings object).
+- Corrected model names in this entry's "Next" section to match the plan's Task 2.
 
 ---
 
