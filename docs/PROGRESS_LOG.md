@@ -19,6 +19,32 @@ Format:
 
 ---
 
+## 2026-05-15 — Claude (Opus 4.7) — v0.1.0 Task 2: Pydantic domain models
+
+**Slice:** v0.1.0 Task 2
+
+**Done:**
+- Wrote `backend/tests/test_models.py` first (5 tests covering `Evidence`, `ScoreResult` cap, `ScoreBreakdown.total()` + `Report` assembly, `Repo` minimal fields, `Profile` assembly) → confirmed `ModuleNotFoundError: No module named 'app.models'` → wrote `backend/app/models.py` with 6 models + the `DeveloperCategory` `Literal` → confirmed `5 passed in 0.09s`.
+- Full backend suite (`test_health` + `test_models`) green: `6 passed in 0.31s`.
+- `uv run ruff check .` clean.
+- Models defined: `Evidence`, `ScoreResult` (with `field_validator` enforcing `points <= max_points`), `Repo`, `Profile`, `ScoreBreakdown` (with `total()` method), `Report` (with `total` field constrained `0 <= total <= 100`).
+
+**Decisions:**
+- **Typed the `field_validator` `info` parameter as `pydantic.ValidationInfo`** rather than leaving it untyped with `# type: ignore[no-untyped-def]`. The spec allowed either; the typed version is cleaner, avoids the silencing comment, and gives editors real autocomplete on `info.data`.
+- **Added `[lint.flake8-type-checking] runtime-evaluated-base-classes = ["pydantic.BaseModel"]` to `backend/ruff.toml`.** Reason: ruff's `TC003` rule wants `datetime` moved into a `TYPE_CHECKING` block, but Pydantic resolves annotations at runtime when building the validator — moving the import breaks model construction with `PydanticUserError: ... is not fully defined`. Telling ruff that `BaseModel` subclasses evaluate their annotations at runtime is the project-wide correct fix. This will benefit every Pydantic model in the codebase going forward (scoring outputs, request/response schemas, etc.).
+- **Used `datetime.UTC` over `datetime.timezone.utc` in the test file** (project rule 3: modern Python idioms; ruff `UP017` auto-fix). The spec's snippet predates the 3.11+ alias, but the project pins ≥3.12 so the modern form is correct.
+
+**Learned / surprises:**
+- Pydantic v2 + `from __future__ import annotations` still needs the type names available at runtime in the module namespace — string annotations are lazy-resolved during model build, not deferred indefinitely. `TYPE_CHECKING` guards do not work for any name that appears in a Pydantic field type.
+- Ruff's `flake8-type-checking` has a dedicated config knob for exactly this Pydantic case; no per-import `noqa` needed.
+
+**Blocked / open:** none.
+
+**Next:**
+- **v0.1.0 Task 3 — GitHub client (REST + GraphQL + rate-limit retry).** Wire up `httpx.AsyncClient` against the GitHub API with respx-mocked tests, retry/backoff on 429 + secondary rate limits, and a single `Profile`-shaped ingest function that downstream scoring will call. Token comes from `Settings.github_token`.
+
+---
+
 ## 2026-05-15 — Claude (Opus 4.7) — v0.1.0 Task 1: backend skeleton
 
 **Slice:** v0.1.0 Task 1

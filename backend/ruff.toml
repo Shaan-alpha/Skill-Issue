@@ -5,5 +5,8 @@ line-length = 100
 select = ["E", "F", "I", "UP", "B", "SIM", "TCH", "RUF"]
 ignore = ["E501"]
 
+[lint.flake8-type-checking]
+runtime-evaluated-base-classes = ["pydantic.BaseModel"]
+
 [format]
 quote-style = "double"
