@@ -1,0 +1,58 @@
+{
+  "username": "student-builder",
+  "bio": null,
+  "profile_readme_chars": 0,
+  "followers": 2,
+  "public_repos": 3,
+  "languages": {
+    "JavaScript": 1200
+  },
+  "repos": [
+    {
+      "name": "calculator",
+      "full_name": "student-builder/calculator",
+      "primary_language": "JavaScript",
+      "stars": 0,
+      "forks": 0,
+      "is_fork": false,
+      "has_readme": false,
+      "has_tests": false,
+      "has_ci": false,
+      "deployment_hints": [],
+      "last_commit_at": "2025-01-01T00:00:00+00:00",
+      "created_at": "2024-12-01T00:00:00+00:00"
+    },
+    {
+      "name": "todo-html",
+      "full_name": "student-builder/todo-html",
+      "primary_language": "HTML",
+      "stars": 0,
+      "forks": 0,
+      "is_fork": false,
+      "has_readme": false,
+      "has_tests": false,
+      "has_ci": false,
+      "deployment_hints": [],
+      "last_commit_at": "2025-02-01T00:00:00+00:00",
+      "created_at": "2024-12-15T00:00:00+00:00"
+    },
+    {
+      "name": "notes-api",
+      "full_name": "student-builder/notes-api",
+      "primary_language": "Python",
+      "stars": 1,
+      "forks": 0,
+      "is_fork": false,
+      "has_readme": false,
+      "has_tests": false,
+      "has_ci": false,
+      "deployment_hints": [],
+      "last_commit_at": "2025-03-01T00:00:00+00:00",
+      "created_at": "2025-01-10T00:00:00+00:00"
+    }
+  ],
+  "external_prs_merged": 0,
+  "external_reviews": 0,
+  "commit_dates": [],
+  "account_created_at": "2024-12-01T00:00:00+00:00"
+}

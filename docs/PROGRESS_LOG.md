@@ -19,6 +19,31 @@ Format:
 
 ---
 
+## 2026-05-15 — Codex — v0.1.0 Tasks 6–7: scoring base + repo quality
+
+**Slice:** v0.1.0 Tasks 6–7
+
+**Done:**
+- Added `backend/app/scoring/base.py` with the shared `make_result()` helper used by scorer modules.
+- Added the first deterministic scorer: `backend/app/scoring/repo_quality.py` (30-point max, current implemented signals award up to 26 while the license signal is deferred).
+- Added three fixture profiles (`profile_student.json`, `profile_oss.json`, `profile_senior.json`) for scorer tests.
+- Added `backend/tests/scoring/test_repo_quality.py` with explicit expected scores: student = 0, OSS = 20, senior = 26, plus evidence-weight summing.
+- Verified: `uv run pytest -v` → 15 passed; `uv run ruff check .` → clean; `uv run ruff format --check .` → clean.
+
+**Decisions:**
+- Kept the license portion of Repository Quality at 0 for v0.1.0 because `Repo` does not yet carry a license field and ingestion does not fetch per-repo license content. This is a known scoring gap, not silent behavior.
+- `deployment_hints` excludes `"pinned"` from deployment credit. Pinned repos help Recruiter Signal later, but they do not prove deployment maturity.
+- Fixture tests use exact scores instead of broad ranges so scorer changes cannot drift quietly.
+
+**Learned / surprises:**
+- The current Repository Quality ceiling is 26/30 until license data lands. The v0.1.0 report can still be deterministic and explainable, but the missing 4 points should be called out in release notes if it remains deferred at slice completion.
+
+**Blocked / open:** license scoring is deferred until ingestion/model support exists.
+
+**Next:** v0.1.0 Task 8 — Engineering Maturity scorer.
+
+---
+
 ## 2026-05-15 — Codex — v0.1.0 Task 5: ingestion enrichments
 
 **Slice:** v0.1.0 Task 5
