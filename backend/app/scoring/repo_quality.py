@@ -59,4 +59,16 @@ def score(profile: Profile) -> ScoreResult:
         )
         points += 6
 
+    if non_fork:
+        licensed = sum(1 for r in non_fork if r.full_name in profile.licensed_repos)
+        if licensed / len(non_fork) >= 0.5:
+            evidence.append(
+                Evidence(
+                    signal="license_majority",
+                    detail=f"{licensed}/{len(non_fork)} non-fork repos carry a recognised SPDX license",
+                    weight=4,
+                )
+            )
+            points += 4
+
     return make_result(points=points, max_points=MAX_POINTS, evidence=evidence)
