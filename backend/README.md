@@ -19,7 +19,8 @@ uv run uvicorn app.main:app --reload --port 8000
 | --- | --- | --- |
 | `GITHUB_TOKEN` | every `/analyze` request | Classic PAT or fine-grained token. Stored only in `.env` (gitignored). |
 | `OPENAI_API_KEY` | v0.3.0+ (narrative layer) | Not used yet in v0.1.0/v0.2.0. |
-| `CORS_ALLOW_ORIGINS` | optional | List of allowed origins for CORS. Defaults to `["http://localhost:3000"]`. |
+| `CORS_ALLOW_ORIGINS` | optional | Comma-separated allowed origins. Defaults to `http://localhost:3000`. |
+| `CORS_ALLOW_ORIGIN_REGEX` | optional | Regex matched against `Origin` for preview deploys. Used in production to allow Vercel preview URLs. |
 
 ## Routes
 
@@ -54,3 +55,7 @@ uv run ruff format .
 ```
 
 Config in `ruff.toml` — py312, line length 100, `E/F/I/UP/B/SIM/TCH/RUF`.
+
+## Deploy
+
+See [`../docs/DEPLOY.md`](../docs/DEPLOY.md) for the Vercel walkthrough. The deploy reads `backend/vercel.json`, exposes the FastAPI app via `backend/api/index.py`, and installs from `backend/requirements.txt` (regenerate via `uv export --no-hashes --no-emit-project --no-dev --format requirements-txt > requirements.txt`).
