@@ -249,6 +249,18 @@
 
 Not committed. Tracked here so they don't get lost.
 
+### Cross-platform identity expansion
+
+The long-term play: Skill Issue is the *reputation layer for developers*, not a GitHub-only tool. Once GitHub analysis is stable in v1.0, the same deterministic-scoring + narrative architecture extends to other identity surfaces. These are major slices, each likely a `v1.X.0` family of its own.
+
+- **GitLab Checker** — same six-bucket model, GitLab-native ingestion. Lowest-risk addition because the activity shape is closest to GitHub.
+- **LinkedIn Profile Checker** — parse a LinkedIn export or public profile; score work history, role progression, endorsement signal. Different rubric, same explainability contract.
+- **Resume Checker** — upload a PDF/markdown resume; score structure, signal density, stack relevance, evidence per claim. This is where the deterministic-vs-AI line gets interesting — resumes need extraction (LLM) before scoring (deterministic).
+
+**Architecture implication for current work:** any abstractions added before v1.0 should make these extensions plausible without rewrites. In practice, that means keeping the *contract* clean (`Profile -> ScoreResult -> Report` is a generic shape), not building premature plugin systems.
+
+### Other ideas
+
 - **Team Intelligence** — analyze an org's engineering identity
 - **OSS Reputation Score** — public leaderboard for OSS contributors
 - **Career Timeline** — animated history of a developer's growth
