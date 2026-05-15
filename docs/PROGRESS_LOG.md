@@ -19,6 +19,40 @@ Format:
 
 ---
 
+## 2026-05-15 — Claude (Opus 4.7) — v0.2.0 hardening: e2e test, validation, error boundaries
+
+**Slice:** v0.2.0 (in progress)
+
+**Done:**
+- Wrote the e2e integration test the v0.1.0 plan promised but never delivered (`tests/test_analyze_e2e.py`). It drives the FastAPI app via ASGITransport with respx-mocked GitHub responses, asserts the full report shape, validates `total == sum(buckets)`, covers 404 (unknown user), 400 (invalid username), 500 (missing token), and parametrizes 8 invalid-username shapes. This is the test that would have caught both v0.1.0 production crashes.
+- Added a GitHub-username regex validator (`^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$`) at the API layer. Bad input gets a clean 400, not a stack trace.
+- Frontend error UX overhaul:
+  - `app/u/[username]/not-found.tsx` — on-voice "no such GitHub user" page, replaces Next's default 404
+  - `app/u/[username]/error.tsx` — segment-level error boundary with retry + home buttons and an optional digest reference for log correlation
+  - `page.tsx` no longer has its own try/catch; it lets `notFound()` and thrown errors bubble to the boundaries, which is how App Router is designed to work
+  - Stopped leaking `NEXT_PUBLIC_BACKEND_URL` into the error UI
+- Search bar hardening:
+  - Mirrors the backend username regex; rejects invalid input client-side with inline error copy under the input
+  - `normalize()` accepts pasted `github.com/<user>`, `https://github.com/<user>`, `@user`, and trailing slashes/paths — pulls the username out
+  - Proper a11y: `aria-label`, `aria-invalid`, `aria-live="polite"` on the error region
+
+**Decisions:**
+- Username validation lives in *both* layers. Client-side gives instant feedback and avoids burning a GitHub-API roundtrip on obvious garbage; backend keeps it because never trust the client. Same regex on both sides so they can't drift quietly.
+- The frontend treats backend 400 the same as 404 — both route to `not-found.tsx`. From the user's perspective, "you typed nonsense" and "GitHub doesn't have that user" are the same outcome. A separate "invalid input" page would be design noise.
+- Did *not* push beyond v0.2.0 scope into auth, OG cards, analytics, rate limiting, or observability. PLAN.md slices v0.4–v0.9 own those; jumping ahead would violate AGENTS.md rule 3. v0.2.0's job is "shell that consumes v0.1.0 cleanly" and we're not done with that yet — Lighthouse, visual polish, and Product Vision pass are still open.
+
+**Learned / surprises:**
+- The e2e test caught a third bug on its first run: my mock didn't include `repo.owner.login`, which ingestion uses to call `list_commits`. Real GitHub responses include it; my synthetic payload didn't. The unit tests never exercised that code path because they all mocked the commits endpoint without going through repo-iteration. Lesson: synthetic fixtures should be assembled by deep-copying real responses, not by hand.
+
+**Blocked / open:**
+- Visual polish and Lighthouse mobile ≥ 90 are still the v0.2.0 blockers.
+
+**Next:**
+- v0.2.0 — Browser visual review, animation timing, copy pass against `docs/PRODUCT_VISION.md`.
+- v0.2.0 — Lighthouse audit + first round of fixes.
+
+---
+
 ## 2026-05-15 — Claude (Opus 4.7) — v0.2.0 schema alignment + CORS + secrets hygiene
 
 **Slice:** v0.2.0 (in progress)
