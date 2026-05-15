@@ -165,8 +165,7 @@ These are **development-time accelerators**, not runtime dependencies. None of t
 
 These are explicitly unresolved. Decisions get logged in [`docs/PROGRESS_LOG.md`](./docs/PROGRESS_LOG.md) when made.
 
-1. ~~**Backend host**~~ — **Decided 2026-05-15: Vercel Functions (Fluid Compute).** See Deployment topology above.
-2. **ORM** — SQLModel vs. SQLAlchemy + Alembic vs. Drizzle (if Node-side). Decision in v0.4.0.
+1. **ORM** — SQLModel vs. SQLAlchemy + Alembic vs. Drizzle (if Node-side). Decision in v0.4.0.
 3. **Streaming framework** — SSE vs. WebSocket vs. Vercel AI SDK helpers. Decision in v0.3.0.
 4. **Background ingestion** — cron on Vercel vs. Inngest vs. self-hosted. Decision in v0.7.0.
 5. **OG image runtime** — `@vercel/og` (edge) vs. Satori-on-Node. Decision in v0.6.0.

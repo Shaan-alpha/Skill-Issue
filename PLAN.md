@@ -19,7 +19,7 @@
 | **v0.0.0** | Repo + docs scaffolding | ✅ shipped |
 | **v0.0.1** | Automated GitHub Release pipeline | ✅ shipped |
 | **v0.1.0** | Backend MVP — GitHub ingestion + deterministic scoring | ✅ shipped |
-| **v0.2.0** | Frontend shell — landing page + analyze flow + results page (static) | ⏳ pending (next: Tasks 14–20) |
+| **v0.2.0** | Frontend shell — landing page + analyze flow + results page (static) | ⏳ in progress |
 | **v0.3.0** | AI narrative layer — Roast Mode + Mentor Mode | pending |
 | **v0.4.0** | Auth + persistence — GitHub OAuth + Neon Postgres | pending |
 | **v0.5.0** | Remaining modes — Recruiter, CTO, Career | pending |
@@ -66,11 +66,11 @@
 - One end-to-end integration test against a real public profile (rate-limit-aware)
 
 **Exit criteria:**
-- [ ] `cd backend && uv run uvicorn app.main:app --reload` boots the API
-- [ ] `GET /analyze/octocat` returns a complete, well-typed JSON report in under 10s (warm)
-- [ ] All scorers have ≥ 3 fixture-driven unit tests with explicit expected numbers
-- [ ] Total score is the literal sum of the six buckets — no fudge factors
-- [ ] `CHANGELOG.md` and `docs/PROGRESS_LOG.md` updated; version bumped to `0.1.0`
+- [x] `cd backend && uv run uvicorn app.main:app --reload` boots the API
+- [x] `GET /analyze/octocat` returns a complete, well-typed JSON report in under 10s (warm)
+- [x] All scorers have ≥ 3 fixture-driven unit tests with explicit expected numbers
+- [x] Total score is the literal sum of the six buckets — no fudge factors
+- [x] `CHANGELOG.md` and `docs/PROGRESS_LOG.md` updated; version bumped to `0.1.0`
 
 **Sub-plan:** When this slice starts, generate a detailed TDD plan via the `superpowers:writing-plans` skill and save to `docs/superpowers/plans/YYYY-MM-DD-v0.1.0-backend-mvp.md`.
 
