@@ -87,6 +87,32 @@ class GitHubClient:
             return []
         return [str(entry.get("name", "")) for entry in data]
 
+    async def get_license(self, owner: str, repo: str) -> str | None:
+        """Return the repo's SPDX licence id, or None if absent / NOASSERTION."""
+        resp = await self._request("GET", f"{API_BASE}/repos/{owner}/{repo}/license")
+        if resp.status_code == 404:
+            return None
+        resp.raise_for_status()
+        spdx = (resp.json().get("license") or {}).get("spdx_id")
+        if not spdx or spdx == "NOASSERTION":
+            return None
+        return str(spdx)
+
+    async def list_workflow_files(self, owner: str, repo: str) -> list[str]:
+        """Return the names of files (not directories) under .github/workflows.
+
+        Returns [] when the directory doesn't exist."""
+        resp = await self._request(
+            "GET", f"{API_BASE}/repos/{owner}/{repo}/contents/.github/workflows"
+        )
+        if resp.status_code == 404:
+            return []
+        resp.raise_for_status()
+        data = resp.json()
+        if not isinstance(data, list):
+            return []
+        return [str(e["name"]) for e in data if e.get("type") == "file"]
+
     async def get_profile_readme(self, username: str) -> str | None:
         resp = await self._request("GET", f"{API_BASE}/repos/{username}/{username}/readme")
         if resp.status_code == 404:

@@ -72,3 +72,61 @@ async def test_client_retries_on_secondary_rate_limit() -> None:
         user = await gh.get_user("octocat")
 
     assert user["login"] == "octocat"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_get_license_returns_spdx_id() -> None:
+    respx.get("https://api.github.com/repos/o/r/license").mock(
+        return_value=Response(200, json={"license": {"spdx_id": "MIT"}})
+    )
+    async with GitHubClient(token="ghs_test") as gh:
+        assert await gh.get_license("o", "r") == "MIT"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_get_license_returns_none_on_404() -> None:
+    respx.get("https://api.github.com/repos/o/r/license").mock(
+        return_value=Response(404, json={"message": "Not Found"})
+    )
+    async with GitHubClient(token="ghs_test") as gh:
+        assert await gh.get_license("o", "r") is None
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_get_license_treats_noassertion_as_none() -> None:
+    respx.get("https://api.github.com/repos/o/r/license").mock(
+        return_value=Response(200, json={"license": {"spdx_id": "NOASSERTION"}})
+    )
+    async with GitHubClient(token="ghs_test") as gh:
+        assert await gh.get_license("o", "r") is None
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_list_workflow_files_counts_entries() -> None:
+    respx.get("https://api.github.com/repos/o/r/contents/.github/workflows").mock(
+        return_value=Response(
+            200,
+            json=[
+                {"name": "ci.yml", "type": "file"},
+                {"name": "release.yml", "type": "file"},
+                {"name": "examples", "type": "dir"},
+            ],
+        )
+    )
+    async with GitHubClient(token="ghs_test") as gh:
+        files = await gh.list_workflow_files("o", "r")
+    assert files == ["ci.yml", "release.yml"]
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_list_workflow_files_returns_empty_on_404() -> None:
+    respx.get("https://api.github.com/repos/o/r/contents/.github/workflows").mock(
+        return_value=Response(404, json={"message": "Not Found"})
+    )
+    async with GitHubClient(token="ghs_test") as gh:
+        assert await gh.list_workflow_files("o", "r") == []
