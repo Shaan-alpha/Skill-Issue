@@ -23,8 +23,15 @@ query PinnedRepos($login: String!) {
 EXTERNAL_PRS = """
 query ExternalPRs($login: String!) {
   user(login: $login) {
-    pullRequests(states: MERGED, first: 1) {
+    pullRequests(states: MERGED, first: 100) {
       totalCount
+      nodes {
+        repository {
+          owner {
+            login
+          }
+        }
+      }
     }
     contributionsCollection {
       pullRequestReviewContributions(first: 1) {

@@ -61,6 +61,7 @@ class Profile(BaseModel):
     repos: list[Repo]
     external_prs_merged: int
     external_reviews: int
+    external_orgs: set[str] = Field(default_factory=set)
     commit_dates: list[datetime]
     account_created_at: datetime
 

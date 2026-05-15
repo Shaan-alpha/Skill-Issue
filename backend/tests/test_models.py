@@ -70,6 +70,7 @@ def test_profile_assembles() -> None:
         repos=[],
         external_prs_merged=3,
         external_reviews=2,
+        external_orgs={"facebook", "google"},
         commit_dates=[],
         account_created_at=datetime.now(UTC),
     )

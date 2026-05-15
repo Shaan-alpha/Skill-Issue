@@ -57,12 +57,19 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
             languages[language] = languages.get(language, 0) + bytes_count
 
     external_user = external.get("user") or {}
-    external_prs_merged = external_user.get("pullRequests", {}).get("totalCount", 0)
+    external_prs = external_user.get("pullRequests", {})
+    external_prs_merged = external_prs.get("totalCount", 0)
     external_reviews = (
         external_user.get("contributionsCollection", {})
         .get("pullRequestReviewContributions", {})
         .get("totalCount", 0)
     )
+
+    external_orgs = set()
+    for node in external_prs.get("nodes", []):
+        owner_login = node.get("repository", {}).get("owner", {}).get("login")
+        if owner_login and owner_login.lower() != username.lower():
+            external_orgs.add(owner_login)
 
     return Profile(
         username=user["login"],
@@ -74,6 +81,7 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
         repos=repos,
         external_prs_merged=external_prs_merged,
         external_reviews=external_reviews,
+        external_orgs=external_orgs,
         commit_dates=[],  # Task 10 will fill
         account_created_at=_parse_dt(user["created_at"]) or datetime.now(UTC),
     )
