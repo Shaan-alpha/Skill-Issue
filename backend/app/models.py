@@ -97,6 +97,14 @@ class Profile(BaseModel):
     has_sponsors_listing: bool = False
     is_github_star: bool = False
     is_developer_program_member: bool = False
+    # --- v0.3.0 depth signals (populated only when base tier unlocks them) ---
+    licensed_repos: list[str] = Field(default_factory=list)
+    workflow_counts: dict[str, int] = Field(default_factory=dict)
+    readme_lengths: dict[str, int] = Field(default_factory=dict)
+    review_avg_comments: int | None = None
+    dep_files: dict[str, list[str]] = Field(default_factory=dict)
+    commit_message_quality: int | None = None
+    cross_repo_contribution_count: int | None = None
 
 
 class ScoreBreakdown(BaseModel):

@@ -75,3 +75,27 @@ def test_profile_assembles() -> None:
         account_created_at=datetime.now(UTC),
     )
     assert profile.username == "octocat"
+
+
+def test_profile_depth_defaults() -> None:
+    p = Profile(
+        username="u",
+        bio=None,
+        profile_readme_chars=0,
+        followers=0,
+        public_repos=0,
+        languages={},
+        repos=[],
+        external_prs_merged=0,
+        external_reviews=0,
+        commit_dates=[],
+        account_created_at=datetime.now(UTC),
+    )
+    # New depth fields must default empty / zero so existing call sites keep working.
+    assert p.licensed_repos == []
+    assert p.workflow_counts == {}
+    assert p.readme_lengths == {}
+    assert p.review_avg_comments is None
+    assert p.dep_files == {}
+    assert p.commit_message_quality is None
+    assert p.cross_repo_contribution_count is None
