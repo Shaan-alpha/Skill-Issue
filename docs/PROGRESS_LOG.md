@@ -19,6 +19,30 @@ Format:
 
 ---
 
+## 2026-05-15 — Antigravity — Task 10: Consistency Scorer
+
+**Slice:** v0.1.0
+
+**Done:**
+- Added `list_commits` to `GitHubClient` to fetch author-specific commits with time-window filtering.
+- Updated `ingest_profile` to aggregate commit dates across the top 10 most-recently-updated non-fork repositories from the last 365 days.
+- Implemented `consistency.py` scorer with heuristics for active cadence (last 3 months), dry spell length (< 60 days), and annual commit volume (>= 30 days).
+- Verified implementation with `test_consistency.py` and updated ingestion mocks.
+
+**Decisions:**
+- Capped commit ingestion to top 10 repos to avoid excessive API calls on profiles with hundreds of repos; 10 is enough to establish a consistency signal.
+- Normalized commit dates to `YYYY-MM-DD` to focus on daily activity rather than raw timestamp volume.
+
+**Learned / surprises:**
+- Multi-repo commit aggregation requires `asyncio.gather` for acceptable performance.
+
+**Blocked / open:** none.
+
+**Next:**
+- **v0.1.0 Task 11 — Recruiter Signal Scorer (15 pts).** Heuristics for popularity, sponsorship, and verified status.
+
+---
+
 ## 2026-05-15 — Antigravity — Task 9: OSS & Collaboration Scorer
 
 **Slice:** v0.1.0
