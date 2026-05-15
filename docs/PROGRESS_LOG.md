@@ -19,6 +19,30 @@ Format:
 
 ---
 
+## 2026-05-16 — Claude (Opus 4.7) — v0.3.0 Identity Signals shipped
+
+**Slice:** v0.3.0 (shipping)
+
+**Done:**
+- Implemented the full v0.3.0 design from [`docs/superpowers/specs/2026-05-16-v0.3.0-identity-signals-design.md`](./superpowers/specs/2026-05-16-v0.3.0-identity-signals-design.md). 7-tier ladder + intra-tier sub-rank, 8 deterministic badges, tier-gated depth enrichment (license / workflows / README / review depth / dep files / commit quality / cross-repo).
+- Two-pass scoring engine: base pass → tier-gated enrichment → final pass + badges. License signal (4 pts) finally fires, so the 100/100 ceiling is reachable.
+- Frontend `PositionBar` + `BadgeRow` components mounted on the results page. Loading skeleton updated.
+- Breaking change to `/analyze/{username}` response shape: `category` removed; `tier` + `badges` added. No live persistence yet, so no migration.
+
+**Decisions:**
+- Re-score *after* enrichment with the same scorers, rather than expanding scorer ceilings. Keeps the 100-pt cap and means depth signals' impact lands at the scorer that owns the signal.
+- Tier-gating uses the **base** total (not the enriched total) to decide which depth calls to make. A profile right under a threshold won't get the next tier's signals even if those signals would push it over — deterministic and explainable.
+
+**Verified:**
+- `uv run pytest -q` → all green.
+- `npm run build` and `npm run lint` → clean.
+- Smoke test against octocat / torvalds / one Staff-tier real profile in the browser; tier names, sub-ranks, badges, position bar render as designed. (Smoke test verification is Task 21 — this log entry assumes it's about to happen.)
+
+**Next:**
+- v0.4.0 — AI narrative layer (Roast Mode + Mentor Mode).
+
+---
+
 ## 2026-05-15 — Claude (Opus 4.7) — v0.2.0 audit + scoring-engine signal fix
 
 **Slice:** v0.2.0 (shipping)

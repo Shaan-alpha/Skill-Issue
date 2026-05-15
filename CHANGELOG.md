@@ -8,6 +8,27 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
+## [0.3.0] — 2026-05-16
+
+### Added
+- **7-tier ladder** replacing the old multi-axis category model: Hobbyist · Student Builder · Entry-Level Engineer · Professional Developer · Senior Engineer · Staff Engineer · Principal Engineer. Band semantics `[lower, upper)` except Principal which includes 100.
+- **Intra-tier sub-rank (1–100)** rendered alongside the tier name (e.g. "Senior Engineer · 47/100").
+- **Position bar** on the results page: minimal-marker style with tier dividers, "X pts to <next tier>" caption, `role="progressbar"` semantics, lazy-loaded framer-motion animation.
+- **Eight stackable badges**, all deterministic: OSS Contributor, PR Master, Maintainer, Star Magnet, Polyglot, Long-haul, Indie Hacker, Toolmaker. Each ships with a one-line evidence string.
+- **Tier-gated depth signals**:
+  - Professional+: per-repo license (SPDX-validated), workflow file counts, README length.
+  - Senior+: PR review depth (avg body length across last 25 reviews), dependency file detection.
+  - Staff+: commit message quality sampling, cross-repo contribution count.
+- Two-pass scoring engine: base file-existence scoring → tier-gated enrichment → re-score on enriched profile.
+
+### Fixed
+- **`repo_quality.license_majority` (4 pts).** Deferred since v0.1.0. Finally fires when ≥50% of the top 10 non-fork repos carry an SPDX-recognised license. Makes the 100/100 ceiling reachable for the first time.
+
+### Changed
+- **Breaking — `/analyze/{username}` response shape.** `report.category: DeveloperCategory` removed; replaced with `report.tier: TierInfo` and `report.badges: list[Badge]`. Frontend types updated in lockstep. No live persistence exists yet, so no migration story is needed.
+
+---
+
 ## [0.2.0] — 2026-05-15
 
 ### Added
