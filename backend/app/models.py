@@ -14,6 +14,26 @@ DeveloperCategory = Literal[
     "Indie Hacker",
 ]
 
+TierName = Literal[
+    "Hobbyist",
+    "Student Builder",
+    "Entry-Level Engineer",
+    "Professional Developer",
+    "Senior Engineer",
+    "Staff Engineer",
+    "Principal Engineer",
+]
+
+
+class TierInfo(BaseModel):
+    name: TierName
+    sub_rank: int = Field(ge=0, le=100)
+    band: tuple[int, int]
+    next_tier: TierName | None = None
+    pts_to_next: int | None = None
+    prev_tier: TierName | None = None
+    pts_above_prev: int = 0
+
 
 class Evidence(BaseModel):
     signal: str
