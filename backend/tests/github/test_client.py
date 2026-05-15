@@ -130,3 +130,45 @@ async def test_list_workflow_files_returns_empty_on_404() -> None:
     )
     async with GitHubClient(token="ghs_test") as gh:
         assert await gh.list_workflow_files("o", "r") == []
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_get_repo_readme_text_returns_decoded() -> None:
+    import base64
+    content = "# Hello\nSecond line."
+    respx.get("https://api.github.com/repos/o/r/readme").mock(
+        return_value=Response(
+            200,
+            json={"content": base64.b64encode(content.encode()).decode(), "encoding": "base64"},
+        )
+    )
+    async with GitHubClient(token="ghs_test") as gh:
+        assert await gh.get_repo_readme_text("o", "r") == content
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_get_repo_readme_text_returns_empty_on_404() -> None:
+    respx.get("https://api.github.com/repos/o/r/readme").mock(
+        return_value=Response(404, json={"message": "Not Found"})
+    )
+    async with GitHubClient(token="ghs_test") as gh:
+        assert await gh.get_repo_readme_text("o", "r") == ""
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_list_recent_commits_sample_returns_message_list() -> None:
+    respx.get(url__startswith="https://api.github.com/repos/o/r/commits").mock(
+        return_value=Response(
+            200,
+            json=[
+                {"commit": {"message": "feat: add thing\n\nlong body"}},
+                {"commit": {"message": "wip"}},
+            ],
+        )
+    )
+    async with GitHubClient(token="ghs_test") as gh:
+        msgs = await gh.list_recent_commits_sample("o", "r", limit=10)
+    assert msgs == ["feat: add thing\n\nlong body", "wip"]

@@ -113,6 +113,29 @@ class GitHubClient:
             return []
         return [str(e["name"]) for e in data if e.get("type") == "file"]
 
+    async def get_repo_readme_text(self, owner: str, repo: str) -> str:
+        """Return decoded README text for any repo, or "" when missing."""
+        resp = await self._request("GET", f"{API_BASE}/repos/{owner}/{repo}/readme")
+        if resp.status_code == 404:
+            return ""
+        resp.raise_for_status()
+        content = resp.json().get("content", "")
+        return base64.b64decode(content).decode("utf-8", errors="ignore")
+
+    async def list_recent_commits_sample(
+        self, owner: str, repo: str, *, limit: int = 100
+    ) -> list[str]:
+        """Return the most-recent commit messages on the default branch (up to limit)."""
+        resp = await self._request(
+            "GET",
+            f"{API_BASE}/repos/{owner}/{repo}/commits",
+            params={"per_page": limit},
+        )
+        if resp.status_code == 404:
+            return []
+        resp.raise_for_status()
+        return [str(c.get("commit", {}).get("message", "")) for c in resp.json()]
+
     async def get_profile_readme(self, username: str) -> str | None:
         resp = await self._request("GET", f"{API_BASE}/repos/{username}/{username}/readme")
         if resp.status_code == 404:
