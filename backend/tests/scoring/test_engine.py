@@ -1,30 +1,46 @@
-import pathlib
+from pathlib import Path
+from unittest.mock import AsyncMock
+
+import pytest
 
 from app.models import Profile
 from app.scoring.engine import run_scoring_engine
 
-
-def _load(name: str) -> Profile:
-    return Profile.model_validate_json(
-        (pathlib.Path(__file__).parent.parent / "fixtures" / name).read_text()
-    )
+FIXTURES = Path(__file__).parent.parent / "fixtures"
 
 
-def test_engine_aggregates_all_scorers() -> None:
-    profile = _load("profile_senior.json")
-    report = run_scoring_engine(profile)
+def _profile(name: str) -> Profile:
+    return Profile.model_validate_json((FIXTURES / name).read_text())
 
-    assert report.username == profile.username
-    assert report.total >= 0
-    assert report.total <= 100
-    assert report.breakdown.repo_quality.max_points == 30
-    assert report.breakdown.engineering_maturity.max_points == 20
-    assert report.breakdown.oss_collab.max_points == 15
-    assert report.breakdown.consistency.max_points == 10
-    assert report.breakdown.recruiter_signal.max_points == 15
-    assert report.breakdown.learning_trajectory.max_points == 10
 
-    # Ensure total matches the sum
+@pytest.mark.asyncio
+async def test_engine_returns_tier_and_badges_for_student() -> None:
+    profile = _profile("profile_student.json")
+    gh = AsyncMock()  # never called for Hobbyist/Student tiers
+    report = await run_scoring_engine(profile, gh)
+
+    assert report.tier.name in {"Hobbyist", "Student Builder"}
+    assert isinstance(report.badges, list)
+    assert report.total == report.breakdown.total()
+    gh.get_license.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_engine_runs_depth_for_high_scorer() -> None:
+    profile = _profile("profile_senior.json")
+    gh = AsyncMock()
+    gh.get_license.return_value = "MIT"
+    gh.list_workflow_files.return_value = ["ci.yml"]
+    gh.get_repo_readme_text.return_value = "# README\n## Setup"
+    gh.get_review_depth.return_value = 200
+    gh.get_repo_root_contents.return_value = ["pyproject.toml"]
+    gh.list_recent_commits_sample.return_value = ["feat: add foo"]
+    gh.get_contribution_repo_count.return_value = 10
+
+    report = await run_scoring_engine(profile, gh)
+
+    assert report.tier.name in {"Professional Developer", "Senior Engineer", "Staff Engineer"}
+    gh.get_license.assert_called()
     assert report.total == (
         report.breakdown.repo_quality.points
         + report.breakdown.engineering_maturity.points

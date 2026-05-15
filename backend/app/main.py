@@ -59,4 +59,4 @@ async def analyze_user(username: str) -> Report:
                 status_code=500, detail=f"Failed to analyze user '{username}'"
             ) from None
 
-        return run_scoring_engine(profile)
+        return await run_scoring_engine(profile, gh)

@@ -7,6 +7,7 @@ from app.models import (
     Report,
     ScoreBreakdown,
     ScoreResult,
+    TierInfo,
 )
 
 
@@ -32,7 +33,8 @@ def test_report_total_is_sum_of_breakdown() -> None:
     )
     report = Report(
         username="octocat",
-        category="Professional Developer",
+        tier=TierInfo(name="Professional Developer", sub_rank=40, band=(50, 65)),
+        badges=[],
         breakdown=breakdown,
         total=breakdown.total(),
         generated_at=datetime.now(UTC),

@@ -5,15 +5,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
-DeveloperCategory = Literal[
-    "Student Builder",
-    "Entry-Level Engineer",
-    "Professional Developer",
-    "Senior Engineer",
-    "OSS Contributor",
-    "Indie Hacker",
-]
-
 TierName = Literal[
     "Hobbyist",
     "Student Builder",
@@ -128,7 +119,8 @@ class ScoreBreakdown(BaseModel):
 
 class Report(BaseModel):
     username: str
-    category: DeveloperCategory
+    tier: TierInfo
+    badges: list[Badge] = Field(default_factory=list)
     breakdown: ScoreBreakdown
     total: int = Field(ge=0, le=100)
     generated_at: datetime
