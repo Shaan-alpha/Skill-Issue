@@ -58,6 +58,10 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
             languages[language] = languages.get(language, 0) + bytes_count
 
     external_user = external.get("user") or {}
+    has_sponsors_listing = external_user.get("hasSponsorsListing", False)
+    is_github_star = external_user.get("isGitHubStar", False)
+    is_developer_program_member = external_user.get("isDeveloperProgramMember", False)
+
     external_prs = external_user.get("pullRequests", {})
     external_prs_merged = external_prs.get("totalCount", 0)
     external_reviews = (
@@ -102,4 +106,10 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
         external_orgs=external_orgs,
         commit_dates=sorted(list(commit_dates_set)),
         account_created_at=_parse_dt(user["created_at"]) or datetime.now(UTC),
+        company=user.get("company"),
+        blog=user.get("blog"),
+        hireable=bool(user.get("hireable")),
+        has_sponsors_listing=has_sponsors_listing,
+        is_github_star=is_github_star,
+        is_developer_program_member=is_developer_program_member,
     )

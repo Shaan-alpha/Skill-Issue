@@ -94,7 +94,10 @@ def _mock_graphql(
                 json={
                     "data": {
                         "user": {
-                            "pullRequests": {"totalCount": external_prs},
+                            "hasSponsorsListing": True,
+                            "isGitHubStar": False,
+                            "isDeveloperProgramMember": True,
+                            "pullRequests": {"totalCount": external_prs, "nodes": []},
                             "contributionsCollection": {
                                 "pullRequestReviewContributions": {"totalCount": external_reviews}
                             },
@@ -182,3 +185,5 @@ async def test_ingest_profile_populates_languages_readme_and_external_counts() -
     assert profile.profile_readme_chars == len(readme)
     assert profile.external_prs_merged == 12
     assert profile.external_reviews == 4
+    assert profile.has_sponsors_listing is True
+    assert profile.is_developer_program_member is True

@@ -64,6 +64,13 @@ class Profile(BaseModel):
     external_orgs: set[str] = Field(default_factory=set)
     commit_dates: list[datetime]
     account_created_at: datetime
+    # Recruiter Signal fields
+    company: str | None = None
+    blog: str | None = None
+    hireable: bool = False
+    has_sponsors_listing: bool = False
+    is_github_star: bool = False
+    is_developer_program_member: bool = False
 
 
 class ScoreBreakdown(BaseModel):

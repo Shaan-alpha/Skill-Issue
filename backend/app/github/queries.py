@@ -23,6 +23,9 @@ query PinnedRepos($login: String!) {
 EXTERNAL_PRS = """
 query ExternalPRs($login: String!) {
   user(login: $login) {
+    hasSponsorsListing
+    isGitHubStar
+    isDeveloperProgramMember
     pullRequests(states: MERGED, first: 100) {
       totalCount
       nodes {
