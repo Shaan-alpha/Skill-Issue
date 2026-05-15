@@ -8,25 +8,30 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
-## [Unreleased]
-
-> Work-in-progress toward **v0.2.0 — Frontend shell**. Entries here become the public release body when the slice ships. Visual polish + Lighthouse pass are the remaining exit criteria.
+## [0.2.0] — 2026-05-15
 
 ### Added
 - Next.js 16 + React 19 + Tailwind 4 frontend with landing page (`/`) and results route (`/u/[username]`). Mobile-first responsive across all breakpoints.
-- Loading skeleton mirroring the results layout (no layout jump on load → loaded).
-- Segment-level `not-found.tsx` (on-voice "no such GitHub user") and `error.tsx` (retry + home) boundaries for `/u/[username]`.
+- `LazyMotion` (`framer-motion`) wired through a `FramerProvider` so animation features are lazy-loaded — smaller initial JS bundle.
+- Loading skeleton mirroring the results layout (no layout jump between loading and loaded states).
+- Segment-level `not-found.tsx` (on-voice "no such GitHub user") and `error.tsx` (retry + home, with optional digest reference) boundaries for `/u/[username]`.
 - Search bar that accepts `github.com/<user>` URLs, `@user` shorthand, and validates the username pattern client-side before navigating.
-- Backend `/analyze/{username}` username validator (GitHub regex) — invalid input returns 400 with a clean detail.
-- Backend CORS middleware. Allowed origins configurable via `CORS_ALLOW_ORIGINS`; defaults to `http://localhost:3000`.
-- End-to-end integration test (`tests/test_analyze_e2e.py`) covering happy-path, 404 (unknown user), 400 (invalid username × 8 shapes), and 500 (missing token).
+- Backend `/analyze/{username}` GitHub-username validator — invalid input returns a clean 400 instead of a stack trace.
+- Backend CORS middleware. Allowed origins configurable via `CORS_ALLOW_ORIGINS`; preview-deploy URLs supported via `CORS_ALLOW_ORIGIN_REGEX`.
+- End-to-end integration test (`tests/test_analyze_e2e.py`) covering happy-path, 404 (unknown user), 400 (invalid username across 8 shapes), and 500 (missing token).
+- Per-repo signal detection: ingestion now fetches each repo's root contents and populates `has_readme`, `has_tests`, `has_ci`, and `deployment_hints` (Dockerfile, vercel.json, fly.toml, netlify.toml, render.yaml, serverless, Heroku, Cloudflare, etc.).
 
 ### Fixed
-- `consistency.score` crashed on `strptime(datetime, ...)` and `learning_trajectory.score` crashed comparing naive vs aware datetimes. Root cause: ingestion produced `YYYY-MM-DD` strings that Pydantic coerced into naive datetimes. Ingestion now writes tz-aware UTC datetimes directly.
-- `/analyze` no longer wraps every exception as a 404; real "not found" returns 404, GitHub HTTP errors return 502, anything else returns 500 with the full traceback logged.
+- `/analyze` no longer wraps every exception as a 404. Real "not found" returns 404, GitHub HTTP errors return 502, anything else returns 500 with the full traceback logged.
+- `consistency.score` previously crashed on `strptime(datetime, ...)` and `learning_trajectory.score` crashed comparing naive vs aware datetimes. Root cause: ingestion produced `YYYY-MM-DD` strings that Pydantic coerced into naive datetimes. Ingestion now writes tz-aware UTC datetimes directly.
+- **Scoring engine signals now actually fire.** `_repo_from_rest` previously hardcoded `has_readme`, `has_tests`, and `has_ci` to `False` and only ever appended `"pinned"` to `deployment_hints`. ~28 of 100 scoring points were unreachable in production. Fixed by enriching the top 20 non-fork repos with their root-tree contents.
+- A11y: minimum readable font size raised to `12px` (`text-xs`) for badges, the analysis ID line, the metadata grid, the error-digest line, and the footer.
+- A11y: `aria-hidden="true"` on decorative icons in `SearchBar`, `ResultsView`, `not-found.tsx`, and `error.tsx`; `aria-label` on the external profile link.
+- A11y: `ResultsView` semantic heading structure cleaned up — single `<main>` with a screen-reader-only `<h1>`, `<h2>` for sections.
+- Performance: tightened animation timings in `ResultsView` so the aggregate score paints faster (LCP target < 2.5s).
 
 ### Changed
-- `Report` JSON shape exposed to the frontend uses `breakdown.<bucket>.points / max_points` — the previous draft type (`total_score`, `score`, `max_score`, untyped `evidence`) was wrong and would have crashed the UI.
+- `Report` JSON shape exposed to the frontend now uses `breakdown.<bucket>.points / max_points` — the previous draft type (`total_score`, `score`, `max_score`, untyped `evidence`) was wrong and would have crashed the UI.
 
 ---
 

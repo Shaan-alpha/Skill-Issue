@@ -69,6 +69,27 @@ def _mock_commits(repos_payload: list[dict[str, object]]) -> None:
         )
 
 
+def _mock_contents(
+    repos_payload: list[dict[str, object]],
+    contents_by_repo: dict[str, list[dict[str, object]]] | None = None,
+) -> None:
+    """Mock `/repos/{owner}/{repo}/contents`. Default: empty repo (404)."""
+    contents_by_repo = contents_by_repo or {}
+    for raw in repos_payload:
+        if raw.get("fork"):
+            continue
+        owner, repo = str(raw["full_name"]).split("/", 1)
+        entries = contents_by_repo.get(str(raw["name"]))
+        if entries is None:
+            respx.get(f"https://api.github.com/repos/{owner}/{repo}/contents").mock(
+                return_value=Response(404, json={"message": "This repository is empty."})
+            )
+        else:
+            respx.get(f"https://api.github.com/repos/{owner}/{repo}/contents").mock(
+                return_value=Response(200, json=entries)
+            )
+
+
 def _mock_graphql(
     *,
     pinned_nodes: list[dict[str, object]] | None = None,
@@ -125,6 +146,7 @@ async def test_ingest_profile_maps_to_domain() -> None:
     repos_payload = _mock_repos()
     _mock_languages(repos_payload)
     _mock_commits(repos_payload)
+    _mock_contents(repos_payload)
     _mock_profile_readme()
     _mock_graphql()
 
@@ -143,6 +165,7 @@ async def test_pinned_repos_get_tagged() -> None:
     repos_payload = _mock_repos()
     _mock_languages(repos_payload)
     _mock_commits(repos_payload)
+    _mock_contents(repos_payload)
     _mock_profile_readme()
     # Pin the first non-fork repo from the fixture
     first_non_fork_name = next(r["name"] for r in repos_payload if not r.get("fork", False))
@@ -176,6 +199,7 @@ async def test_ingest_profile_populates_languages_readme_and_external_counts() -
     )
     _mock_profile_readme(readme)
     _mock_commits(repos_payload)
+    _mock_contents(repos_payload)
     _mock_graphql(external_prs=12, external_reviews=4)
 
     async with GitHubClient(token="ghs_test") as gh:
@@ -187,3 +211,54 @@ async def test_ingest_profile_populates_languages_readme_and_external_counts() -
     assert profile.external_reviews == 4
     assert profile.has_sponsors_listing is True
     assert profile.is_developer_program_member is True
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_ingest_profile_detects_readme_tests_ci_and_deployment_hints() -> None:
+    """The previously-dormant signals must be populated from per-repo root contents.
+
+    Regression guard for the bug where `_repo_from_rest` hardcoded these flags to
+    `False`, silently making ~28 of 100 scoring points unreachable in production.
+    """
+    repos_payload = [
+        _fake_repo("polished", language="TypeScript"),
+        _fake_repo("bare", language="Go"),
+    ]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_commits(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql()
+    _mock_contents(
+        repos_payload,
+        {
+            "polished": [
+                {"name": "README.md", "type": "file"},
+                {"name": "tests", "type": "dir"},
+                {"name": ".github", "type": "dir"},
+                {"name": "Dockerfile", "type": "file"},
+                {"name": "vercel.json", "type": "file"},
+            ],
+            # "bare" gets the default 404 -> empty contents, so it stays all-False.
+        },
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    by_name = {r.name: r for r in profile.repos}
+    polished = by_name["polished"]
+    assert polished.has_readme is True
+    assert polished.has_tests is True
+    assert polished.has_ci is True
+    assert "dockerfile" in polished.deployment_hints
+    assert "vercel" in polished.deployment_hints
+
+    bare = by_name["bare"]
+    assert bare.has_readme is False
+    assert bare.has_tests is False
+    assert bare.has_ci is False
+    # Deployment hints stay empty (or only "pinned" if pinned, which it isn't here)
+    assert bare.deployment_hints == []

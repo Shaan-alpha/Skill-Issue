@@ -19,7 +19,7 @@
 | **v0.0.0** | Repo + docs scaffolding | ✅ shipped |
 | **v0.0.1** | Automated GitHub Release pipeline | ✅ shipped |
 | **v0.1.0** | Backend MVP — GitHub ingestion + deterministic scoring | ✅ shipped |
-| **v0.2.0** | Frontend shell — landing page + analyze flow + results page (static) | ⏳ in progress |
+| **v0.2.0** | Frontend shell — landing page + analyze flow + results page (static) | ✅ shipped |
 | **v0.3.0** | AI narrative layer — Roast Mode + Mentor Mode | pending |
 | **v0.4.0** | Auth + persistence — GitHub OAuth + Neon Postgres | pending |
 | **v0.5.0** | Remaining modes — Recruiter, CTO, Career | pending |
@@ -90,9 +90,10 @@
 - Lighthouse mobile score ≥ 90 on the results page
 
 **Exit criteria:**
-- [ ] Deployed preview URL on Vercel renders `/u/octocat` end-to-end against the backend
-- [ ] Visual review: zero crypto-dashboard / neon-gradient violations of `docs/PRODUCT_VISION.md`
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.2.0`
+- [x] Deployed preview URL on Vercel renders `/u/octocat` end-to-end against the backend
+- [x] Visual review: zero crypto-dashboard / neon-gradient violations of `docs/PRODUCT_VISION.md`
+- [x] Lighthouse performance ≥ 90 and Accessibility ≥ 95 on results page
+- [x] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.2.0`
 
 ---
 

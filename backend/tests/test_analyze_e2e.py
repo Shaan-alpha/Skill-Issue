@@ -82,6 +82,19 @@ def _mock_github_for_testuser(
         respx.get(
             url__startswith=f"https://api.github.com/repos/{owner}/{name}/commits"
         ).mock(return_value=Response(200, json=commits_by_repo.get(name, [])))
+        # Root-contents enrichment: give every test repo a healthy set of signals
+        # so the e2e contract test exercises the README/tests/CI/deployment paths.
+        respx.get(f"https://api.github.com/repos/{owner}/{name}/contents").mock(
+            return_value=Response(
+                200,
+                json=[
+                    {"name": "README.md", "type": "file"},
+                    {"name": "tests", "type": "dir"},
+                    {"name": ".github", "type": "dir"},
+                    {"name": "Dockerfile", "type": "file"},
+                ],
+            )
+        )
 
     respx.post("https://api.github.com/graphql").mock(
         side_effect=[

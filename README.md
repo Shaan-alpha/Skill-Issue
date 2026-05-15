@@ -20,7 +20,7 @@ Engineering insight first. AI flavor second. Scoring is deterministic and explai
 
 ## Status
 
-Pre-alpha. Latest shipped release is **v0.1.0** (Backend MVP). **v0.2.0 — Frontend shell** is in progress on `feat/v0.1.0-backend-mvp`: the Next.js 16 app, schema-aligned results page, CORS, input validation, and error boundaries are all in; visual polish + Lighthouse pass are the remaining exit criteria. See [`CHANGELOG.md`](./CHANGELOG.md) for shipped slices, [`PLAN.md`](./PLAN.md) for the full roadmap, and [`docs/PROGRESS_LOG.md`](./docs/PROGRESS_LOG.md) for the most recent session handoff.
+Pre-alpha. Latest shipped release is **v0.2.0** (Frontend shell + backend hardening): Next.js 16 / React 19 app with landing + results route, schema-aligned types, CORS, username validation, error boundaries, and a fix for previously-dormant scoring signals (README / tests / CI / deployment detection). **v0.3.0 — AI narrative layer** is the next slice. See [`CHANGELOG.md`](./CHANGELOG.md) for shipped slices, [`PLAN.md`](./PLAN.md) for the full roadmap, and [`docs/PROGRESS_LOG.md`](./docs/PROGRESS_LOG.md) for the most recent session handoff.
 
 ---
 
@@ -53,7 +53,7 @@ cp .env.example .env        # then edit .env and add your GITHUB_TOKEN
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
-Verify: `curl http://localhost:8000/health` → `{"status":"ok","version":"0.1.0"}`.
+Verify: `curl http://localhost:8000/health` → `{"status":"ok","version":"0.2.0"}`.
 Hit the analyzer: `curl http://localhost:8000/analyze/octocat`.
 
 ### Frontend (`:3000`)

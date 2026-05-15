@@ -47,7 +47,10 @@ export function SearchBar() {
     <div className="w-full max-w-md space-y-2">
       <form onSubmit={handleSearch} className="relative flex w-full items-center gap-2">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search
+            className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
           <Input
             placeholder="GitHub username"
             value={raw}
@@ -72,9 +75,9 @@ export function SearchBar() {
           className="h-12 w-12 rounded-lg bg-white text-black transition-all hover:bg-white/90 hover:scale-105 active:scale-95 disabled:opacity-50"
         >
           {isLoading ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
+            <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
           ) : (
-            <ArrowRight className="h-5 w-5" />
+            <ArrowRight className="h-5 w-5" aria-hidden="true" />
           )}
         </Button>
       </form>

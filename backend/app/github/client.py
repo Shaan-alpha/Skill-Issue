@@ -71,6 +71,22 @@ class GitHubClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def get_repo_root_contents(self, owner: str, repo: str) -> list[str]:
+        """Return root-level file and directory names for a repo.
+
+        Empty repos return 404 ("This repository is empty.") — surface those as [].
+        If GitHub returns a single file object instead of a list (which happens when
+        the path resolves to a file), treat it as no usable directory listing.
+        """
+        resp = await self._request("GET", f"{API_BASE}/repos/{owner}/{repo}/contents")
+        if resp.status_code == 404:
+            return []
+        resp.raise_for_status()
+        data = resp.json()
+        if not isinstance(data, list):
+            return []
+        return [str(entry.get("name", "")) for entry in data]
+
     async def get_profile_readme(self, username: str) -> str | None:
         resp = await self._request("GET", f"{API_BASE}/repos/{username}/{username}/readme")
         if resp.status_code == 404:

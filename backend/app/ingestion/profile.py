@@ -4,11 +4,56 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
+import httpx
+
 from app.github.queries import EXTERNAL_PRS, PINNED_REPOS
 from app.models import Profile, Repo
 
 if TYPE_CHECKING:
     from app.github.client import GitHubClient
+
+# How many repos to inspect for README / tests / CI / deployment signals.
+# Matches the cap used for language aggregation. Beyond this, signals are
+# diminishing and the API cost is real.
+ROOT_CONTENT_LIMIT = 20
+
+_TEST_DIRS = {"tests", "test", "__tests__", "spec", "specs"}
+_CI_MARKERS = {
+    ".github",
+    ".circleci",
+    ".gitlab-ci.yml",
+    ".travis.yml",
+    "azure-pipelines.yml",
+    "bitbucket-pipelines.yml",
+    "jenkinsfile",
+}
+_DEPLOYMENT_MARKERS: dict[str, str] = {
+    "dockerfile": "dockerfile",
+    "docker-compose.yml": "docker-compose",
+    "docker-compose.yaml": "docker-compose",
+    "vercel.json": "vercel",
+    "netlify.toml": "netlify",
+    "fly.toml": "fly",
+    "render.yaml": "render",
+    "app.yaml": "app-engine",
+    "serverless.yml": "serverless",
+    "serverless.yaml": "serverless",
+    "procfile": "heroku",
+    "wrangler.toml": "cloudflare",
+}
+
+
+def _classify_root_entries(entries: list[str]) -> tuple[bool, bool, bool, list[str]]:
+    """Derive (has_readme, has_tests, has_ci, deployment_hints) from root entry names."""
+    lowered = {entry.lower() for entry in entries}
+    has_readme = any(entry.startswith("readme") for entry in lowered)
+    has_tests = bool(lowered & _TEST_DIRS)
+    has_ci = bool(lowered & _CI_MARKERS)
+    hints = [hint for marker, hint in _DEPLOYMENT_MARKERS.items() if marker in lowered]
+    # Preserve insertion order, dedupe (e.g. docker-compose.yml + .yaml both map to docker-compose).
+    seen: set[str] = set()
+    unique_hints = [h for h in hints if not (h in seen or seen.add(h))]
+    return has_readme, has_tests, has_ci, unique_hints
 
 
 def _parse_dt(value: str | None) -> datetime | None:
@@ -35,6 +80,28 @@ def _repo_from_rest(raw: dict[str, Any]) -> Repo:
     )
 
 
+async def _enrich_repo_signals(repo: Repo, gh: GitHubClient) -> None:
+    """Inspect a repo's root contents and populate README/tests/CI/deployment flags.
+
+    Silently tolerates per-repo HTTP failures: a single broken request must not
+    take down the entire ingestion. Untouched repos keep their default `False`
+    flags, which is the correct conservative reading.
+    """
+    owner, name = repo.full_name.split("/", 1)
+    try:
+        entries = await gh.get_repo_root_contents(owner, name)
+    except httpx.HTTPError:
+        return
+
+    has_readme, has_tests, has_ci, hints = _classify_root_entries(entries)
+    repo.has_readme = has_readme
+    repo.has_tests = has_tests
+    repo.has_ci = has_ci
+    for hint in hints:
+        if hint not in repo.deployment_hints:
+            repo.deployment_hints.append(hint)
+
+
 async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
     user = await gh.get_user(username)
     repos_raw = await gh.list_repos(username)
@@ -51,8 +118,12 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
         if r.name in pinned_names:
             r.deployment_hints.append("pinned")
 
+    # Enrich README / tests / CI / deployment signals from each repo's root tree.
+    # Capped at ROOT_CONTENT_LIMIT to stay polite to GitHub on heavy profiles.
+    await asyncio.gather(*(_enrich_repo_signals(r, gh) for r in repos[:ROOT_CONTENT_LIMIT]))
+
     languages: dict[str, int] = {}
-    for repo in repos[:20]:
+    for repo in repos[:ROOT_CONTENT_LIMIT]:
         owner, name = repo.full_name.split("/", 1)
         for language, bytes_count in (await gh.list_languages(owner, name)).items():
             languages[language] = languages.get(language, 0) + bytes_count

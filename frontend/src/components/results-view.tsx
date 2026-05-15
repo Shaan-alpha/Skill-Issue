@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import {
   ArrowLeft,
   ExternalLink,
@@ -28,7 +28,7 @@ interface ScoreCardProps {
 function ScoreItem({ title, result, icon, description, delay }: ScoreCardProps) {
   const { points, max_points } = result;
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
@@ -38,7 +38,7 @@ function ScoreItem({ title, result, icon, description, delay }: ScoreCardProps) 
           <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
             {title}
           </CardTitle>
-          <div className="h-4 w-4 text-accent">{icon}</div>
+          <div className="h-4 w-4 text-accent" aria-hidden="true">{icon}</div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-baseline gap-1">
@@ -53,7 +53,7 @@ function ScoreItem({ title, result, icon, description, delay }: ScoreCardProps) 
           <p className="text-xs text-muted-foreground leading-relaxed">{description}</p>
         </CardContent>
       </Card>
-    </motion.div>
+    </m.div>
   );
 }
 
@@ -100,19 +100,20 @@ export function ResultsView({ report }: { report: Report }) {
 
   return (
     <div className="min-h-screen bg-background px-4 py-6 sm:px-6 sm:py-12">
-      <div className="mx-auto max-w-6xl space-y-8 sm:space-y-12">
+      <main className="mx-auto max-w-6xl space-y-8 sm:space-y-12">
+        <h1 className="sr-only">Engineering report for {report.username}</h1>
         <header className="flex flex-wrap items-center justify-between gap-3">
           <Link
             href="/"
             className="group flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
-            <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
+            <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" aria-hidden="true" />
             Back to search
           </Link>
           <div className="flex items-center gap-3">
             <Badge
               variant="outline"
-              className="max-w-[60vw] truncate border-white/10 bg-white/5 font-mono text-[10px] sm:text-xs"
+              className="max-w-[60vw] truncate border-white/10 bg-white/5 font-mono text-xs"
             >
               ANALYSIS: {report.username.toUpperCase()}
             </Badge>
@@ -123,19 +124,19 @@ export function ResultsView({ report }: { report: Report }) {
               aria-label={`Open ${report.username}'s GitHub profile`}
               className="glass glass-hover rounded-full p-2"
             >
-              <ExternalLink className="h-4 w-4" />
+              <ExternalLink className="h-4 w-4" aria-hidden="true" />
             </Link>
           </div>
         </header>
 
         <section className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-8">
-          <motion.div
+          <m.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.6 }}
+            transition={{ duration: 0.4 }}
             className="glass flex flex-col items-center justify-center space-y-4 rounded-3xl p-6 text-center sm:p-8 lg:col-span-1"
           >
-            <span className="text-xs font-medium uppercase tracking-widest text-muted-foreground sm:text-sm">
+            <span className="text-sm font-medium uppercase tracking-widest text-muted-foreground">
               Aggregate Score
             </span>
             <div className="relative flex items-center justify-center">
@@ -153,7 +154,7 @@ export function ResultsView({ report }: { report: Report }) {
                   strokeWidth="4"
                   className="text-white/5"
                 />
-                <motion.circle
+                <m.circle
                   cx="96"
                   cy="96"
                   r="88"
@@ -163,7 +164,7 @@ export function ResultsView({ report }: { report: Report }) {
                   strokeDasharray={552.92}
                   initial={{ strokeDashoffset: 552.92 }}
                   animate={{ strokeDashoffset: 552.92 * (1 - report.total / 100) }}
-                  transition={{ duration: 1.5, ease: "easeOut", delay: 0.2 }}
+                  transition={{ duration: 1.2, ease: "easeOut", delay: 0.1 }}
                   className="text-accent"
                   strokeLinecap="round"
                 />
@@ -172,23 +173,23 @@ export function ResultsView({ report }: { report: Report }) {
             </div>
             <div className="space-y-1">
               <h2 className="text-lg font-semibold sm:text-xl">{report.category}</h2>
-              <p className="break-all text-[10px] text-muted-foreground sm:text-xs">
+              <p className="break-all text-xs text-muted-foreground">
                 ID: SKILL-ISSUE-{report.username.toUpperCase()}-01
               </p>
             </div>
-          </motion.div>
+          </m.div>
 
-          <motion.div
+          <m.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
+            transition={{ duration: 0.4, delay: 0.1 }}
             className="glass flex flex-col justify-center space-y-5 rounded-3xl p-6 sm:space-y-6 sm:p-8 lg:col-span-2"
           >
             <div className="space-y-2">
               <Badge className="border-accent/20 bg-accent/10 text-accent">Deterministic</Badge>
-              <h3 className="text-xl font-semibold text-gradient sm:text-2xl md:text-3xl">
+              <h2 className="text-xl font-semibold text-gradient sm:text-2xl md:text-3xl">
                 Engineering Report
-              </h3>
+              </h2>
             </div>
             <p className="text-base leading-relaxed text-muted-foreground sm:text-lg">
               {report.total} / 100 across six signals. Every point is backed by evidence — no
@@ -196,38 +197,38 @@ export function ResultsView({ report }: { report: Report }) {
             </p>
             <div className="grid grid-cols-2 gap-4 pt-2 sm:grid-cols-4 sm:pt-4">
               <div className="space-y-1">
-                <p className="text-[10px] font-bold uppercase tracking-tighter text-muted-foreground">
+                <p className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">
                   Reliability
                 </p>
                 <p className="text-sm font-medium">Deterministic</p>
               </div>
               <div className="space-y-1">
-                <p className="text-[10px] font-bold uppercase tracking-tighter text-muted-foreground">
+                <p className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">
                   Insights
                 </p>
                 <p className="text-sm font-medium">Evidence-based</p>
               </div>
               <div className="space-y-1">
-                <p className="text-[10px] font-bold uppercase tracking-tighter text-muted-foreground">
+                <p className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">
                   Mode
                 </p>
                 <p className="text-sm font-medium">Standard</p>
               </div>
               <div className="space-y-1">
-                <p className="text-[10px] font-bold uppercase tracking-tighter text-muted-foreground">
+                <p className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">
                   Verified
                 </p>
                 <p className="text-sm font-medium text-accent">GitHub API</p>
               </div>
             </div>
-          </motion.div>
+          </m.div>
         </section>
 
         <section className="space-y-6">
           <div className="flex items-center gap-4">
-            <h4 className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground sm:text-sm">
+            <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground sm:text-sm">
               Scoring Matrix
-            </h4>
+            </h2>
             <div className="h-px flex-1 bg-white/5" />
           </div>
 
@@ -239,16 +240,16 @@ export function ResultsView({ report }: { report: Report }) {
                 result={item.result}
                 icon={item.icon}
                 description={item.desc}
-                delay={0.1 * i + 0.5}
+                delay={0.05 * i + 0.3}
               />
             ))}
           </div>
         </section>
 
-        <footer className="space-y-2 pt-8 text-center text-[10px] uppercase tracking-widest text-muted-foreground sm:pt-12">
+        <footer className="space-y-2 pt-8 text-center text-xs uppercase tracking-widest text-muted-foreground sm:pt-12">
           <p>Skill Issue — GitHub Reputation Protocol v0.1.0</p>
         </footer>
-      </div>
+      </main>
 
       <div className="fixed inset-0 -z-10 bg-[linear-gradient(to_right,#80808005_1px,transparent_1px),linear-gradient(to_bottom,#80808005_1px,transparent_1px)] bg-[size:2rem_2rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]" />
     </div>

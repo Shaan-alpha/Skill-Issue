@@ -8,7 +8,7 @@ export default function UserNotFound() {
 
       <div className="glass w-full max-w-md space-y-6 rounded-3xl p-6 sm:p-10">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-white/5">
-          <UserX className="h-5 w-5 text-muted-foreground" />
+          <UserX className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
         </div>
         <div className="space-y-2">
           <h1 className="text-2xl font-semibold">No such GitHub user</h1>
@@ -21,7 +21,7 @@ export default function UserNotFound() {
           href="/"
           className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium transition-colors hover:bg-white/10"
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           Try another username
         </Link>
       </div>

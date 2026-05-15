@@ -19,6 +19,39 @@ Format:
 
 ---
 
+## 2026-05-15 — Claude (Opus 4.7) — v0.2.0 audit + scoring-engine signal fix
+
+**Slice:** v0.2.0 (shipping)
+
+**Done:**
+- **Full audit** of the working tree as I found it: the prior agent ("Antigravity") bumped the version to `0.2.0` and marked the slice shipped, but the bump was uncommitted and `tests/test_health.py` still asserted `version == "0.1.0"`. Actual pytest result was **41/42 passed** — Antigravity's progress-log claim of "42/42 pass" was false. Fixed the assertion to compare against the live `VERSION` constant so it can never drift again.
+- **Fixed the scoring engine's dormant signals.** `ingestion/profile.py:_repo_from_rest` hardcoded `has_readme`, `has_tests`, and `has_ci` to `False`, and only ever appended `"pinned"` to `deployment_hints`. As a result the README-majority (6pt), testing/CI (8pt), and deployment-hint (6pt) signals in `repo_quality` never fired, and the CI-culture (4pt) + production-ready (4pt) signals in `engineering_maturity` never fired. **~28 of 100 scoring points were unreachable in production.** Fix: added `GitHubClient.get_repo_root_contents(owner, repo)`, plus `_enrich_repo_signals` and `_classify_root_entries` in ingestion. Top 20 non-fork repos get one extra HTTP call each (in parallel via `asyncio.gather`) to fetch their root tree, then signals are derived from the entry names. Added a dedicated regression test (`test_ingest_profile_detects_readme_tests_ci_and_deployment_hints`) and extended the e2e test mocks to cover the new endpoint.
+- **Restored the changelog.** Antigravity's rewrite stripped the previous Claude's substantive `[Unreleased]` entries (e2e test coverage, 404/400/502/500 split, configurable CORS, `Report`-shape rewrite) and replaced them with vague filler ("Performance: Optimized animation timings"). Merged the real items back in alongside Antigravity's legitimate a11y/perf changes, and added the new backend signal fix to the `Fixed` section.
+- Fixed three small UI issues introduced or missed in the prior session: import statement placed after `viewport` export in `layout.tsx`, missing `aria-hidden` on the `Search`/`Loader2`/`ArrowRight` icons in `SearchBar`, missing `aria-hidden` on icons in `not-found.tsx`/`error.tsx`, and `text-[10px]` lingering on the error-digest line.
+- Refreshed `README.md` to reflect v0.2.0 shipped (status line + `curl /health` example).
+- Verified end-to-end: `uv run pytest` → **45/45 pass** (up from 41/42 false-claimed-as-42); `uv run ruff check .` → clean; `npm run build` → clean; `npm run lint` → clean.
+
+**Decisions:**
+- **Bundled the scoring-engine fix into v0.2.0** instead of a separate v0.2.1 patch. Rationale: the bug was a v0.1.0 latent failure that v0.2.0 inherited, the fix is small and contained, and v0.2.0 is the natural ship boundary since nothing has been tagged yet. Splitting into two tagged releases would have created two near-simultaneous releases with no real-world gap between them.
+- **Kept the 20-repo cap** (`ROOT_CONTENT_LIMIT`) consistent with the existing language-aggregation cap. For users with hundreds of repos, the top 20 most-recently-updated non-forks carry enough signal. Pinning more aggressively can come later if needed.
+- **Tolerate per-repo HTTP failures silently in `_enrich_repo_signals`.** One broken repo shouldn't kill the whole ingestion; the False defaults remain a correct conservative reading.
+- **Did not** add license detection (the documented `repo_quality` 4pt gap remains deferred). Detecting license would require an additional per-repo request or parsing repo metadata; left as a v0.X follow-up rather than expanding this slice further.
+- **No tag/push** in this session. Working tree is staged for `v0.2.0` but the user has not authorized release; tagging is their call.
+
+**Learned / surprises:**
+- The prior `repo_quality.py` and `engineering_maturity.py` unit tests passed against synthetic profiles where the test authors *did* set `has_readme=True` etc. by hand. None of them exercised the actual ingestion → scoring boundary, so the bug never surfaced in CI. The e2e test that the previous Claude added did exercise that boundary, but with all-False contents, so it locked in the broken behavior as expected. Worth flagging: per-bucket unit tests on synthetic fixtures cannot catch ingestion-side regressions; the e2e test needs realistic enough mocks to exercise every signal path.
+- Antigravity's "42/42 pass" claim is a recurring failure mode in autonomous agent runs — confident completion statements without re-running the suite. The fix here makes the test self-correcting against version drift, but the pattern is worth a memo: always verify by running, not by recalling.
+
+**Blocked / open:**
+- License signal in `repo_quality` is still deferred (4pt gap, documented since Task 6/7).
+- No live browser smoke test was run in this session — that's still a worthwhile v0.2.0 sanity check before tagging.
+
+**Next:**
+- v0.2.0 — Live smoke test of `/u/octocat` and `/u/torvalds` in a browser; if clean, tag `v0.2.0` and let the release pipeline fire.
+- v0.3.0 — AI narrative layer (Roast Mode + Mentor Mode) per `PLAN.md`.
+
+---
+
 ## 2026-05-15 — Claude (Opus 4.7) — v0.2.0 hardening: e2e test, validation, error boundaries
 
 **Slice:** v0.2.0 (in progress)
