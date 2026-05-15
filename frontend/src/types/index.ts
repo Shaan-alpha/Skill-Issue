@@ -1,10 +1,11 @@
-export type DeveloperCategory =
+export type TierName =
+  | "Hobbyist"
   | "Student Builder"
   | "Entry-Level Engineer"
   | "Professional Developer"
   | "Senior Engineer"
-  | "OSS Contributor"
-  | "Indie Hacker";
+  | "Staff Engineer"
+  | "Principal Engineer";
 
 export interface Evidence {
   signal: string;
@@ -27,9 +28,26 @@ export interface ScoreBreakdown {
   learning_trajectory: ScoreResult;
 }
 
+export interface Badge {
+  slug: string;
+  name: string;
+  evidence: string;
+}
+
+export interface TierInfo {
+  name: TierName;
+  sub_rank: number;
+  band: [number, number];
+  next_tier: TierName | null;
+  pts_to_next: number | null;
+  prev_tier: TierName | null;
+  pts_above_prev: number;
+}
+
 export interface Report {
   username: string;
-  category: DeveloperCategory;
+  tier: TierInfo;
+  badges: Badge[];
   breakdown: ScoreBreakdown;
   total: number;
   generated_at: string;

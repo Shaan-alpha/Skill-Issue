@@ -16,6 +16,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress, ProgressLabel } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Report, ScoreResult } from "@/types";
+import { PositionBar } from "@/components/position-bar";
+import { BadgeRow } from "@/components/badge-row";
 
 interface ScoreCardProps {
   title: string;
@@ -129,6 +131,9 @@ export function ResultsView({ report }: { report: Report }) {
           </div>
         </header>
 
+        <PositionBar tier={report.tier} total={report.total} />
+        <BadgeRow badges={report.badges} />
+
         <section className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-8">
           <m.div
             initial={{ opacity: 0, scale: 0.95 }}
@@ -172,7 +177,12 @@ export function ResultsView({ report }: { report: Report }) {
               <span className="absolute text-5xl font-bold sm:text-6xl">{report.total}</span>
             </div>
             <div className="space-y-1">
-              <h2 className="text-lg font-semibold sm:text-xl">{report.category}</h2>
+              <h2 className="text-lg font-semibold sm:text-xl">
+                {report.tier.name}
+                <span className="ml-2 text-sm font-normal text-muted-foreground">
+                  · {report.tier.sub_rank}/100
+                </span>
+              </h2>
               <p className="break-all text-xs text-muted-foreground">
                 ID: SKILL-ISSUE-{report.username.toUpperCase()}-01
               </p>
