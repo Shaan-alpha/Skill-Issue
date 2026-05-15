@@ -19,6 +19,43 @@ Format:
 
 ---
 
+## 2026-05-15 — Claude (Opus 4.7) — v0.2.0 schema alignment + CORS + secrets hygiene
+
+**Slice:** v0.2.0 (in progress)
+
+**Done:**
+- Audited the prior agent's hand-off and committed the four staged doc updates as `d7784e5` (post-v0.1.0 cleanup, v0.2.0 marked in-progress, backend-host question closed in `ARCHITECTURE.md`).
+- Resolved the frontend↔backend schema drift flagged by Antigravity. `frontend/src/types/index.ts` now mirrors `backend/app/models.py` exactly: `Report.breakdown.*`, `ScoreResult.points/max_points`, typed `Evidence[]`, `DeveloperCategory` literal union. `results-view.tsx` and `[username]/page.tsx` rewired accordingly.
+- Killed three build/runtime blockers introduced by `npx shadcn init`:
+  1. `lucide-react@^1.16.0` dropped branded icons — `Github` swapped for `ExternalLink` with `aria-label`. The badge next to it already announces the link as the user's GitHub.
+  2. `@import "shadcn/tailwind.css"` doesn't resolve (the file lives at `node_modules/shadcn/dist/tailwind.css` and isn't in the package's `exports` map). Inlined the seven `@custom-variant` blocks we'd actually use directly into `globals.css`; removed the accordion keyframes since nothing uses them yet.
+  3. `shadcn` moved from runtime `dependencies` to `devDependencies` — it's a CLI scaffolder, not a runtime package.
+- Moved route from `/[username]` to `/u/[username]` to match the layout promised in `PLAN.md` and `ARCHITECTURE.md`.
+- Replaced the default `layout.tsx` metadata with real product copy.
+- Backend gained CORS via `CORSMiddleware` with `cors_allow_origins` defaulting to `["http://localhost:3000"]` (overridable via `CORS_ALLOW_ORIGINS`). `GET` only, all headers allowed — narrow surface area.
+- Verified end-to-end: backend `31/31 pytest` pass, ruff clean, `next build` clean, and a live `GET /analyze/octocat` returned a complete report in 5.6s (octocat → 26/100, Entry-Level Engineer; recruiter_signal maxed at 15/15 with three real evidence rows).
+
+**Decisions:**
+- Inlined shadcn's `tailwind.css` rather than fixing the import path. Reason: removes a runtime dependency on a CLI package and removes a fragile module-resolution path. The 7 custom variants we kept are static text; the accordion keyframes were dropped because we don't have an accordion component.
+- `ExternalLink` over a hand-rolled inline GitHub SVG mark. Reason: the icon is a *link* affordance, not a brand statement, and the surrounding badge + URL already disambiguate the destination. Avoids a hardcoded SVG that would need maintenance if shadcn switches icon libs later.
+- Kept `cache: "no-store"` on the analyze fetch for now. v0.7.0 will introduce proper caching with Upstash; until then, fresh-every-load matches the "deterministic + transparent" voice.
+
+**Learned / surprises:**
+- `lucide-react` v1.x is a major rewrite that drops every branded icon (Github, Twitter, etc.). Any prior-knowledge code that imports `Github` from `lucide-react` is now broken on fresh installs. Worth memo-ing for future agents.
+- A scaffolder agent (Antigravity, in this case) using `npx shadcn init` against shadcn 4.7 produces a `globals.css` with a non-resolving `@import "shadcn/tailwind.css"` line. This will likely bite again — the workaround above is portable.
+- User pasted real `GITHUB_TOKEN` and `OPENAI_API_KEY` values into the tracked `backend/.env.example` file. Caught before `git add`; rewrote `backend/.env` (gitignored) with the values and `git restore`d the example to placeholders. Strongly recommend rotating both tokens since they briefly existed in a would-be-committed file. Also: the OpenAI key had a `your_openai_key_here` placeholder fragment concatenated onto the end — trimmed before writing, but the user should verify the trimmed value is the full intended key.
+
+**Blocked / open:**
+- Real visual smoke test of the results page against a live backend has not been done — that's the v0.2.0 exit criterion ("zero crypto-dashboard / neon-gradient violations"). Next session should `npm run dev` + `uvicorn app.main:app` and hit `/u/octocat` in a browser.
+- Lighthouse mobile ≥ 90 not measured yet.
+
+**Next:**
+- v0.2.0 — Browser-side visual review of `/u/octocat` and `/u/torvalds`, then iterate on the design until it matches `docs/PRODUCT_VISION.md`.
+- v0.2.0 — Add empty-state and error-state polish; surface evidence rows under each score card.
+- When v0.2.0 ships: bump `CHANGELOG.md`, tag `v0.2.0`, let the release workflow handle the rest.
+
+---
+
 ## 2026-05-15 — Antigravity — Documentation Audit & v0.2.0 Handoff Preparation
 
 **Slice:** v0.2.0
