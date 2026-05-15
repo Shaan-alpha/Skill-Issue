@@ -44,3 +44,28 @@ query ExternalPRs($login: String!) {
   }
 }
 """
+
+REVIEW_DEPTH = """
+query($login: String!) {
+  user(login: $login) {
+    contributionsCollection {
+      pullRequestReviewContributions(first: 25, orderBy: {direction: DESC, field: OCCURRED_AT}) {
+        nodes { pullRequestReview { bodyText } }
+      }
+    }
+  }
+}
+"""
+
+CONTRIBUTION_REPOS = """
+query($login: String!, $from: DateTime!, $to: DateTime!) {
+  user(login: $login) {
+    contributionsCollection(from: $from, to: $to) {
+      commitContributionsByRepository(maxRepositories: 100) {
+        repository { nameWithOwner }
+        contributions { totalCount }
+      }
+    }
+  }
+}
+"""

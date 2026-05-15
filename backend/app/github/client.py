@@ -136,6 +136,47 @@ class GitHubClient:
         resp.raise_for_status()
         return [str(c.get("commit", {}).get("message", "")) for c in resp.json()]
 
+    async def get_review_depth(self, username: str) -> int | None:
+        """Return the avg bodyText length across the 25 most-recent reviews, or None."""
+        from app.github.queries import REVIEW_DEPTH
+
+        data = await self.graphql(REVIEW_DEPTH, {"login": username})
+        nodes = (
+            data.get("user", {})
+            .get("contributionsCollection", {})
+            .get("pullRequestReviewContributions", {})
+            .get("nodes", [])
+        )
+        bodies = [
+            str(n.get("pullRequestReview", {}).get("bodyText") or "") for n in nodes
+        ]
+        bodies = [b for b in bodies if b]
+        if not bodies:
+            return None
+        return sum(len(b) for b in bodies) // len(bodies)
+
+    async def get_contribution_repo_count(self, username: str, *, min_commits: int = 10) -> int:
+        """Return the number of repos the user contributed >= min_commits to in the last year."""
+        from datetime import UTC, datetime, timedelta
+
+        from app.github.queries import CONTRIBUTION_REPOS
+
+        now = datetime.now(UTC)
+        data = await self.graphql(
+            CONTRIBUTION_REPOS,
+            {
+                "login": username,
+                "from": (now - timedelta(days=365)).isoformat(),
+                "to": now.isoformat(),
+            },
+        )
+        repos = (
+            data.get("user", {})
+            .get("contributionsCollection", {})
+            .get("commitContributionsByRepository", [])
+        )
+        return sum(1 for r in repos if r.get("contributions", {}).get("totalCount", 0) >= min_commits)
+
     async def get_profile_readme(self, username: str) -> str | None:
         resp = await self._request("GET", f"{API_BASE}/repos/{username}/{username}/readme")
         if resp.status_code == 404:

@@ -172,3 +172,77 @@ async def test_list_recent_commits_sample_returns_message_list() -> None:
     async with GitHubClient(token="ghs_test") as gh:
         msgs = await gh.list_recent_commits_sample("o", "r", limit=10)
     assert msgs == ["feat: add thing\n\nlong body", "wip"]
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_get_review_depth_averages_body_length() -> None:
+    respx.post("https://api.github.com/graphql").mock(
+        return_value=Response(
+            200,
+            json={
+                "data": {
+                    "user": {
+                        "contributionsCollection": {
+                            "pullRequestReviewContributions": {
+                                "nodes": [
+                                    {"pullRequestReview": {"bodyText": "a" * 100}},
+                                    {"pullRequestReview": {"bodyText": "b" * 200}},
+                                ]
+                            }
+                        }
+                    }
+                }
+            },
+        )
+    )
+    async with GitHubClient(token="ghs_test") as gh:
+        avg = await gh.get_review_depth("alice")
+    assert avg == 150
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_get_review_depth_returns_none_for_no_reviews() -> None:
+    respx.post("https://api.github.com/graphql").mock(
+        return_value=Response(
+            200,
+            json={
+                "data": {
+                    "user": {
+                        "contributionsCollection": {
+                            "pullRequestReviewContributions": {"nodes": []}
+                        }
+                    }
+                }
+            },
+        )
+    )
+    async with GitHubClient(token="ghs_test") as gh:
+        assert await gh.get_review_depth("alice") is None
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_get_contribution_repos_filters_low_volume() -> None:
+    respx.post("https://api.github.com/graphql").mock(
+        return_value=Response(
+            200,
+            json={
+                "data": {
+                    "user": {
+                        "contributionsCollection": {
+                            "commitContributionsByRepository": [
+                                {"repository": {"nameWithOwner": "alice/big"}, "contributions": {"totalCount": 50}},
+                                {"repository": {"nameWithOwner": "alice/medium"}, "contributions": {"totalCount": 15}},
+                                {"repository": {"nameWithOwner": "alice/small"}, "contributions": {"totalCount": 3}},
+                            ]
+                        }
+                    }
+                }
+            },
+        )
+    )
+    async with GitHubClient(token="ghs_test") as gh:
+        count = await gh.get_contribution_repo_count("alice", min_commits=10)
+    assert count == 2
