@@ -76,14 +76,14 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
         if owner_login and owner_login.lower() != username.lower():
             external_orgs.add(owner_login)
 
-    # Task 10: Consistency (commits over last year)
-    one_year_ago = (datetime.now(UTC) - timedelta(days=365)).isoformat()
+    # Task 10/12: Consistency and Learning Trajectory (commits over last 2 years)
+    two_years_ago = (datetime.now(UTC) - timedelta(days=730)).isoformat()
     # Top 10 non-fork repos by update date
     top_repos = [r for r in repos_raw if not r.get("fork")][:10]
 
     commit_dates_set: set[str] = set()
     commit_tasks = [
-        gh.list_commits(r["owner"]["login"], r["name"], username, one_year_ago) for r in top_repos
+        gh.list_commits(r["owner"]["login"], r["name"], username, two_years_ago) for r in top_repos
     ]
     all_repo_commits = await asyncio.gather(*commit_tasks)
 
