@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from app.models import Profile, Repo, ScoreBreakdown, ScoreResult
@@ -99,3 +99,58 @@ def test_polyglot_threshold() -> None:
     # 3 languages above 5% → no badge
     p.languages = {"Python": 100, "TypeScript": 100, "Go": 100, "Rust": 1}
     assert not any(b.slug == "polyglot" for b in compute_badges(p, _zero_breakdown()))
+
+
+def test_long_haul_requires_age_and_recent_activity() -> None:
+    p = _profile()
+    p.account_created_at = datetime.now(UTC) - timedelta(days=365 * 9)
+    p.commit_dates = [datetime.now(UTC) - timedelta(days=30)]
+    assert any(b.slug == "long-haul" for b in compute_badges(p, _zero_breakdown()))
+
+    # young but active
+    p.account_created_at = datetime.now(UTC) - timedelta(days=365 * 5)
+    assert not any(b.slug == "long-haul" for b in compute_badges(p, _zero_breakdown()))
+
+    # old but inactive (last commit > 365 days)
+    p.account_created_at = datetime.now(UTC) - timedelta(days=365 * 9)
+    p.commit_dates = [datetime.now(UTC) - timedelta(days=400)]
+    assert not any(b.slug == "long-haul" for b in compute_badges(p, _zero_breakdown()))
+
+
+def _breakdown_with_consistency(points: int) -> ScoreBreakdown:
+    b = _zero_breakdown()
+    b.consistency = ScoreResult(points=points, max_points=10)
+    return b
+
+
+def test_indie_hacker_full_trigger() -> None:
+    p = _profile()
+    p.blog = "https://example.com"
+    p.hireable = False
+    p.company = None
+    assert any(b.slug == "indie-hacker" for b in compute_badges(p, _breakdown_with_consistency(8)))
+
+
+def test_indie_hacker_blocked_by_company() -> None:
+    p = _profile()
+    p.blog = "https://example.com"
+    p.hireable = False
+    p.company = "@stripe"
+    assert not any(b.slug == "indie-hacker" for b in compute_badges(p, _breakdown_with_consistency(8)))
+
+
+def test_indie_hacker_blocked_by_hireable_true() -> None:
+    p = _profile()
+    p.blog = "https://example.com"
+    p.hireable = True
+    p.company = None
+    assert not any(b.slug == "indie-hacker" for b in compute_badges(p, _breakdown_with_consistency(8)))
+
+
+def test_toolmaker_threshold() -> None:
+    p = _profile()
+    p.repos = [_make_repo("a", stars=200), _make_repo("b", stars=300)]
+    assert any(b.slug == "toolmaker" for b in compute_badges(p, _zero_breakdown()))
+
+    p.repos = [_make_repo("a", stars=200), _make_repo("b", stars=199)]
+    assert not any(b.slug == "toolmaker" for b in compute_badges(p, _zero_breakdown()))

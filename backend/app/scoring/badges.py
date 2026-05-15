@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 
 from app.models import Badge, Profile, ScoreBreakdown
 
@@ -58,6 +59,52 @@ def _polyglot(profile: Profile, _: ScoreBreakdown) -> Badge | None:
     )
 
 
+def _long_haul(profile: Profile, _: ScoreBreakdown) -> Badge | None:
+    now = datetime.now(UTC)
+    age_years = (now - profile.account_created_at).days / 365
+    if age_years < 8:
+        return None
+    one_year_ago = now - timedelta(days=365)
+    recent = any(
+        (d if d.tzinfo else d.replace(tzinfo=UTC)) > one_year_ago for d in profile.commit_dates
+    )
+    if not recent:
+        return None
+    return Badge(
+        slug="long-haul",
+        name="Long-haul",
+        evidence=f"Active for {age_years:.1f} years, still committing",
+    )
+
+
+def _indie_hacker(profile: Profile, breakdown: ScoreBreakdown) -> Badge | None:
+    if breakdown.consistency.points < 8:
+        return None
+    if not profile.blog:
+        return None
+    if profile.hireable:
+        return None
+    if profile.company:
+        return None
+    return Badge(
+        slug="indie-hacker",
+        name="Indie Hacker",
+        evidence="Consistent solo shipper with a public portfolio",
+    )
+
+
+def _toolmaker(profile: Profile, _: ScoreBreakdown) -> Badge | None:
+    qualifying = [r for r in profile.repos if not r.is_fork and r.stars >= 200]
+    if len(qualifying) < 2:
+        return None
+    names = ", ".join(r.full_name for r in sorted(qualifying, key=lambda r: -r.stars)[:3])
+    return Badge(
+        slug="toolmaker",
+        name="Toolmaker",
+        evidence=f"{len(qualifying)} repos with ≥200 stars: {names}",
+    )
+
+
 # Each detector returns Badge | None. compute_badges runs them all and filters.
 # Detectors are registered in Tasks 3-5.
 _DETECTORS: list[Callable[[Profile, ScoreBreakdown], Badge | None]] = [
@@ -66,6 +113,9 @@ _DETECTORS: list[Callable[[Profile, ScoreBreakdown], Badge | None]] = [
     _maintainer,
     _star_magnet,
     _polyglot,
+    _long_haul,
+    _indie_hacker,
+    _toolmaker,
 ]
 
 
