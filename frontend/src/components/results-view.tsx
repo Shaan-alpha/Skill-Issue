@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
+import { Progress, ProgressLabel } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Report, ScoreResult } from "@/types";
 
@@ -45,7 +45,11 @@ function ScoreItem({ title, result, icon, description, delay }: ScoreCardProps) 
             <span className="text-3xl font-bold">{points}</span>
             <span className="text-sm text-muted-foreground">/ {max_points}</span>
           </div>
-          <Progress value={(points / max_points) * 100} className="h-1.5 bg-white/5" />
+          <Progress value={(points / max_points) * 100} className="h-1.5 bg-white/5">
+            <ProgressLabel className="sr-only">
+              {title}: {points} of {max_points} points
+            </ProgressLabel>
+          </Progress>
           <p className="text-xs text-muted-foreground leading-relaxed">{description}</p>
         </CardContent>
       </Card>
