@@ -19,6 +19,26 @@ Format:
 
 ---
 
+## 2026-05-15 — Codex — docs handoff sanity pass
+
+**Slice:** v0.1.0 documentation hygiene
+
+**Done:**
+- Checked the cold-start documentation surfaces after Tasks 6–7.
+- Updated `README.md` status from the old v0.0.0/no-code wording to the current state: v0.0.1 shipped, v0.1.0 backend MVP in progress, Tasks 1–7 complete, next resume point Task 8.
+- Updated the `PLAN.md` version map so v0.1.0 no longer claims only Tasks 1–4 are complete.
+
+**Decisions:**
+- Left `CHANGELOG.md` unchanged because v0.1.0 is not shipped yet. It should get a public `## [0.1.0]` section during Task 16, after the backend MVP exit criteria are met.
+
+**Learned / surprises:** The detailed handoff files were current, but the overview docs had drifted. Cold agents read overview files first, so keeping these summaries aligned matters.
+
+**Blocked / open:** none.
+
+**Next:** v0.1.0 Task 8 — Engineering Maturity scorer.
+
+---
+
 ## 2026-05-15 — Codex — v0.1.0 Tasks 6–7: scoring base + repo quality
 
 **Slice:** v0.1.0 Tasks 6–7

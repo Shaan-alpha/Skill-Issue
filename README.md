@@ -20,7 +20,7 @@ Engineering insight first. AI flavor second. Scoring is deterministic and explai
 
 ## Status
 
-Pre-alpha. We are at **v0.0.0** — repository scaffolded, no application code yet. See [`CHANGELOG.md`](./CHANGELOG.md) for shipped slices and [`PLAN.md`](./PLAN.md) for the versioned roadmap.
+Pre-alpha. Latest shipped release is **v0.0.1** (automated GitHub Release pipeline). Active work is **v0.1.0 — Backend MVP** on branch `feat/v0.1.0-backend-mvp`; Tasks 1–7 are complete and the next resume point is Task 8, the Engineering Maturity scorer. See [`CHANGELOG.md`](./CHANGELOG.md) for shipped slices, [`PLAN.md`](./PLAN.md) for the roadmap, and [`docs/PROGRESS_LOG.md`](./docs/PROGRESS_LOG.md) for the current handoff.
 
 ---
 
