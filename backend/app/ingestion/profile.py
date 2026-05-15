@@ -81,7 +81,7 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
     # Top 10 non-fork repos by update date
     top_repos = [r for r in repos_raw if not r.get("fork")][:10]
 
-    commit_dates_set: set[str] = set()
+    commit_dates_set: set[datetime] = set()
     commit_tasks = [
         gh.list_commits(r["owner"]["login"], r["name"], username, two_years_ago) for r in top_repos
     ]
@@ -91,7 +91,9 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
         for c in repo_commits:
             date_str = c.get("commit", {}).get("author", {}).get("date")
             if date_str:
-                commit_dates_set.add(date_str[:10])  # YYYY-MM-DD
+                # Normalize to a UTC-aware day so downstream date math is safe.
+                day = datetime.strptime(date_str[:10], "%Y-%m-%d").replace(tzinfo=UTC)
+                commit_dates_set.add(day)
 
     return Profile(
         username=user["login"],
@@ -104,7 +106,7 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
         external_prs_merged=external_prs_merged,
         external_reviews=external_reviews,
         external_orgs=external_orgs,
-        commit_dates=sorted(list(commit_dates_set)),
+        commit_dates=sorted(commit_dates_set),
         account_created_at=_parse_dt(user["created_at"]) or datetime.now(UTC),
         company=user.get("company"),
         blog=user.get("blog"),

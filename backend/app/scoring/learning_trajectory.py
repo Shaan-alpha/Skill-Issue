@@ -42,8 +42,8 @@ def score(profile: Profile) -> ScoreResult:
 
     y1_commits = 0
     y2_commits = 0
-    for d in profile.commit_dates:
-        # Pydantic parsed them as datetime
+    for raw_d in profile.commit_dates:
+        d = raw_d if raw_d.tzinfo else raw_d.replace(tzinfo=UTC)
         if d > one_year_ago:
             y1_commits += 1
         elif d > two_years_ago:
