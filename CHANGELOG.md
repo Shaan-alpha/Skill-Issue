@@ -13,7 +13,7 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 ### Added
 - Backend MVP skeleton using FastAPI, Pydantic v2, and `uv`.
 - Async GitHub client with REST/GraphQL support and robust rate-limit handling.
-- Deterministic scoring engine with scorers for `repo_quality` (30 pts), `engineering_maturity` (20 pts), `oss_collab` (15 pts), `consistency` (10 pts), and `recruiter_signal` (15 pts).
+- Deterministic scoring engine with scorers for `repo_quality` (30 pts), `engineering_maturity` (20 pts), `oss_collab` (15 pts), `consistency` (10 pts), `recruiter_signal` (15 pts), and `learning_trajectory` (10 pts).
 - Ingestion layer for GitHub profiles, pinned repositories, language statistics, external PR/review activity, multi-repo commit patterns, and professional verification markers.
 - Unit testing suite with fixture profiles for every scorer.
 

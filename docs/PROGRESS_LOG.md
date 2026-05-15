@@ -19,6 +19,28 @@ Format:
 
 ---
 
+## 2026-05-15 — Antigravity — Task 12: Learning Trajectory Scorer
+
+**Slice:** v0.1.0
+
+**Done:**
+- Updated `ingest_profile` to fetch commit history from the last 730 days (2 years) across top 10 repositories.
+- Implemented `learning_trajectory.py` scorer with points for account longevity (>3 years), recent repository growth (+3 in last year), and year-over-year commit activity (verified activity in both Y1 and Y2).
+- Verified implementation with `test_learning_trajectory.py`.
+
+**Decisions:**
+- Increased the commit ingestion window globally to 730 days; this allows the Consistency scorer to see more data if needed, but primarily serves the YOY activity check for Learning Trajectory.
+
+**Learned / surprises:**
+- Fetching 2 years of commits for 10 repos might hit rate limits faster if done at scale; current caps and async parallelization keep it safe for MVP volume.
+
+**Blocked / open:** none.
+
+**Next:**
+- **v0.1.0 Task 13 — Overall Score Orchestrator.** Combine all scorers into a final scorecard and expose via API.
+
+---
+
 ## 2026-05-15 — Antigravity — Task 11: Recruiter Signal Scorer
 
 **Slice:** v0.1.0
