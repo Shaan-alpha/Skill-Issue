@@ -1,9 +1,6 @@
-from __future__ import annotations
-
 from app.models import TierInfo, TierName
 
-# (lower inclusive, upper exclusive, tier name). Principal's upper is sentinel
-# 101 so 100 still falls inside `[90, 101)`.
+# (lower inclusive, upper exclusive, tier name).
 _BANDS: list[tuple[int, int, TierName]] = [
     (0, 20, "Hobbyist"),
     (20, 35, "Student Builder"),
@@ -15,26 +12,27 @@ _BANDS: list[tuple[int, int, TierName]] = [
 ]
 
 
-def _band_for(total: int) -> tuple[int, int, TierName]:
-    for lower, upper, name in _BANDS:
+def _band_for(total: int) -> tuple[int, int, int, TierName]:
+    """Return `(idx, lower, upper, name)` for the band that contains total."""
+    for idx, (lower, upper, name) in enumerate(_BANDS):
         if lower <= total < upper:
-            return lower, upper, name
+            return idx, lower, upper, name
     raise ValueError(f"total {total} out of [0, 100]")
 
 
 def assign_tier(total: int) -> TierInfo:
     if not 0 <= total <= 100:
         raise ValueError(f"total must be in [0, 100], got {total}")
-    lower, upper, name = _band_for(total)
+    idx, lower, upper, name = _band_for(total)
 
-    # Display band uses inclusive upper for the natural reading.
+    # Display band uses inclusive upper for natural reading. Principal Engineer's
+    # band stores sentinel 101 (so score 100 falls in [90, 101)), so cap at 100.
     display_upper = 100 if name == "Principal Engineer" else upper
 
     # Sub-rank: where you sit inside the band, 0..100.
     span = display_upper - lower
     sub_rank = round((total - lower) / span * 100) if span else 0
 
-    idx = next(i for i, (_, _, n) in enumerate(_BANDS) if n == name)
     next_name = _BANDS[idx + 1][2] if idx + 1 < len(_BANDS) else None
     prev_name = _BANDS[idx - 1][2] if idx > 0 else None
 
