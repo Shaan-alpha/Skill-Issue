@@ -19,6 +19,31 @@ Format:
 
 ---
 
+## 2026-05-15 — Antigravity — Task 13: Overall Score Orchestrator
+
+**Slice:** v0.1.0
+
+**Done:**
+- Created `engine.py` to orchestrate all 6 deterministic scorers and aggregate their results into a final `Report`.
+- Implemented heuristic categorization (e.g., "Senior Engineer" if score >= 80, "OSS Contributor" if high collab score).
+- Exposed end-to-end pipeline via `/analyze/{username}` endpoint in `main.py`.
+- Added integration test `test_engine.py` to verify full aggregation.
+
+**Decisions:**
+- Decided on simple thresholds for categorization for the MVP; these will be refined in `v0.3.0` with the AI narrative layer.
+- Enforced `GITHUB_TOKEN` requirement at the API level to ensure ingestion doesn't fail silently.
+
+**Learned / surprises:**
+- Pydantic v2's `model_validate_json` is extremely convenient for loading fixture profiles in tests.
+
+**Blocked / open:** none.
+
+**Next:**
+- **Merge `feat/v0.1.0-backend-mvp` to `main` and tag `v0.1.0`.**
+- **v0.2.0 — Frontend shell.**
+
+---
+
 ## 2026-05-15 — Antigravity — Task 12: Learning Trajectory Scorer
 
 **Slice:** v0.1.0
