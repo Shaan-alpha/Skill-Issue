@@ -44,4 +44,13 @@ def score(profile: Profile) -> ScoreResult:
         )
         points += 2
 
+    if profile.review_avg_comments is not None and profile.review_avg_comments > 0:
+        evidence.append(
+            Evidence(
+                signal="review_depth",
+                detail=f"Reviews average {profile.review_avg_comments} chars of feedback per PR",
+                weight=0,
+            )
+        )
+
     return make_result(points=points, max_points=MAX_POINTS, evidence=evidence)

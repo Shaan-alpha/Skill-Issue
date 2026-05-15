@@ -63,12 +63,14 @@ def score(profile: Profile) -> ScoreResult:
 
         # >= 3 repos with CI config
         if sum(1 for r in non_fork if r.has_ci) >= 3:
+            total_workflows = sum(profile.workflow_counts.values()) if profile.workflow_counts else 0
+            detail = (
+                f"Configures CI pipelines routinely — {total_workflows} workflows across top repos"
+                if total_workflows
+                else "Configures CI pipelines routinely"
+            )
             evidence.append(
-                Evidence(
-                    signal="ci_culture",
-                    detail="Configures CI pipelines routinely",
-                    weight=4,
-                )
+                Evidence(signal="ci_culture", detail=detail, weight=4)
             )
             points += 4
 

@@ -68,4 +68,16 @@ def score(profile: Profile) -> ScoreResult:
         )
         points += 3
 
+    if profile.cross_repo_contribution_count and profile.cross_repo_contribution_count >= 5:
+        evidence.append(
+            Evidence(
+                signal="cross_repo_breadth",
+                detail=(
+                    f"Contributed substantially to {profile.cross_repo_contribution_count} "
+                    "different repos in the last year"
+                ),
+                weight=0,
+            )
+        )
+
     return make_result(points=points, max_points=MAX_POINTS, evidence=evidence)

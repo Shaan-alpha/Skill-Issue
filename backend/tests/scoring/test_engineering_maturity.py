@@ -32,3 +32,11 @@ def test_evidence_weights_sum_to_points() -> None:
     profile.repos[0].size_kb = 250
     result = score(profile)
     assert sum(e.weight for e in result.evidence) == result.points
+
+
+def test_engineering_maturity_uses_workflow_count_when_available() -> None:
+    profile = _load("profile_senior.json")
+    profile.workflow_counts = {profile.repos[0].full_name: 3, profile.repos[1].full_name: 2}
+    result = score(profile)
+    ci_evidence = next(e for e in result.evidence if e.signal == "ci_culture")
+    assert "workflows" in ci_evidence.detail.lower()

@@ -42,3 +42,12 @@ def test_dry_spell_scores_low() -> None:
     # Gap: 79 days > 60 -> 0 pts
     # Volume: 2 < 30 -> 0 pts
     assert result.points <= 4
+
+
+def test_consistency_appends_cross_repo_evidence_when_available() -> None:
+    profile = _load("profile_senior.json")
+    now = datetime.now(UTC)
+    profile.commit_dates = [now - timedelta(days=i * 5) for i in range(40)]
+    profile.cross_repo_contribution_count = 8
+    result = score(profile)
+    assert any(e.signal == "cross_repo_breadth" for e in result.evidence)

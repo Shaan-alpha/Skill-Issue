@@ -38,3 +38,10 @@ def test_senior_profile_scores_mid() -> None:
     result = score(profile)
     assert result.points == 8  # 5 (PRs) + 3 (Reviews) + 0 (Org diversity)
     assert len(result.evidence) == 2
+
+
+def test_oss_collab_appends_review_depth_evidence_when_available() -> None:
+    profile = _load("profile_oss.json")
+    profile.review_avg_comments = 320
+    result = score(profile)
+    assert any(e.signal == "review_depth" for e in result.evidence)
