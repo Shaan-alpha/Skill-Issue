@@ -6,41 +6,43 @@
 
 ## Frontend — `frontend/`
 
-| Tool | Target version | Why |
+| Tool | Pinned (as of 2026-05-15) | Why |
 | --- | --- | --- |
-| **Next.js** | 15.x | App Router, partial prerendering, streaming, Vercel-native |
-| **React** | 19.x | Server Components, Actions, the modern data flow |
-| **TypeScript** | 5.x | Required for sane component contracts |
-| **TailwindCSS** | 4.x where stable, otherwise 3.4 | Utility-first; matches the design philosophy |
-| **shadcn/ui** | latest CLI | Component baseline; we own the source, not a node_module |
-| **Framer Motion** | latest | Physics-based animation, layout transitions |
-| **Magic UI / Aceternity** | latest | Motion accents, hero patterns — used sparingly |
-| **lucide-react** | latest | Icon set — clean, consistent line weight |
+| **Next.js** | `16.2.6` | App Router, partial prerendering, streaming, Vercel-native. v16 dropped some conventions; check `frontend/AGENTS.md` before assuming v13/v14 patterns. |
+| **React** | `19.2.4` | Server Components, Actions, the modern data flow |
+| **TypeScript** | `^5` | Sane component contracts |
+| **TailwindCSS** | `^4` | Utility-first; `@tailwindcss/postcss` is the v4 pipeline. No tailwind.config — config lives in `globals.css` via `@theme`. |
+| **tw-animate-css** | `^1.4` | v4-compatible replacement for `tailwindcss-animate` |
+| **shadcn/ui** | `^4.7` (devDependency, CLI only) | Component baseline; we own the source. The package is a CLI scaffolder — *do not* import from it at runtime. Style: `base-nova` (Base UI primitives, not Radix). |
+| **Framer Motion** | `^12.38` | Animation; prefer spring physics over linear easings |
+| **lucide-react** | `^1.16` | Icon set. **Branded icons (`Github`, `Twitter`, etc.) were removed in 1.x** — substitute generic equivalents (`ExternalLink`) or inline an SVG. |
+| **Magic UI / Aceternity** | latest, on-demand | Motion accents — used sparingly |
 | **@vercel/og** | latest | OG card generation (v0.6.0) |
 | **next-themes** | latest | Dark-mode default with light variant |
 | **zod** | latest | Runtime schema validation at API boundaries |
 
-**Bundler:** Turbopack (Next.js default in 15+).
+**Bundler:** Turbopack (Next.js default in 16+).
 
-**Linting / formatting:** Biome or ESLint+Prettier — pick one in v0.2.0 and log the decision. Default to **Biome** unless it lacks a critical rule.
+**Linting / formatting:** **ESLint** via `eslint-config-next` 16.2.6. Decision logged 2026-05-15 — chosen because the Next.js codemods and recommended rules ship through this config. Revisit Biome at v0.7.0 if perf or DX warrants.
 
 ---
 
 ## Backend — `backend/`
 
-| Tool | Target version | Why |
+| Tool | Pinned (as of 2026-05-15) | Why |
 | --- | --- | --- |
-| **Python** | 3.12+ | Modern type system, performance, structural pattern matching |
-| **FastAPI** | latest | Async-native, Pydantic-integrated, OpenAPI for free |
-| **Pydantic** | 2.x | Models for every API boundary and every scorer output |
-| **httpx** | latest | Async HTTP client with HTTP/2 |
-| **uvicorn** | latest | ASGI server in dev; production server decided in v0.4.0 |
-| **uv** | latest | Package + venv management — significantly faster than pip |
-| **pytest** | latest | Test runner with async support |
-| **pytest-asyncio** | latest | Async test fixtures |
-| **respx** | latest | httpx mocking for GitHub client tests |
-| **ruff** | latest | Linter + formatter — one tool for both |
-| **mypy** or **pyright** | latest | Static typing; pick in v0.1.0 |
+| **Python** | `3.12+` | Modern type system, performance, structural pattern matching |
+| **FastAPI** | `0.136` | Async-native, Pydantic-integrated, OpenAPI for free |
+| **Pydantic** | `2.13` | Models for every API boundary and every scorer output |
+| **pydantic-settings** | `2.14` | `.env` + env-var loading for `Settings` |
+| **httpx** | `0.28` (with `h2`) | Async HTTP client with HTTP/2 multiplexing |
+| **uvicorn[standard]** | `0.47` | ASGI server in dev; production server decided in v0.4.0 |
+| **uv** | `0.11.12+` | Package + venv management — significantly faster than pip |
+| **pytest** | `9.x` | Test runner with async support |
+| **pytest-asyncio** | `1.3` | `asyncio_mode = "auto"` so async tests don't need decorators |
+| **respx** | `0.23` | httpx mocking for GitHub client + e2e tests |
+| **ruff** | `0.15.13` | Linter + formatter — one tool for both. Configured in `backend/ruff.toml` (py312, line 100, E/F/I/UP/B/SIM/TCH/RUF). |
+| Static typing | deferred — ruff covers the lint surface | The mypy/pyright pick was punted past v0.1.0; revisit at v0.4.0 when ORM types land |
 
 **Package manager:** `uv` (not pip, not poetry). Faster, simpler, lockfile-first.
 

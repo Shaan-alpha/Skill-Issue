@@ -20,7 +20,7 @@ Engineering insight first. AI flavor second. Scoring is deterministic and explai
 
 ## Status
 
-Pre-alpha. Latest shipped release is **v0.1.0** (Backend MVP). See [`CHANGELOG.md`](./CHANGELOG.md) for shipped slices, [`PLAN.md`](./PLAN.md) for the roadmap, and [`docs/PROGRESS_LOG.md`](./docs/PROGRESS_LOG.md) for the current handoff. Next slice is **v0.2.0 — Frontend shell**.
+Pre-alpha. Latest shipped release is **v0.1.0** (Backend MVP). **v0.2.0 — Frontend shell** is in progress on `feat/v0.1.0-backend-mvp`: the Next.js 16 app, schema-aligned results page, CORS, input validation, and error boundaries are all in; visual polish + Lighthouse pass are the remaining exit criteria. See [`CHANGELOG.md`](./CHANGELOG.md) for shipped slices, [`PLAN.md`](./PLAN.md) for the full roadmap, and [`docs/PROGRESS_LOG.md`](./docs/PROGRESS_LOG.md) for the most recent session handoff.
 
 ---
 
@@ -35,22 +35,43 @@ Pre-alpha. Latest shipped release is **v0.1.0** (Backend MVP). See [`CHANGELOG.m
 | [`docs/PRODUCT_VISION.md`](./docs/PRODUCT_VISION.md) | Personality, target users, scoring rubric, voice |
 | [`docs/TECH_STACK.md`](./docs/TECH_STACK.md) | Every library, version pin, and why |
 | [`docs/PROGRESS_LOG.md`](./docs/PROGRESS_LOG.md) | Running narrative log — what was done and why |
+| [`docs/superpowers/plans/`](./docs/superpowers/plans/) | TDD sub-plans for each version slice |
 
 ---
 
 ## Quick start
 
-The backend is now functional as an MVP.
+You need two terminals — the FastAPI backend and the Next.js frontend run side by side in dev.
 
-1. **Prerequisites:** Install [uv](https://github.com/astral-sh/uv).
-2. **Setup:**
-   ```bash
-   cd backend
-   uv sync
-   cp .env.example .env # Add your GITHUB_TOKEN
-   ```
-3. **Run:** `uv run uvicorn app.main:app --reload`
-4. **Analyze:** `curl http://localhost:8000/analyze/[username]`
+### Backend (`:8000`)
+
+```bash
+cd backend
+uv sync
+cp .env.example .env        # then edit .env and add your GITHUB_TOKEN
+uv run uvicorn app.main:app --reload --port 8000
+```
+
+Verify: `curl http://localhost:8000/health` → `{"status":"ok","version":"0.1.0"}`.
+Hit the analyzer: `curl http://localhost:8000/analyze/octocat`.
+
+### Frontend (`:3000`)
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend reads `NEXT_PUBLIC_BACKEND_URL` from `frontend/.env.local` (defaults to `http://localhost:8000`).
+Open <http://localhost:3000> and analyze a username.
+
+### Tests + lint
+
+```bash
+cd backend && uv run pytest -v && uv run ruff check .
+cd frontend && npm run lint && npm run build
+```
 
 ---
 

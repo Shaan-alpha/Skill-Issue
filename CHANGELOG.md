@@ -10,8 +10,23 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ## [Unreleased]
 
+> Work-in-progress toward **v0.2.0 — Frontend shell**. Entries here become the public release body when the slice ships. Visual polish + Lighthouse pass are the remaining exit criteria.
+
 ### Added
-- None.
+- Next.js 16 + React 19 + Tailwind 4 frontend with landing page (`/`) and results route (`/u/[username]`). Mobile-first responsive across all breakpoints.
+- Loading skeleton mirroring the results layout (no layout jump on load → loaded).
+- Segment-level `not-found.tsx` (on-voice "no such GitHub user") and `error.tsx` (retry + home) boundaries for `/u/[username]`.
+- Search bar that accepts `github.com/<user>` URLs, `@user` shorthand, and validates the username pattern client-side before navigating.
+- Backend `/analyze/{username}` username validator (GitHub regex) — invalid input returns 400 with a clean detail.
+- Backend CORS middleware. Allowed origins configurable via `CORS_ALLOW_ORIGINS`; defaults to `http://localhost:3000`.
+- End-to-end integration test (`tests/test_analyze_e2e.py`) covering happy-path, 404 (unknown user), 400 (invalid username × 8 shapes), and 500 (missing token).
+
+### Fixed
+- `consistency.score` crashed on `strptime(datetime, ...)` and `learning_trajectory.score` crashed comparing naive vs aware datetimes. Root cause: ingestion produced `YYYY-MM-DD` strings that Pydantic coerced into naive datetimes. Ingestion now writes tz-aware UTC datetimes directly.
+- `/analyze` no longer wraps every exception as a 404; real "not found" returns 404, GitHub HTTP errors return 502, anything else returns 500 with the full traceback logged.
+
+### Changed
+- `Report` JSON shape exposed to the frontend uses `breakdown.<bucket>.points / max_points` — the previous draft type (`total_score`, `score`, `max_score`, untyped `evidence`) was wrong and would have crashed the UI.
 
 ---
 

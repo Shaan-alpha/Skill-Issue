@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# skill-issue-frontend
 
-## Getting Started
+Next.js 16 frontend for **Skill Issue** — landing page, analyze flow, and the results view that consumes the FastAPI backend.
 
-First, run the development server:
+See the repo root [`README.md`](../README.md), [`PLAN.md`](../PLAN.md), [`ARCHITECTURE.md`](../ARCHITECTURE.md), and [`AGENTS.md`](../AGENTS.md) for context. Frontend-specific Next.js warnings live in [`AGENTS.md`](./AGENTS.md) (this directory).
+
+## Local development
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cd frontend
+npm install
+npm run dev          # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The backend must also be running for `/u/[username]` to do anything useful. See the root [`README.md`](../README.md) for the two-terminal setup.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Environment
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+`frontend/.env.local`:
 
-## Learn More
+```bash
+NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
+```
 
-To learn more about Next.js, take a look at the following resources:
+This is the only frontend env var as of v0.2.0. Defaults to `http://localhost:8000` if unset.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Build + lint
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run lint
+npm run build
+```
 
-## Deploy on Vercel
+The build runs TypeScript and generates static pages for `/` and `/_not-found`. `/u/[username]` is a dynamic server-rendered route.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Stack
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+See [`docs/TECH_STACK.md`](../docs/TECH_STACK.md) for the canonical version pins. Quick reference:
+
+- Next.js 16 (Turbopack), React 19, TypeScript 5
+- Tailwind 4 (config in `src/app/globals.css` via `@theme`, no `tailwind.config.*`)
+- shadcn/ui (style: `base-nova` — Base UI primitives; CLI-only dependency)
+- framer-motion for animation, lucide-react for icons
+
+## Routes
+
+| Route | Type | Purpose |
+| --- | --- | --- |
+| `/` | Static | Landing page with search bar |
+| `/u/[username]` | Dynamic (SSR) | Results page; fetches `GET /analyze/{username}` from the backend |
+| `/_not-found` | Static | Next.js default global 404 |
+
+Segment-level `loading.tsx`, `error.tsx`, and `not-found.tsx` live under `app/u/[username]/`.
