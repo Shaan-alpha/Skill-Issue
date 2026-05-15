@@ -1,3 +1,6 @@
+import logging
+
+import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -6,6 +9,8 @@ from app.ingestion.profile import ingest_profile
 from app.models import Report
 from app.scoring.engine import run_scoring_engine
 from app.settings import VERSION, settings
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Skill Issue API", version=VERSION)
 
@@ -24,19 +29,26 @@ async def health() -> dict[str, str]:
 
 @app.get("/analyze/{username}", response_model=Report)
 async def analyze_user(username: str) -> Report:
-    """
-    Ingests data for a GitHub user and returns a full scoring report.
-    """
+    """Ingest a GitHub user and return the deterministic scoring report."""
     if not settings.github_token:
         raise HTTPException(status_code=500, detail="GITHUB_TOKEN not configured on backend")
 
     async with GitHubClient(token=settings.github_token) as gh:
         try:
             profile = await ingest_profile(username, gh)
-            report = run_scoring_engine(profile)
-            return report
-        except Exception as e:
-            # Basic error handling for MVP
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                raise HTTPException(
+                    status_code=404, detail=f"GitHub user '{username}' not found"
+                ) from e
+            logger.exception("GitHub HTTP error analyzing %s", username)
             raise HTTPException(
-                status_code=404, detail=f"Error analyzing user '{username}': {e!s}"
+                status_code=502, detail=f"GitHub API error: {e.response.status_code}"
+            ) from e
+        except Exception:
+            logger.exception("Unexpected error analyzing %s", username)
+            raise HTTPException(
+                status_code=500, detail=f"Failed to analyze user '{username}'"
             ) from None
+
+        return run_scoring_engine(profile)
