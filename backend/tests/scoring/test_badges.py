@@ -1,6 +1,7 @@
+from datetime import UTC, datetime
 from pathlib import Path
 
-from app.models import Profile, ScoreBreakdown, ScoreResult
+from app.models import Profile, Repo, ScoreBreakdown, ScoreResult
 from app.scoring.badges import compute_badges
 
 FIXTURES = Path(__file__).parent.parent / "fixtures"
@@ -54,3 +55,47 @@ def test_maintainer_threshold() -> None:
 def test_pr_family_stacks() -> None:
     slugs = {b.slug for b in compute_badges(_profile_with_external(60, 30, 3), _zero_breakdown())}
     assert {"oss-contributor", "pr-master", "maintainer"}.issubset(slugs)
+
+
+def _make_repo(name: str, *, stars: int = 0, is_fork: bool = False) -> Repo:
+    return Repo(
+        name=name,
+        full_name=f"u/{name}",
+        primary_language="Python",
+        stars=stars,
+        forks=0,
+        is_fork=is_fork,
+        has_readme=False,
+        has_tests=False,
+        has_ci=False,
+        deployment_hints=[],
+        size_kb=10,
+        last_commit_at=None,
+        created_at=datetime.now(UTC),
+    )
+
+
+def test_star_magnet_threshold() -> None:
+    p = _profile()
+    p.repos = [_make_repo("alpha", stars=1000)]
+    assert any(b.slug == "star-magnet" for b in compute_badges(p, _zero_breakdown()))
+
+    p.repos = [_make_repo("alpha", stars=999)]
+    assert not any(b.slug == "star-magnet" for b in compute_badges(p, _zero_breakdown()))
+
+
+def test_star_magnet_ignores_forks() -> None:
+    p = _profile()
+    p.repos = [_make_repo("forked", stars=5000, is_fork=True)]
+    assert not any(b.slug == "star-magnet" for b in compute_badges(p, _zero_breakdown()))
+
+
+def test_polyglot_threshold() -> None:
+    p = _profile()
+    # 4 languages each ≥ 5% — 100 bytes per language, 400 total → each is 25%
+    p.languages = {"Python": 100, "TypeScript": 100, "Go": 100, "Rust": 100}
+    assert any(b.slug == "polyglot" for b in compute_badges(p, _zero_breakdown()))
+
+    # 3 languages above 5% → no badge
+    p.languages = {"Python": 100, "TypeScript": 100, "Go": 100, "Rust": 1}
+    assert not any(b.slug == "polyglot" for b in compute_badges(p, _zero_breakdown()))

@@ -33,12 +33,39 @@ def _maintainer(profile: Profile, _: ScoreBreakdown) -> Badge | None:
     )
 
 
+def _star_magnet(profile: Profile, _: ScoreBreakdown) -> Badge | None:
+    top = max((r for r in profile.repos if not r.is_fork), key=lambda r: r.stars, default=None)
+    if top is None or top.stars < 1000:
+        return None
+    return Badge(
+        slug="star-magnet",
+        name="Star Magnet",
+        evidence=f"{top.full_name} has {top.stars} stars",
+    )
+
+
+def _polyglot(profile: Profile, _: ScoreBreakdown) -> Badge | None:
+    total_bytes = sum(profile.languages.values())
+    if total_bytes == 0:
+        return None
+    significant = [lang for lang, b in profile.languages.items() if b / total_bytes >= 0.05]
+    if len(significant) < 4:
+        return None
+    return Badge(
+        slug="polyglot",
+        name="Polyglot",
+        evidence=f"Significant in {len(significant)} languages: {', '.join(sorted(significant))}",
+    )
+
+
 # Each detector returns Badge | None. compute_badges runs them all and filters.
 # Detectors are registered in Tasks 3-5.
 _DETECTORS: list[Callable[[Profile, ScoreBreakdown], Badge | None]] = [
     _oss_contributor,
     _pr_master,
     _maintainer,
+    _star_magnet,
+    _polyglot,
 ]
 
 
