@@ -20,13 +20,14 @@
 | **v0.0.1** | Automated GitHub Release pipeline | ✅ shipped |
 | **v0.1.0** | Backend MVP — GitHub ingestion + deterministic scoring | ✅ shipped |
 | **v0.2.0** | Frontend shell — landing page + analyze flow + results page (static) | ✅ shipped |
-| **v0.3.0** | AI narrative layer — Roast Mode + Mentor Mode | pending |
-| **v0.4.0** | Auth + persistence — GitHub OAuth + Neon Postgres | pending |
-| **v0.5.0** | Remaining modes — Recruiter, CTO, Career | pending |
-| **v0.6.0** | GitHub Receipts™ — shareable OG cards | pending |
-| **v0.7.0** | Caching + performance — Upstash Redis, rate-limit hygiene | pending |
-| **v0.8.0** | Polish + observability — analytics, error tracking, perf budget | pending |
-| **v0.9.0** | Beta hardening — security review, abuse mitigation, load test | pending |
+| **v0.3.0** | Identity Signals — 7-tier ladder, position bar, badges, tier-gated depth | pending |
+| **v0.4.0** | AI narrative layer — Roast Mode + Mentor Mode | pending |
+| **v0.5.0** | Auth + persistence — GitHub OAuth + Neon Postgres | pending |
+| **v0.6.0** | Remaining modes — Recruiter, CTO, Career | pending |
+| **v0.7.0** | GitHub Receipts™ — shareable OG cards | pending |
+| **v0.8.0** | Caching + performance — Upstash Redis, rate-limit hygiene | pending |
+| **v0.9.0** | Polish + observability — analytics, error tracking, perf budget | pending |
+| **v0.10.0** | Beta hardening — security review, abuse mitigation, load test | pending |
 | **v1.0.0** | Public launch | pending |
 
 ---
@@ -97,7 +98,33 @@
 
 ---
 
-## v0.3.0 — AI narrative layer
+## v0.3.0 — Identity Signals
+
+**Goal:** Replace the bare score number with a tier ladder, intra-tier sub-rank, position bar, and stackable badges. Aggressive tier-gated depth signals unlock richer evidence at higher tiers and finally fire the deferred 4-pt license signal at Professional+.
+
+**Design spec:** [`docs/superpowers/specs/2026-05-16-v0.3.0-identity-signals-design.md`](./docs/superpowers/specs/2026-05-16-v0.3.0-identity-signals-design.md).
+
+**Slice scope:**
+- Backend: new `scoring/category.py` (7-tier ladder + sub-rank math), `scoring/badges.py` (8 deterministic v1 badges), `scoring/depth.py` (tier-gated enrichment dispatcher).
+- Ingestion: license / CI workflow / README-quality calls at Professional+; PR review depth + dependency hygiene at Senior+; commit message quality + cross-repo refactor signal at Staff+.
+- Model: drop `Report.category: DeveloperCategory`; add `Report.tier: TierInfo` and `Report.badges: list[Badge]`. New `TierName` literal.
+- Frontend: new `position-bar.tsx` (`role="progressbar"`, minimal-marker style) and `badge-row.tsx` on the results page; loader skeleton updated to match.
+- Tests: per-tier boundary cases, per-badge under/at/over fixtures, depth-signal mocks, e2e shape update.
+
+**Exit criteria:**
+- [ ] `/analyze/{username}` returns `tier` and `badges` in the new shape for every fixture and real-user request.
+- [ ] All 7 tier names assignable from crafted fixtures; band semantics `[lower, upper)` with Principal `[90, 100]`.
+- [ ] Every v1 badge has ≥ 3 unit-test cases (under / at / over).
+- [ ] The license signal earns its 4 pts on at least one Professional+ fixture — provable 100/100 ceiling.
+- [ ] Position bar renders correctly in the browser for octocat (Student Builder) and torvalds (Professional Developer).
+- [ ] Lighthouse mobile performance ≥ 90 and Accessibility ≥ 95 on `/u/[username]` still holds.
+- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.3.0`.
+
+**Sub-plan:** Generated via `superpowers:writing-plans` to `docs/superpowers/plans/2026-05-16-v0.3.0-identity-signals.md` when this slice starts.
+
+---
+
+## v0.4.0 — AI narrative layer
 
 **Goal:** Roast Mode and Mentor Mode produce written narrative that wraps the deterministic score *without altering it*.
 
@@ -114,11 +141,11 @@
 - [ ] Toggling modes never changes the displayed score
 - [ ] No prompt injection vector via username (sanitize, validate)
 - [ ] Cost ceiling: ≤ $0.02 per fresh analysis at current OpenAI pricing
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.3.0`
+- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.4.0`
 
 ---
 
-## v0.4.0 — Auth + persistence
+## v0.5.0 — Auth + persistence
 
 **Goal:** Users sign in with GitHub. Analyses are stored. Repeat visits are fast.
 
@@ -135,11 +162,11 @@
 - [ ] Analyses persist and are retrievable by user
 - [ ] Schema migrations are reversible and tested
 - [ ] No raw GitHub tokens stored in the DB (only refresh-required flow or short-lived session)
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.4.0`
+- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.5.0`
 
 ---
 
-## v0.5.0 — Remaining analysis modes
+## v0.6.0 — Remaining analysis modes
 
 **Goal:** Recruiter, CTO, and Career modes shipped behind the same mode toggle.
 
@@ -151,11 +178,11 @@
 **Exit criteria:**
 - [ ] All five modes (Roast, Mentor, Recruiter, CTO, Career) live and on-voice
 - [ ] Mode-specific emphasis is visible in the rendered narrative
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.5.0`
+- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.6.0`
 
 ---
 
-## v0.6.0 — GitHub Receipts™
+## v0.7.0 — GitHub Receipts™
 
 **Goal:** Every analysis produces a shareable scorecard image suitable for LinkedIn, X, and OG previews.
 
@@ -169,11 +196,11 @@
 **Exit criteria:**
 - [ ] OG card renders in under 800ms on Vercel
 - [ ] Cards pass real-world preview tests on X and LinkedIn
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.6.0`
+- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.7.0`
 
 ---
 
-## v0.7.0 — Caching + performance
+## v0.8.0 — Caching + performance
 
 **Goal:** Repeat analyses are free and fast.
 
@@ -186,11 +213,11 @@
 **Exit criteria:**
 - [ ] p95 latency for a cached analysis ≤ 200ms end-to-end
 - [ ] Lighthouse mobile performance ≥ 95 on `/u/[username]`
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.7.0`
+- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.8.0`
 
 ---
 
-## v0.8.0 — Polish + observability
+## v0.9.0 — Polish + observability
 
 **Goal:** The product feels finished. We can see what users do and what breaks.
 
@@ -205,11 +232,11 @@
 **Exit criteria:**
 - [ ] Error budget defined; dashboards live
 - [ ] Axe critical issues = 0
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.8.0`
+- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.9.0`
 
 ---
 
-## v0.9.0 — Beta hardening
+## v0.10.0 — Beta hardening
 
 **Goal:** Public-ready security and abuse posture.
 
@@ -224,7 +251,7 @@
 - [ ] No high or critical issues from `/security-review`
 - [ ] Load test passes target without errors
 - [ ] Legal docs live and linked from footer
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.9.0`
+- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.10.0`
 
 ---
 
