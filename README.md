@@ -20,7 +20,7 @@ Engineering insight first. AI flavor second. Scoring is deterministic and explai
 
 ## Status
 
-Pre-alpha. Latest shipped release is **v0.0.1** (automated GitHub Release pipeline). Active work is **v0.1.0 — Backend MVP** on branch `feat/v0.1.0-backend-mvp`; Tasks 1–7 are complete and the next resume point is Task 8, the Engineering Maturity scorer. See [`CHANGELOG.md`](./CHANGELOG.md) for shipped slices, [`PLAN.md`](./PLAN.md) for the roadmap, and [`docs/PROGRESS_LOG.md`](./docs/PROGRESS_LOG.md) for the current handoff.
+Pre-alpha. Latest shipped release is **v0.1.0** (Backend MVP). See [`CHANGELOG.md`](./CHANGELOG.md) for shipped slices, [`PLAN.md`](./PLAN.md) for the roadmap, and [`docs/PROGRESS_LOG.md`](./docs/PROGRESS_LOG.md) for the current handoff. Next slice is **v0.2.0 — Frontend shell**.
 
 ---
 
@@ -40,7 +40,17 @@ Pre-alpha. Latest shipped release is **v0.0.1** (automated GitHub Release pipeli
 
 ## Quick start
 
-The project is not yet runnable. When v0.1.0 lands, this section becomes a real getting-started guide. Until then: read [`PLAN.md`](./PLAN.md) and pick the next version slice.
+The backend is now functional as an MVP.
+
+1. **Prerequisites:** Install [uv](https://github.com/astral-sh/uv).
+2. **Setup:**
+   ```bash
+   cd backend
+   uv sync
+   cp .env.example .env # Add your GITHUB_TOKEN
+   ```
+3. **Run:** `uv run uvicorn app.main:app --reload`
+4. **Analyze:** `curl http://localhost:8000/analyze/[username]`
 
 ---
 
