@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+import asyncio
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from app.github.queries import EXTERNAL_PRS, PINNED_REPOS
@@ -71,6 +72,23 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
         if owner_login and owner_login.lower() != username.lower():
             external_orgs.add(owner_login)
 
+    # Task 10: Consistency (commits over last year)
+    one_year_ago = (datetime.now(UTC) - timedelta(days=365)).isoformat()
+    # Top 10 non-fork repos by update date
+    top_repos = [r for r in repos_raw if not r.get("fork")][:10]
+
+    commit_dates_set: set[str] = set()
+    commit_tasks = [
+        gh.list_commits(r["owner"]["login"], r["name"], username, one_year_ago) for r in top_repos
+    ]
+    all_repo_commits = await asyncio.gather(*commit_tasks)
+
+    for repo_commits in all_repo_commits:
+        for c in repo_commits:
+            date_str = c.get("commit", {}).get("author", {}).get("date")
+            if date_str:
+                commit_dates_set.add(date_str[:10])  # YYYY-MM-DD
+
     return Profile(
         username=user["login"],
         bio=user.get("bio"),
@@ -82,6 +100,6 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
         external_prs_merged=external_prs_merged,
         external_reviews=external_reviews,
         external_orgs=external_orgs,
-        commit_dates=[],  # Task 10 will fill
+        commit_dates=sorted(list(commit_dates_set)),
         account_created_at=_parse_dt(user["created_at"]) or datetime.now(UTC),
     )

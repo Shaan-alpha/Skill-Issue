@@ -58,6 +58,19 @@ class GitHubClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def list_commits(
+        self, owner: str, repo: str, author: str, since: str, per_page: int = 100
+    ) -> list[dict[str, Any]]:
+        resp = await self._request(
+            "GET",
+            f"{API_BASE}/repos/{owner}/{repo}/commits",
+            params={"author": author, "since": since, "per_page": per_page},
+        )
+        if resp.status_code == 404:
+            return []
+        resp.raise_for_status()
+        return resp.json()
+
     async def get_profile_readme(self, username: str) -> str | None:
         resp = await self._request("GET", f"{API_BASE}/repos/{username}/{username}/readme")
         if resp.status_code == 404:

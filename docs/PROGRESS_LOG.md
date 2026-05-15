@@ -19,6 +19,54 @@ Format:
 
 ---
 
+## 2026-05-15 — Antigravity — Task 9: OSS & Collaboration Scorer
+
+**Slice:** v0.1.0
+
+**Done:**
+- Added `external_orgs` set to `Profile` model to track distinct organizations contributed to.
+- Extended `EXTERNAL_PRS` GraphQL query to fetch repository owner logins for the last 100 merged PRs.
+- Updated ingestion logic to filter and populate `external_orgs` by identifying non-self repository owners.
+- Implemented `oss_collab.py` scorer awarding points for merged PR volume, external code reviews, and cross-org collaboration diversity.
+- Verified implementation with `test_oss_collab.py` and updated model tests.
+
+**Decisions:**
+- Capped org diversity signal to the last 100 merged PRs for performance; 100 is sufficient for the diversity signal in a general report.
+- Used a case-insensitive check for the user's own login when filtering external organizations.
+
+**Learned / surprises:**
+- Ingestion testing requires careful mocking of GraphQL nested structures; confirmed `respx` handling of complex post bodies.
+
+**Blocked / open:** none.
+
+**Next:**
+- **v0.1.0 Task 10 — Consistency Scorer (10 pts).** Implement heuristics for commit cadence, dry spells, and volume. Requires extending ingestion to pull commit dates across top repos.
+
+---
+
+## 2026-05-15 — Antigravity — Task 8: Engineering Maturity Scorer
+
+**Slice:** v0.1.0
+
+**Done:**
+- Added `size_kb` field (defaulting to 0) to `Repo` domain model in `models.py`.
+- Updated `ingestion/profile.py` to extract repo size from GitHub payload.
+- Created `engineering_maturity.py` scorer with points for typed languages, language diversity, large repos (>200KB indicating multi-folder), CI presence, and deployment hints with tests.
+- Created `test_engineering_maturity.py` to verify logic against the existing student, senior, and oss profile fixtures.
+- Passed `ruff` linting and formatting.
+- Committed the feat to `backend/`.
+
+**Decisions:**
+- Initialized `size_kb` with a default `0` in Pydantic to ensure existing test fixtures load correctly without backwards-compatibility breakage.
+
+**Learned / surprises:**
+- Modified specific tests to directly set `size_kb` inside the test rather than directly altering `profile_senior.json` globally, ensuring side effects stay minimal.
+
+**Blocked / open:** none.
+
+**Next:**
+- **v0.1.0 Task 9 — Impact & Maintenance Scorer (30 pts).** Implement heuristics for stars, fork activity, recent commits, and OSS contribution footprints (external PRs/reviews).
+
 ## 2026-05-15 — Codex — docs handoff sanity pass
 
 **Slice:** v0.1.0 documentation hygiene

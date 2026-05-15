@@ -58,6 +58,17 @@ def _mock_languages(
         )
 
 
+def _mock_commits(repos_payload: list[dict[str, object]]) -> None:
+    for raw in repos_payload:
+        if raw.get("fork"):
+            continue
+        owner, repo = str(raw["full_name"]).split("/", 1)
+        # Use a regex match or generic match for the commits URL because it has params
+        respx.get(url__startswith=f"https://api.github.com/repos/{owner}/{repo}/commits").mock(
+            return_value=Response(200, json=[])
+        )
+
+
 def _mock_graphql(
     *,
     pinned_nodes: list[dict[str, object]] | None = None,
@@ -110,6 +121,7 @@ async def test_ingest_profile_maps_to_domain() -> None:
     _mock_user()
     repos_payload = _mock_repos()
     _mock_languages(repos_payload)
+    _mock_commits(repos_payload)
     _mock_profile_readme()
     _mock_graphql()
 
@@ -127,6 +139,7 @@ async def test_pinned_repos_get_tagged() -> None:
     _mock_user()
     repos_payload = _mock_repos()
     _mock_languages(repos_payload)
+    _mock_commits(repos_payload)
     _mock_profile_readme()
     # Pin the first non-fork repo from the fixture
     first_non_fork_name = next(r["name"] for r in repos_payload if not r.get("fork", False))
@@ -159,6 +172,7 @@ async def test_ingest_profile_populates_languages_readme_and_external_counts() -
         },
     )
     _mock_profile_readme(readme)
+    _mock_commits(repos_payload)
     _mock_graphql(external_prs=12, external_reviews=4)
 
     async with GitHubClient(token="ghs_test") as gh:
