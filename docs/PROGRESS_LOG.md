@@ -19,6 +19,30 @@ Format:
 
 ---
 
+## 2026-05-15 — Antigravity — Task 11: Recruiter Signal Scorer
+
+**Slice:** v0.1.0
+
+**Done:**
+- Extended `Profile` model with professional markers: `company`, `blog`, `hireable`, `has_sponsors_listing`, `is_github_star`, and `is_developer_program_member`.
+- Updated `ExternalPRs` GraphQL query to fetch verification flags and `ingest_profile` to pull REST metadata.
+- Implemented `recruiter_signal.py` scorer with points for repo popularity (>50 stars), professional verification (Sponsors/Star/Pro Member), and digital presence (Portfolio/Hireable status).
+- Verified implementation with `test_recruiter_signal.py` and handled `null` values for `hireable` in ingestion.
+
+**Decisions:**
+- Used `company` starting with `@` as a heuristic for verified organization membership when explicit org verification isn't easily accessible via public user API.
+- Ensured `hireable` is strictly boolean during ingestion to prevent Pydantic validation errors on `null` inputs.
+
+**Learned / surprises:**
+- GitHub API returns `null` for `hireable` if the user hasn't explicitly set it; `bool(None)` is `False`, which is the correct default for the signal.
+
+**Blocked / open:** none.
+
+**Next:**
+- **v0.1.0 Task 12 — Learning Trajectory Scorer (10 pts).** Heuristics for repo growth and consistent activity over years.
+
+---
+
 ## 2026-05-15 — Antigravity — Task 10: Consistency Scorer
 
 **Slice:** v0.1.0
