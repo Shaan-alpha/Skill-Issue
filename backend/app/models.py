@@ -35,6 +35,12 @@ class TierInfo(BaseModel):
     pts_above_prev: int = 0
 
 
+class Badge(BaseModel):
+    slug: str           # kebab-case stable identifier
+    name: str           # display name
+    evidence: str       # one-line trigger explanation
+
+
 class Evidence(BaseModel):
     signal: str
     detail: str
