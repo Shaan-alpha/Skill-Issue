@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.github.client import GitHubClient
 from app.ingestion.profile import ingest_profile
@@ -7,6 +8,13 @@ from app.scoring.engine import run_scoring_engine
 from app.settings import VERSION, settings
 
 app = FastAPI(title="Skill Issue API", version=VERSION)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_allow_origins,
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health")
