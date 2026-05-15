@@ -1,4 +1,5 @@
 import logging
+import re
 
 import httpx
 from fastapi import FastAPI, HTTPException
@@ -11,6 +12,10 @@ from app.scoring.engine import run_scoring_engine
 from app.settings import VERSION, settings
 
 logger = logging.getLogger(__name__)
+
+# GitHub usernames: 1-39 chars, alphanumeric or single hyphens, no leading/
+# trailing hyphen. Source: https://github.com/shinnn/github-username-regex.
+_USERNAME_RE = re.compile(r"^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$")
 
 app = FastAPI(title="Skill Issue API", version=VERSION)
 
@@ -30,6 +35,8 @@ async def health() -> dict[str, str]:
 @app.get("/analyze/{username}", response_model=Report)
 async def analyze_user(username: str) -> Report:
     """Ingest a GitHub user and return the deterministic scoring report."""
+    if not _USERNAME_RE.fullmatch(username):
+        raise HTTPException(status_code=400, detail="Invalid GitHub username")
     if not settings.github_token:
         raise HTTPException(status_code=500, detail="GITHUB_TOKEN not configured on backend")
 
