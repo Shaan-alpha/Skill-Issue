@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -16,6 +16,14 @@ export const metadata: Metadata = {
   title: "Skill Issue — your GitHub, read honestly",
   description:
     "Deterministic, evidence-based engineering reports from any GitHub profile. Six signals, one hundred points, zero hallucinations.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  themeColor: "#09090b",
+  colorScheme: "dark",
 };
 
 export default function RootLayout({

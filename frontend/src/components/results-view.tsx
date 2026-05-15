@@ -95,18 +95,21 @@ export function ResultsView({ report }: { report: Report }) {
   ];
 
   return (
-    <div className="min-h-screen bg-background py-12 px-6">
-      <div className="max-w-6xl mx-auto space-y-12">
-        <header className="flex items-center justify-between">
+    <div className="min-h-screen bg-background px-4 py-6 sm:px-6 sm:py-12">
+      <div className="mx-auto max-w-6xl space-y-8 sm:space-y-12">
+        <header className="flex flex-wrap items-center justify-between gap-3">
           <Link
             href="/"
-            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors group"
+            className="group flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
             Back to search
           </Link>
-          <div className="flex items-center gap-4">
-            <Badge variant="outline" className="border-white/10 bg-white/5 font-mono text-xs">
+          <div className="flex items-center gap-3">
+            <Badge
+              variant="outline"
+              className="max-w-[60vw] truncate border-white/10 bg-white/5 font-mono text-[10px] sm:text-xs"
+            >
               ANALYSIS: {report.username.toUpperCase()}
             </Badge>
             <Link
@@ -114,25 +117,29 @@ export function ResultsView({ report }: { report: Report }) {
               target="_blank"
               rel="noopener noreferrer"
               aria-label={`Open ${report.username}'s GitHub profile`}
-              className="p-2 rounded-full glass glass-hover"
+              className="glass glass-hover rounded-full p-2"
             >
               <ExternalLink className="h-4 w-4" />
             </Link>
           </div>
         </header>
 
-        <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <section className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-8">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.6 }}
-            className="lg:col-span-1 glass p-8 rounded-3xl flex flex-col items-center justify-center text-center space-y-4"
+            className="glass flex flex-col items-center justify-center space-y-4 rounded-3xl p-6 text-center sm:p-8 lg:col-span-1"
           >
-            <span className="text-sm font-medium text-muted-foreground uppercase tracking-widest">
+            <span className="text-xs font-medium uppercase tracking-widest text-muted-foreground sm:text-sm">
               Aggregate Score
             </span>
             <div className="relative flex items-center justify-center">
-              <svg className="w-48 h-48 transform -rotate-90">
+              <svg
+                viewBox="0 0 192 192"
+                className="h-36 w-36 -rotate-90 sm:h-48 sm:w-48"
+                aria-hidden="true"
+              >
                 <circle
                   cx="96"
                   cy="96"
@@ -157,11 +164,11 @@ export function ResultsView({ report }: { report: Report }) {
                   strokeLinecap="round"
                 />
               </svg>
-              <span className="absolute text-6xl font-bold">{report.total}</span>
+              <span className="absolute text-5xl font-bold sm:text-6xl">{report.total}</span>
             </div>
             <div className="space-y-1">
-              <h2 className="text-xl font-semibold">{report.category}</h2>
-              <p className="text-xs text-muted-foreground">
+              <h2 className="text-lg font-semibold sm:text-xl">{report.category}</h2>
+              <p className="break-all text-[10px] text-muted-foreground sm:text-xs">
                 ID: SKILL-ISSUE-{report.username.toUpperCase()}-01
               </p>
             </div>
@@ -171,39 +178,39 @@ export function ResultsView({ report }: { report: Report }) {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.6, delay: 0.2 }}
-            className="lg:col-span-2 glass p-8 rounded-3xl flex flex-col justify-center space-y-6"
+            className="glass flex flex-col justify-center space-y-5 rounded-3xl p-6 sm:space-y-6 sm:p-8 lg:col-span-2"
           >
             <div className="space-y-2">
-              <Badge className="bg-accent/10 text-accent border-accent/20">Deterministic</Badge>
-              <h3 className="text-2xl md:text-3xl font-semibold text-gradient">
+              <Badge className="border-accent/20 bg-accent/10 text-accent">Deterministic</Badge>
+              <h3 className="text-xl font-semibold text-gradient sm:text-2xl md:text-3xl">
                 Engineering Report
               </h3>
             </div>
-            <p className="text-lg text-muted-foreground leading-relaxed">
+            <p className="text-base leading-relaxed text-muted-foreground sm:text-lg">
               {report.total} / 100 across six signals. Every point is backed by evidence — no
               hallucinations, no vibes. AI narrative arrives in v0.3.0.
             </p>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4">
+            <div className="grid grid-cols-2 gap-4 pt-2 sm:grid-cols-4 sm:pt-4">
               <div className="space-y-1">
-                <p className="text-[10px] uppercase text-muted-foreground font-bold tracking-tighter">
+                <p className="text-[10px] font-bold uppercase tracking-tighter text-muted-foreground">
                   Reliability
                 </p>
                 <p className="text-sm font-medium">Deterministic</p>
               </div>
               <div className="space-y-1">
-                <p className="text-[10px] uppercase text-muted-foreground font-bold tracking-tighter">
+                <p className="text-[10px] font-bold uppercase tracking-tighter text-muted-foreground">
                   Insights
                 </p>
                 <p className="text-sm font-medium">Evidence-based</p>
               </div>
               <div className="space-y-1">
-                <p className="text-[10px] uppercase text-muted-foreground font-bold tracking-tighter">
+                <p className="text-[10px] font-bold uppercase tracking-tighter text-muted-foreground">
                   Mode
                 </p>
                 <p className="text-sm font-medium">Standard</p>
               </div>
               <div className="space-y-1">
-                <p className="text-[10px] uppercase text-muted-foreground font-bold tracking-tighter">
+                <p className="text-[10px] font-bold uppercase tracking-tighter text-muted-foreground">
                   Verified
                 </p>
                 <p className="text-sm font-medium text-accent">GitHub API</p>
@@ -214,13 +221,13 @@ export function ResultsView({ report }: { report: Report }) {
 
         <section className="space-y-6">
           <div className="flex items-center gap-4">
-            <h4 className="text-sm font-bold uppercase tracking-[0.2em] text-muted-foreground">
+            <h4 className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground sm:text-sm">
               Scoring Matrix
             </h4>
             <div className="h-px flex-1 bg-white/5" />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3">
             {items.map((item, i) => (
               <ScoreItem
                 key={item.name}
@@ -234,7 +241,7 @@ export function ResultsView({ report }: { report: Report }) {
           </div>
         </section>
 
-        <footer className="pt-12 text-center text-[10px] text-muted-foreground uppercase tracking-widest space-y-2">
+        <footer className="space-y-2 pt-8 text-center text-[10px] uppercase tracking-widest text-muted-foreground sm:pt-12">
           <p>Skill Issue — GitHub Reputation Protocol v0.1.0</p>
         </footer>
       </div>
