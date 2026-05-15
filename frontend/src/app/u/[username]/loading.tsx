@@ -25,6 +25,21 @@ export default function Loading() {
           </div>
         </section>
 
+        <div className="glass space-y-3 rounded-2xl p-4 sm:p-6">
+          <div className="flex items-baseline justify-between">
+            <Skeleton className="h-4 w-40 bg-white/5" />
+            <Skeleton className="h-3 w-24 bg-white/5" />
+          </div>
+          <Skeleton className="h-2 w-full rounded-full bg-white/5" />
+          <Skeleton className="h-3 w-full bg-white/5" />
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-6 w-24 rounded-full bg-white/5" />
+          ))}
+        </div>
+
         <div className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="glass space-y-4 rounded-xl p-6">
