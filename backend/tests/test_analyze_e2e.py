@@ -95,6 +95,27 @@ def _mock_github_for_testuser(
                 ],
             )
         )
+        # Pro+ depth endpoints (Professional Developer tier and above)
+        respx.get(f"https://api.github.com/repos/{owner}/{name}/license").mock(
+            return_value=Response(200, json={"license": {"spdx_id": "MIT"}})
+        )
+        respx.get(
+            f"https://api.github.com/repos/{owner}/{name}/contents/.github/workflows"
+        ).mock(
+            return_value=Response(
+                200,
+                json=[{"name": "ci.yml", "type": "file"}],
+            )
+        )
+        respx.get(f"https://api.github.com/repos/{owner}/{name}/readme").mock(
+            return_value=Response(
+                200,
+                json={
+                    "content": base64.b64encode(b"# README\n## Setup").decode(),
+                    "encoding": "base64",
+                },
+            )
+        )
 
     respx.post("https://api.github.com/graphql").mock(
         side_effect=[
@@ -114,6 +135,32 @@ def _mock_github_for_testuser(
                             "contributionsCollection": {
                                 "pullRequestReviewContributions": {"totalCount": 0}
                             },
+                        }
+                    }
+                },
+            ),
+            # REVIEW_DEPTH (Senior Engineer tier and above)
+            Response(
+                200,
+                json={
+                    "data": {
+                        "user": {
+                            "contributionsCollection": {
+                                "pullRequestReviewContributions": {"nodes": []}
+                            }
+                        }
+                    }
+                },
+            ),
+            # CONTRIBUTION_REPOS (Staff Engineer tier and above)
+            Response(
+                200,
+                json={
+                    "data": {
+                        "user": {
+                            "contributionsCollection": {
+                                "commitContributionsByRepository": []
+                            }
                         }
                     }
                 },
@@ -144,14 +191,19 @@ async def test_analyze_returns_complete_report(_settings_with_token: None) -> No
 
     # Shape: every bucket the frontend reads must be present.
     assert body["username"] == "testuser"
-    assert body["category"] in {
+    assert "tier" in body
+    tier = body["tier"]
+    assert tier["name"] in {
+        "Hobbyist",
         "Student Builder",
         "Entry-Level Engineer",
         "Professional Developer",
         "Senior Engineer",
-        "OSS Contributor",
-        "Indie Hacker",
+        "Staff Engineer",
+        "Principal Engineer",
     }
+    assert 0 <= tier["sub_rank"] <= 100
+    assert isinstance(body["badges"], list)
     breakdown = body["breakdown"]
     expected_keys = {
         "repo_quality",
