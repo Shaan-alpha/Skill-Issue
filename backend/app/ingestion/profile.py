@@ -28,6 +28,7 @@ def _repo_from_rest(raw: dict[str, Any]) -> Repo:
         has_tests=False,
         has_ci=False,
         deployment_hints=[],
+        size_kb=raw.get("size", 0),
         last_commit_at=_parse_dt(raw.get("pushed_at")),
         created_at=_parse_dt(raw.get("created_at")) or datetime.now(UTC),
     )
