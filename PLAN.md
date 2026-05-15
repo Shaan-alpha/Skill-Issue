@@ -18,8 +18,8 @@
 | --- | --- | --- |
 | **v0.0.0** | Repo + docs scaffolding | ✅ shipped |
 | **v0.0.1** | Automated GitHub Release pipeline | ✅ shipped |
-| **v0.1.0** | Backend MVP — GitHub ingestion + deterministic scoring | ⏳ in progress (Tasks 1–13 complete on `feat/v0.1.0-backend-mvp`; ready for v0.1.0 RC) |
-| **v0.2.0** | Frontend shell — landing page + analyze flow + results page (static) | pending |
+| **v0.1.0** | Backend MVP — GitHub ingestion + deterministic scoring | ✅ shipped |
+| **v0.2.0** | Frontend shell — landing page + analyze flow + results page (static) | ⏳ pending (next: Tasks 14–20) |
 | **v0.3.0** | AI narrative layer — Roast Mode + Mentor Mode | pending |
 | **v0.4.0** | Auth + persistence — GitHub OAuth + Neon Postgres | pending |
 | **v0.5.0** | Remaining modes — Recruiter, CTO, Career | pending |
