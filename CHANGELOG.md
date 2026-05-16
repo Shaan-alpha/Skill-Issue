@@ -8,9 +8,76 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
-## [Unreleased]
+## [0.4.0] — 2026-05-16
 
-Nothing yet. Next slice: **v0.1.0 — Backend MVP** (see [`PLAN.md`](./PLAN.md)).
+### Added
+- **AI Narrative Layer** with real-time streaming Roast Mode and Mentor Mode breakdowns wrapping every engineering report.
+- **SSE Streaming API (`/narrative/{username}`)** delivering prompt-injection-hardened, on-voice AI commentary token by token with zero perceived latency.
+- **In-process LRU Caching** ensuring instant repeat visits and seamless mode toggling.
+- **Daily Budget & Fallback Engine** protecting OpenAI quotas while maintaining a 100% resilient UI via high-quality deterministic fallback copy when offline.
+- **Cinematic UI Controls** featuring a smooth `layoutId`-animated Mode Pill Toggle, live typing cursor indicator, and ambient glow effects matching the Apple HIG / Linear aesthetic standard.
+
+---
+
+## [0.3.0] — 2026-05-16
+
+### Added
+- **7-tier ladder** replacing the old multi-axis category model: Hobbyist · Student Builder · Entry-Level Engineer · Professional Developer · Senior Engineer · Staff Engineer · Principal Engineer. Band semantics `[lower, upper)` except Principal which includes 100.
+- **Intra-tier sub-rank (1–100)** rendered alongside the tier name (e.g. "Senior Engineer · 47/100").
+- **Position bar** on the results page: minimal-marker style with tier dividers, "X pts to <next tier>" caption, `role="progressbar"` semantics, lazy-loaded framer-motion animation.
+- **Eight stackable badges**, all deterministic: OSS Contributor, PR Master, Maintainer, Star Magnet, Polyglot, Long-haul, Indie Hacker, Toolmaker. Each ships with a one-line evidence string.
+- **Tier-gated depth signals**:
+  - Professional+: per-repo license (SPDX-validated), workflow file counts, README length.
+  - Senior+: PR review depth (avg body length across last 25 reviews), dependency file detection.
+  - Staff+: commit message quality sampling, cross-repo contribution count.
+- Two-pass scoring engine: base file-existence scoring → tier-gated enrichment → re-score on enriched profile.
+
+### Fixed
+- **`repo_quality.license_majority` (4 pts).** Deferred since v0.1.0. Finally fires when ≥50% of the top 10 non-fork repos carry an SPDX-recognised license. Makes the 100/100 ceiling reachable for the first time.
+
+### Changed
+- **Breaking — `/analyze/{username}` response shape.** `report.category: DeveloperCategory` removed; replaced with `report.tier: TierInfo` and `report.badges: list[Badge]`. Frontend types updated in lockstep. No live persistence exists yet, so no migration story is needed.
+
+---
+
+## [0.2.0] — 2026-05-15
+
+### Added
+- Next.js 16 + React 19 + Tailwind 4 frontend with landing page (`/`) and results route (`/u/[username]`). Mobile-first responsive across all breakpoints.
+- `LazyMotion` (`framer-motion`) wired through a `FramerProvider` so animation features are lazy-loaded — smaller initial JS bundle.
+- Loading skeleton mirroring the results layout (no layout jump between loading and loaded states).
+- Segment-level `not-found.tsx` (on-voice "no such GitHub user") and `error.tsx` (retry + home, with optional digest reference) boundaries for `/u/[username]`.
+- Search bar that accepts `github.com/<user>` URLs, `@user` shorthand, and validates the username pattern client-side before navigating.
+- Backend `/analyze/{username}` GitHub-username validator — invalid input returns a clean 400 instead of a stack trace.
+- Backend CORS middleware. Allowed origins configurable via `CORS_ALLOW_ORIGINS`; preview-deploy URLs supported via `CORS_ALLOW_ORIGIN_REGEX`.
+- End-to-end integration test (`tests/test_analyze_e2e.py`) covering happy-path, 404 (unknown user), 400 (invalid username across 8 shapes), and 500 (missing token).
+- Per-repo signal detection: ingestion now fetches each repo's root contents and populates `has_readme`, `has_tests`, `has_ci`, and `deployment_hints` (Dockerfile, vercel.json, fly.toml, netlify.toml, render.yaml, serverless, Heroku, Cloudflare, etc.).
+
+### Fixed
+- `/analyze` no longer wraps every exception as a 404. Real "not found" returns 404, GitHub HTTP errors return 502, anything else returns 500 with the full traceback logged.
+- `consistency.score` previously crashed on `strptime(datetime, ...)` and `learning_trajectory.score` crashed comparing naive vs aware datetimes. Root cause: ingestion produced `YYYY-MM-DD` strings that Pydantic coerced into naive datetimes. Ingestion now writes tz-aware UTC datetimes directly.
+- **Scoring engine signals now actually fire.** `_repo_from_rest` previously hardcoded `has_readme`, `has_tests`, and `has_ci` to `False` and only ever appended `"pinned"` to `deployment_hints`. ~28 of 100 scoring points were unreachable in production. Fixed by enriching the top 20 non-fork repos with their root-tree contents.
+- A11y: minimum readable font size raised to `12px` (`text-xs`) for badges, the analysis ID line, the metadata grid, the error-digest line, and the footer.
+- A11y: `aria-hidden="true"` on decorative icons in `SearchBar`, `ResultsView`, `not-found.tsx`, and `error.tsx`; `aria-label` on the external profile link.
+- A11y: `ResultsView` semantic heading structure cleaned up — single `<main>` with a screen-reader-only `<h1>`, `<h2>` for sections.
+- Performance: tightened animation timings in `ResultsView` so the aggregate score paints faster (LCP target < 2.5s).
+
+### Changed
+- `Report` JSON shape exposed to the frontend now uses `breakdown.<bucket>.points / max_points` — the previous draft type (`total_score`, `score`, `max_score`, untyped `evidence`) was wrong and would have crashed the UI.
+
+---
+
+## [0.1.0] — 2026-05-15
+
+### Added
+- Backend MVP skeleton using FastAPI, Pydantic v2, and `uv`.
+- Async GitHub client with REST/GraphQL support and robust rate-limit handling.
+- Deterministic scoring engine with scorers for `repo_quality` (30 pts), `engineering_maturity` (20 pts), `oss_collab` (15 pts), `consistency` (10 pts), `recruiter_signal` (15 pts), and `learning_trajectory` (10 pts).
+- Ingestion layer for GitHub profiles, pinned repositories, language statistics, external PR/review activity, multi-repo commit patterns, and professional verification markers.
+- REST API endpoint `/analyze/{username}` for end-to-end ingestion and scoring.
+- Scoring engine orchestrator that aggregates 6 category scorers into a final weighted scorecard with automated developer categorization (e.g., Senior Engineer, OSS Contributor).
+- Unit testing suite with fixture profiles for every scorer and integration tests for the scoring engine.
+
 
 ---
 

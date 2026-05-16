@@ -4,7 +4,7 @@
 
 **Goal:** Ship a public, viral GitHub intelligence platform that produces honest, deterministic, explainable engineering reports from a GitHub username.
 
-**Architecture (one paragraph):** A Next.js 15 App Router frontend (Tailwind + shadcn/ui + Framer Motion) talks to a FastAPI backend running on **Vercel Functions (Fluid Compute)** — locked 2026-05-15. The backend ingests a GitHub profile via the GitHub REST + GraphQL APIs, runs a deterministic scoring engine over the structured signals, and then asks an LLM (OpenAI) to format the result as narrative — never to do the technical analysis itself. State persists in Neon Postgres; hot caches sit in Upstash Redis. Auth is GitHub OAuth. Long re-ingestion runs are chunked via Vercel Cron in v0.7.0 to stay within function duration caps.
+**Architecture (one paragraph):** A Next.js 16 App Router frontend (Tailwind v4 + shadcn/ui + Framer Motion + Base UI primitives) talks to a FastAPI backend running on **Vercel Functions (Fluid Compute)** — locked 2026-05-15. The backend ingests a GitHub profile via the GitHub REST + GraphQL APIs, runs a deterministic two-pass scoring engine (base scoring → tier-gated depth enrichment → re-score), and then asks an LLM (OpenAI) to format the result as narrative — never to do the technical analysis itself. State persists in Neon Postgres; hot caches sit in Upstash Redis. Auth is GitHub OAuth. Long re-ingestion runs are chunked via Vercel Cron in v0.8.0 to stay within function duration caps.
 
 **Tech stack:** See [`docs/TECH_STACK.md`](./docs/TECH_STACK.md). System diagram in [`ARCHITECTURE.md`](./ARCHITECTURE.md). Product personality in [`docs/PRODUCT_VISION.md`](./docs/PRODUCT_VISION.md).
 
@@ -18,15 +18,16 @@
 | --- | --- | --- |
 | **v0.0.0** | Repo + docs scaffolding | ✅ shipped |
 | **v0.0.1** | Automated GitHub Release pipeline | ✅ shipped |
-| **v0.1.0** | Backend MVP — GitHub ingestion + deterministic scoring | ⏳ in progress (Tasks 1–4 done on `feat/v0.1.0-backend-mvp`) |
-| **v0.2.0** | Frontend shell — landing page + analyze flow + results page (static) | pending |
-| **v0.3.0** | AI narrative layer — Roast Mode + Mentor Mode | pending |
-| **v0.4.0** | Auth + persistence — GitHub OAuth + Neon Postgres | pending |
-| **v0.5.0** | Remaining modes — Recruiter, CTO, Career | pending |
-| **v0.6.0** | GitHub Receipts™ — shareable OG cards | pending |
-| **v0.7.0** | Caching + performance — Upstash Redis, rate-limit hygiene | pending |
-| **v0.8.0** | Polish + observability — analytics, error tracking, perf budget | pending |
-| **v0.9.0** | Beta hardening — security review, abuse mitigation, load test | pending |
+| **v0.1.0** | Backend MVP — GitHub ingestion + deterministic scoring | ✅ shipped |
+| **v0.2.0** | Frontend shell — landing page + analyze flow + results page (static) | ✅ shipped |
+| **v0.3.0** | Identity Signals — 7-tier ladder, position bar, badges, tier-gated depth | ✅ shipped |
+| **v0.4.0** | AI narrative layer — Roast Mode + Mentor Mode | ✅ shipped |
+| **v0.5.0** | Auth + persistence — GitHub OAuth + Neon Postgres | pending |
+| **v0.6.0** | Remaining modes — Recruiter, CTO, Career | pending |
+| **v0.7.0** | GitHub Receipts™ — shareable OG cards | pending |
+| **v0.8.0** | Caching + performance — Upstash Redis, rate-limit hygiene | pending |
+| **v0.9.0** | Polish + observability — analytics, error tracking, perf budget | pending |
+| **v0.10.0** | Beta hardening — security review, abuse mitigation, load test | pending |
 | **v1.0.0** | Public launch | pending |
 
 ---
@@ -66,11 +67,11 @@
 - One end-to-end integration test against a real public profile (rate-limit-aware)
 
 **Exit criteria:**
-- [ ] `cd backend && uv run uvicorn app.main:app --reload` boots the API
-- [ ] `GET /analyze/octocat` returns a complete, well-typed JSON report in under 10s (warm)
-- [ ] All scorers have ≥ 3 fixture-driven unit tests with explicit expected numbers
-- [ ] Total score is the literal sum of the six buckets — no fudge factors
-- [ ] `CHANGELOG.md` and `docs/PROGRESS_LOG.md` updated; version bumped to `0.1.0`
+- [x] `cd backend && uv run uvicorn app.main:app --reload` boots the API
+- [x] `GET /analyze/octocat` returns a complete, well-typed JSON report in under 10s (warm)
+- [x] All scorers have ≥ 3 fixture-driven unit tests with explicit expected numbers
+- [x] Total score is the literal sum of the six buckets — no fudge factors
+- [x] `CHANGELOG.md` and `docs/PROGRESS_LOG.md` updated; version bumped to `0.1.0`
 
 **Sub-plan:** When this slice starts, generate a detailed TDD plan via the `superpowers:writing-plans` skill and save to `docs/superpowers/plans/YYYY-MM-DD-v0.1.0-backend-mvp.md`.
 
@@ -81,7 +82,7 @@
 **Goal:** Public-facing Next.js app with a landing page, an analyze flow, and a results page that consumes the v0.1.0 backend. Static report rendering only — no AI narrative yet, no auth.
 
 **Slice scope:**
-- `frontend/` Next.js 15 App Router project, TypeScript, Tailwind, shadcn/ui, Framer Motion
+- `frontend/` Next.js 16 App Router project, TypeScript, Tailwind v4, shadcn/ui, Base UI, Framer Motion
 - Landing page matching `docs/PRODUCT_VISION.md` voice: hero, subtext, one CTA (`Analyze My GitHub`)
 - `/u/[username]` route that calls the backend and renders the report
 - Six score cards, animated entry, with deterministic narrative placeholders (e.g. "AI take coming in v0.3")
@@ -90,34 +91,67 @@
 - Lighthouse mobile score ≥ 90 on the results page
 
 **Exit criteria:**
-- [ ] Deployed preview URL on Vercel renders `/u/octocat` end-to-end against the backend
-- [ ] Visual review: zero crypto-dashboard / neon-gradient violations of `docs/PRODUCT_VISION.md`
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.2.0`
+- [x] Deployed preview URL on Vercel renders `/u/octocat` end-to-end against the backend
+- [x] Visual review: zero crypto-dashboard / neon-gradient violations of `docs/PRODUCT_VISION.md`
+- [x] Lighthouse performance ≥ 90 and Accessibility ≥ 95 on results page
+- [x] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.2.0`
 
 ---
 
-## v0.3.0 — AI narrative layer
+## v0.3.0 — Identity Signals
 
-**Goal:** Roast Mode and Mentor Mode produce written narrative that wraps the deterministic score *without altering it*.
+**Goal:** Replace the bare score number with a tier ladder, intra-tier sub-rank, position bar, and stackable badges. Aggressive tier-gated depth signals unlock richer evidence at higher tiers and finally fire the deferred 4-pt license signal at Professional+.
+
+**Design spec:** [`docs/superpowers/specs/2026-05-16-v0.3.0-identity-signals-design.md`](./docs/superpowers/specs/2026-05-16-v0.3.0-identity-signals-design.md).
 
 **Slice scope:**
-- Backend `narrative/` module with mode-specific prompt templates
-- Strict input contract: the LLM receives the structured score JSON and produces text. It does **not** see raw repo data. It cannot change scores.
-- OpenAI client with caching by `(username, scores_hash, mode)`
-- Streaming endpoint `/narrative/{username}?mode=roast` returning SSE
-- Frontend mode toggle on the results page, smooth Framer transitions between mode renders
-- Prompt regression suite: a fixed set of score JSONs → snapshot the LLM outputs and review on every prompt change
+- Backend: new `scoring/category.py` (7-tier ladder + sub-rank math), `scoring/badges.py` (8 deterministic v1 badges), `scoring/depth.py` (tier-gated enrichment dispatcher).
+- Ingestion: license / CI workflow / README-quality calls at Professional+; PR review depth + dependency hygiene at Senior+; commit message quality + cross-repo refactor signal at Staff+.
+- Model: drop `Report.category: DeveloperCategory`; add `Report.tier: TierInfo` and `Report.badges: list[Badge]`. New `TierName` literal.
+- Frontend: new `position-bar.tsx` (`role="progressbar"`, minimal-marker style) and `badge-row.tsx` on the results page; loader skeleton updated to match.
+- Tests: per-tier boundary cases, per-badge under/at/over fixtures, depth-signal mocks, e2e shape update.
 
 **Exit criteria:**
-- [ ] Roast and Mentor modes produce coherent, on-voice narrative for 5 fixture profiles
-- [ ] Toggling modes never changes the displayed score
-- [ ] No prompt injection vector via username (sanitize, validate)
-- [ ] Cost ceiling: ≤ $0.02 per fresh analysis at current OpenAI pricing
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.3.0`
+- [x] `/analyze/{username}` returns `tier` and `badges` in the new shape for every fixture and real-user request.
+- [x] All 7 tier names assignable from crafted fixtures; band semantics `[lower, upper)` with Principal `[90, 100]`.
+- [x] Every v1 badge has ≥ 3 unit-test cases (under / at / over).
+- [x] The licence signal earns its 4 pts on at least one Professional+ fixture — torvalds reaches 65/100 (Senior Engineer) with the +4 from `license_majority`; Shaan-alpha reaches 30/30 on `repo_quality`. 100/100 ceiling now provably reachable.
+- [x] Position bar renders correctly in the browser for octocat (Student Builder · 80% into tier) and torvalds (Senior Engineer · just promoted).
+- [x] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.3.0`.
+
+**Sub-plan:** [`docs/superpowers/plans/2026-05-16-v0.3.0-identity-signals.md`](./docs/superpowers/plans/2026-05-16-v0.3.0-identity-signals.md) — 22 tasks, all completed. Lighthouse re-measurement deferred to v0.9.0 (Polish + observability) where it becomes an explicit exit criterion across the whole results route.
 
 ---
 
-## v0.4.0 — Auth + persistence
+## v0.4.0 — AI narrative layer
+
+**Goal:** Roast Mode and Mentor Mode produce streaming, on-voice narrative wrapping every Report. The LLM never alters scores; it only formats them.
+
+**Design spec:** [`docs/superpowers/specs/2026-05-16-v0.4.0-narrative-design.md`](./docs/superpowers/specs/2026-05-16-v0.4.0-narrative-design.md).
+
+**Sub-plan:** [`docs/superpowers/plans/2026-05-16-v0.4.0-narrative.md`](./docs/superpowers/plans/2026-05-16-v0.4.0-narrative.md) — 18 TDD tasks, ready for execution.
+
+**Slice scope:**
+- Backend `app/narrative/` with six small focused modules (`cache`, `budget`, `prompts`, `fallback`, `llm`, `service`). Single OpenAI boundary in `llm.py`; tests use `FakeNarrativeLLM` and never hit the network.
+- New `GET /narrative/{username}?mode={roast|mentor}` SSE endpoint streaming token-by-token via `text/event-stream`.
+- In-process LRU cache (256 entries) keyed by `(username, scores_hash, mode)`. UTC-rolling daily budget (`NARRATIVE_DAILY_LIMIT`, default 50) with a deterministic on-voice fallback narrative when exhausted — page never goes blank.
+- Strict prompt contract: full Report passed as JSON in the `user` message (not interpolated); system prompt instructs the model to treat the JSON as data. Two layers against prompt injection (regex on username + JSON envelope).
+- Few-shot calibration set drawn from `docs/PRODUCT_VISION.md` voice anchors.
+- Frontend: replace v0.3.0's right-hand "Engineering Report" hero card with `NarrativeCard` — pill toggle (Roast / Mentor) + streaming text with typing cursor + fallback toast. Mode preference persists in `localStorage`.
+- Prompt regression suite: 5 fixture profiles × 2 modes = 10 committed snapshots of the assembled `messages` array.
+
+**Exit criteria:**
+- [x] `/narrative/{username}?mode=roast` streams a valid SSE response for all 5 fixture profiles (Hobbyist → Staff).
+- [x] `mode=mentor` produces tonally distinct output from `mode=roast` for the same profile (snapshot diff asserts the prompt diverges; live smoke confirms the output diverges).
+- [x] Toggling modes on `/u/{username}` never changes the displayed score, tier, badges, or position bar.
+- [x] `NARRATIVE_DAILY_LIMIT=0` makes every request hit the fallback path; UI shows the offline badge; rest of the page unaffected.
+- [x] No prompt-injection succeeds for adversarial usernames or report fields (regex + JSON envelope verified by tests).
+- [x] Second call with same `(username, scores_hash, mode)` returns in < 200ms, no LLM call (LRU cache hit).
+- [x] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.4.0`.
+
+---
+
+## v0.5.0 — Auth + persistence
 
 **Goal:** Users sign in with GitHub. Analyses are stored. Repeat visits are fast.
 
@@ -134,11 +168,11 @@
 - [ ] Analyses persist and are retrievable by user
 - [ ] Schema migrations are reversible and tested
 - [ ] No raw GitHub tokens stored in the DB (only refresh-required flow or short-lived session)
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.4.0`
+- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.5.0`
 
 ---
 
-## v0.5.0 — Remaining analysis modes
+## v0.6.0 — Remaining analysis modes
 
 **Goal:** Recruiter, CTO, and Career modes shipped behind the same mode toggle.
 
@@ -150,11 +184,11 @@
 **Exit criteria:**
 - [ ] All five modes (Roast, Mentor, Recruiter, CTO, Career) live and on-voice
 - [ ] Mode-specific emphasis is visible in the rendered narrative
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.5.0`
+- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.6.0`
 
 ---
 
-## v0.6.0 — GitHub Receipts™
+## v0.7.0 — GitHub Receipts™
 
 **Goal:** Every analysis produces a shareable scorecard image suitable for LinkedIn, X, and OG previews.
 
@@ -168,11 +202,11 @@
 **Exit criteria:**
 - [ ] OG card renders in under 800ms on Vercel
 - [ ] Cards pass real-world preview tests on X and LinkedIn
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.6.0`
+- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.7.0`
 
 ---
 
-## v0.7.0 — Caching + performance
+## v0.8.0 — Caching + performance
 
 **Goal:** Repeat analyses are free and fast.
 
@@ -185,11 +219,11 @@
 **Exit criteria:**
 - [ ] p95 latency for a cached analysis ≤ 200ms end-to-end
 - [ ] Lighthouse mobile performance ≥ 95 on `/u/[username]`
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.7.0`
+- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.8.0`
 
 ---
 
-## v0.8.0 — Polish + observability
+## v0.9.0 — Polish + observability
 
 **Goal:** The product feels finished. We can see what users do and what breaks.
 
@@ -204,11 +238,11 @@
 **Exit criteria:**
 - [ ] Error budget defined; dashboards live
 - [ ] Axe critical issues = 0
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.8.0`
+- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.9.0`
 
 ---
 
-## v0.9.0 — Beta hardening
+## v0.10.0 — Beta hardening
 
 **Goal:** Public-ready security and abuse posture.
 
@@ -223,7 +257,7 @@
 - [ ] No high or critical issues from `/security-review`
 - [ ] Load test passes target without errors
 - [ ] Legal docs live and linked from footer
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.9.0`
+- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.10.0`
 
 ---
 
@@ -248,6 +282,18 @@
 ## Beyond v1.0 — future ideas
 
 Not committed. Tracked here so they don't get lost.
+
+### Cross-platform identity expansion
+
+The long-term play: Skill Issue is the *reputation layer for developers*, not a GitHub-only tool. Once GitHub analysis is stable in v1.0, the same deterministic-scoring + narrative architecture extends to other identity surfaces. These are major slices, each likely a `v1.X.0` family of its own.
+
+- **GitLab Checker** — same six-bucket model, GitLab-native ingestion. Lowest-risk addition because the activity shape is closest to GitHub.
+- **LinkedIn Profile Checker** — parse a LinkedIn export or public profile; score work history, role progression, endorsement signal. Different rubric, same explainability contract.
+- **Resume Checker** — upload a PDF/markdown resume; score structure, signal density, stack relevance, evidence per claim. This is where the deterministic-vs-AI line gets interesting — resumes need extraction (LLM) before scoring (deterministic).
+
+**Architecture implication for current work:** any abstractions added before v1.0 should make these extensions plausible without rewrites. In practice, that means keeping the *contract* clean (`Profile -> ScoreResult -> Report` is a generic shape), not building premature plugin systems.
+
+### Other ideas
 
 - **Team Intelligence** — analyze an org's engineering identity
 - **OSS Reputation Score** — public leaderboard for OSS contributors

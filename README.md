@@ -10,17 +10,19 @@ Engineering insight first. AI flavor second. Scoring is deterministic and explai
 
 ## What it does
 
-- **Profile analysis** — pinned repos, contribution rhythm, README quality, CI/CD, deployment maturity, testing culture
-- **Developer category engine** — Student Builder, Entry-Level, Professional, Senior, OSS Contributor, Indie Hacker
+- **Profile analysis** — pinned repos, contribution rhythm, README quality, CI/CD, deployment maturity, testing culture, licence detection
 - **Engineering score (100 pts)** — Repo Quality 30 · Engineering Maturity 20 · OSS/Collab 15 · Consistency 10 · Recruiter Signal 15 · Learning Trajectory 10
-- **Analysis modes** — Roast, Mentor, Recruiter, CTO, Career
-- **GitHub Receipts™** — shareable scorecards for LinkedIn, X, portfolios
+- **7-tier identity ladder** — Hobbyist · Student Builder · Entry-Level · Professional · Senior · Staff · Principal Engineer, with intra-tier sub-rank
+- **Stackable badges** — OSS Contributor, PR Master, Maintainer, Star Magnet, Polyglot, Long-haul, Indie Hacker, Toolmaker (signal-driven, deterministic, multi-earnable)
+- **Tier-gated depth** — higher tiers unlock richer signals (licence SPDX, CI workflows, README quality, PR review depth, commit-message quality, cross-repo refactor)
+- **Analysis modes (v0.4.0+)** — Roast, Mentor, Recruiter, CTO, Career
+- **GitHub Receipts™ (v0.7.0+)** — shareable scorecards for LinkedIn, X, portfolios
 
 ---
 
 ## Status
 
-Pre-alpha. We are at **v0.0.0** — repository scaffolded, no application code yet. See [`CHANGELOG.md`](./CHANGELOG.md) for shipped slices and [`PLAN.md`](./PLAN.md) for the versioned roadmap.
+Pre-alpha. Latest shipped release is **v0.4.0** (AI Narrative Layer): real-time streaming Roast Mode and Mentor Mode narrative synthesis wrapping every Report. Powered by OpenAI (`gpt-4o`) via an SSE endpoint (`/narrative`), with in-process LRU caching, robust prompt injection defense, and a daily token/call budget backed by deterministic on-voice fallback narratives so the UI never goes blank. **v0.5.0 — Auth + persistence (GitHub OAuth + Neon Postgres)** is the next slice. See [`CHANGELOG.md`](./CHANGELOG.md) for shipped slices, [`PLAN.md`](./PLAN.md) for the full roadmap, and [`docs/PROGRESS_LOG.md`](./docs/PROGRESS_LOG.md) for the most recent session handoff.
 
 ---
 
@@ -35,12 +37,44 @@ Pre-alpha. We are at **v0.0.0** — repository scaffolded, no application code y
 | [`docs/PRODUCT_VISION.md`](./docs/PRODUCT_VISION.md) | Personality, target users, scoring rubric, voice |
 | [`docs/TECH_STACK.md`](./docs/TECH_STACK.md) | Every library, version pin, and why |
 | [`docs/PROGRESS_LOG.md`](./docs/PROGRESS_LOG.md) | Running narrative log — what was done and why |
+| [`docs/DEPLOY.md`](./docs/DEPLOY.md) | How to ship to Vercel (two-project layout) |
+| [`docs/superpowers/plans/`](./docs/superpowers/plans/) | TDD sub-plans for each version slice |
 
 ---
 
 ## Quick start
 
-The project is not yet runnable. When v0.1.0 lands, this section becomes a real getting-started guide. Until then: read [`PLAN.md`](./PLAN.md) and pick the next version slice.
+You need two terminals — the FastAPI backend and the Next.js frontend run side by side in dev.
+
+### Backend (`:8000`)
+
+```bash
+cd backend
+uv sync
+cp .env.example .env        # then edit .env and add your GITHUB_TOKEN and OPENAI_API_KEY
+uv run uvicorn app.main:app --reload --port 8000
+```
+
+Verify: `curl http://localhost:8000/health` → `{"status":"ok","version":"0.4.0"}`.
+Hit the analyzer: `curl http://localhost:8000/analyze/octocat`.
+
+### Frontend (`:3000`)
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend reads `NEXT_PUBLIC_BACKEND_URL` from `frontend/.env.local` (defaults to `http://localhost:8000`).
+Open <http://localhost:3000> and analyze a username.
+
+### Tests + lint
+
+```bash
+cd backend && uv run pytest -v && uv run ruff check .
+cd frontend && npm run lint && npm run build
+```
 
 ---
 
