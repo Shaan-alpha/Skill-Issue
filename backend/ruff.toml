@@ -8,6 +8,10 @@ ignore = ["E501"]
 [lint.per-file-ignores]
 # Narrative prompts are user-facing copy; en dashes (U+2013) are intentional typography.
 "app/narrative/prompts.py" = ["RUF001"]
+# SQLAlchemy models: datetime import must be runtime (not TYPE_CHECKING) for SQLAlchemy annotation resolution
+"app/db/models.py" = ["TC003"]
+# Test file uses semicolons for compact async test setup (intentional formatting)
+"tests/db/test_models.py" = ["E702"]
 
 [lint.flake8-type-checking]
 runtime-evaluated-base-classes = ["pydantic.BaseModel"]
