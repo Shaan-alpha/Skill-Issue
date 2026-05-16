@@ -52,3 +52,6 @@ export interface Report {
   total: number;
   generated_at: string;
 }
+
+export type NarrativeMode = "roast" | "mentor";
+
