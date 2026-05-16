@@ -1,6 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 
 
 class Settings(BaseSettings):
@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     # Optional regex to match preview-deploy URLs whose hash isn't known up
     # front. Example: r"https://skill-issue-frontend(-[a-z0-9-]+)?\.vercel\.app"
     cors_allow_origin_regex: str | None = None
+
+    # v0.4.0 narrative layer.
+    narrative_model: str = "gpt-4o"
+    narrative_daily_limit: int = 50
 
 
 settings = Settings()
