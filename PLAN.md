@@ -153,22 +153,34 @@
 
 ## v0.5.0 — Auth + persistence
 
-**Goal:** Users sign in with GitHub. Analyses are stored. Repeat visits are fast.
+**Goal:** Users sign in with GitHub. Analyses are stored. Repeat visits are fast. Signed-in users get a dedicated 5000/hr GitHub rate-limit budget by using their own access token during ingestion.
+
+**Design spec:** [`docs/superpowers/specs/2026-05-16-v0.5.0-auth-persistence-design.md`](./docs/superpowers/specs/2026-05-16-v0.5.0-auth-persistence-design.md).
 
 **Slice scope:**
-- GitHub OAuth (server-side flow, httpOnly cookies)
-- Neon Postgres schema: `users`, `analyses`, `analysis_runs`, `narratives`
-- Migration tooling (`alembic` or `drizzle` depending on backend boundary — decide and log)
-- Authenticated users get higher rate limits and saved analyses
-- `/me` page with history
-- Privacy default: an analysis is private unless explicitly shared
+- GitHub **OAuth App** (not GitHub App), server-side flow, scopes `read:user public_repo`. State token in a short-lived httpOnly cookie. Server-side opaque sessions in Postgres (no JWT).
+- **Neon Postgres** schema (5 tables): `users`, `sessions`, `analyses`, `analysis_runs`, `narratives`. Cascade deletes from `users` clean everything up.
+- **SQLAlchemy 2.0 async + asyncpg** against Neon's pooled host (port 6543, `statement_cache_size=0`). Direct host (port 5432) only for Alembic migrations.
+- **Alembic** migrations, hand-edited, reversibility tested.
+- GitHub access tokens **encrypted at rest** with AES-GCM (key from `SESSION_TOKEN_ENC_KEY`); never plaintext in the DB.
+- New routes: `/auth/{login,callback,logout}`, `/me`, `/me/analyses`, `POST|DELETE /analyses/{id}/share`, `GET /share/{slug}`. Existing `/analyze` and `/narrative` gain optional persistence when a session is present — anonymous flow unchanged.
+- Frontend: site header with GitHub sign-in / avatar menu, `/me` history grid, `/share/[slug]` read-only public view, Save + Share affordances on `/u/[username]` for signed-in viewers. Mobile responsive at 320 / 375 / 414 / 768.
+- Analyses are private by default; sharing is opt-in and generates a 12-char base64url (~72-bit) slug. Revoking nulls both `is_public` and `share_slug`.
 
 **Exit criteria:**
-- [ ] Sign-in flow works in preview and prod
-- [ ] Analyses persist and are retrievable by user
-- [ ] Schema migrations are reversible and tested
-- [ ] No raw GitHub tokens stored in the DB (only refresh-required flow or short-lived session)
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.5.0`
+- [ ] `uv run alembic upgrade head` creates all 5 tables on a fresh Neon branch; `alembic downgrade base` drops them.
+- [ ] Sign-in flow works in preview and prod (verified manually in both).
+- [ ] Signed-in `/analyze/{user}` persists `analyses` + `analysis_runs`; anonymous calls write nothing.
+- [ ] Signed-in `/narrative/{user}` persists a `narratives` row on success; anonymous calls write nothing.
+- [ ] `GET /me/analyses` returns 20-per-page history sorted by latest run; `sort=score_desc|score_asc|recent` works.
+- [ ] Share toggle round-trip: `POST /analyses/{id}/share` returns slug, `GET /share/{slug}` returns the analysis, `DELETE /analyses/{id}/share` → 404 on the slug.
+- [ ] `SELECT access_token_ct FROM sessions LIMIT 1` returns binary BYTEA — no raw GitHub tokens in the DB.
+- [ ] `uv run pytest -q` passes with ≥ 30 new tests; existing 124 still pass.
+- [ ] `npm run lint && npm run build` clean.
+- [ ] Mobile browser smoke (320 / 375 / 414 / 768): sign in → save → share → open share URL in incognito → sign out.
+- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.5.0`.
+
+**Sub-plan:** When this slice starts, generate a detailed TDD plan via the `superpowers:writing-plans` skill and save to `docs/superpowers/plans/2026-05-16-v0.5.0-auth-persistence.md`.
 
 ---
 
