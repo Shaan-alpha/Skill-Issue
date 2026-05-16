@@ -18,6 +18,8 @@ import { Badge } from "@/components/ui/badge";
 import { Report, ScoreResult, TierInfo } from "@/types";
 import { PositionBar } from "@/components/position-bar";
 import { BadgeRow } from "@/components/badge-row";
+import { NarrativeCard } from "@/components/narrative-card";
+
 
 function tierChipLabel(tier: TierInfo): string {
   // Sub-rank is the % position inside the current band. "0/100" reads as
@@ -217,7 +219,7 @@ export function ResultsView({ report }: { report: Report }) {
             <p className="text-base leading-relaxed text-muted-foreground sm:text-lg">
               <span className="text-foreground">{report.total} of 100</span> across six signals.
               Every point is backed by evidence — no hallucinations, no vibes. Roast and Mentor
-              modes land in v0.4.0.
+              modes deliver real-time synthesized AI breakdowns.
             </p>
             <div className="grid grid-cols-2 gap-4 pt-2 sm:grid-cols-4 sm:pt-4">
               <div className="space-y-1">
@@ -236,7 +238,7 @@ export function ResultsView({ report }: { report: Report }) {
                 <p className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">
                   Mode
                 </p>
-                <p className="text-sm font-medium">Standard</p>
+                <p className="text-sm font-medium text-accent">AI Synthesized</p>
               </div>
               <div className="space-y-1">
                 <p className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">
@@ -247,6 +249,8 @@ export function ResultsView({ report }: { report: Report }) {
             </div>
           </m.div>
         </section>
+
+        <NarrativeCard username={report.username} />
 
         <section className="space-y-6">
           <div className="flex items-center gap-4">
