@@ -28,6 +28,7 @@ Format:
 - Integrated streaming SSE endpoint `GET /narrative/{username}?mode={roast|mentor}` into the FastAPI application.
 - Built comprehensive unit tests (`tests/narrative/*`) with 100% test pass rate using a mocked `FakeNarrativeLLM` to verify LRU caching, budget exhaustion fallbacks, streaming tokens, and prompt injection defense.
 - Created `NarrativeCard.tsx` on the frontend with beautiful framer-motion layout animations, mode pill toggle (Roast vs Mentor), live streaming token rendering, blinking cursor indicator, and offline fallback toast badge.
+- Refined frontend client-side `localStorage` persistence for narrative mode preference across visits and added an elegant visual fallback badge when AI quota is exhausted.
 - Verified live E2E streaming against real OpenAI `gpt-4o` API and tagged release v0.4.0.
 
 **Decisions:**

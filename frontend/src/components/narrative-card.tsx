@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { NarrativeMode } from "@/types";
 import { ModePillToggle } from "./mode-pill-toggle";
 import { NarrativeStream } from "./narrative-stream";
@@ -11,6 +11,22 @@ interface NarrativeCardProps {
 
 export function NarrativeCard({ username }: NarrativeCardProps) {
   const [mode, setMode] = useState<NarrativeMode>("roast");
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+    const saved = localStorage.getItem("skill_issue_narrative_mode");
+    if (saved === "roast" || saved === "mentor") {
+      setMode(saved);
+    }
+  }, []);
+
+  const handleModeChange = (newMode: NarrativeMode) => {
+    setMode(newMode);
+    if (isClient) {
+      localStorage.setItem("skill_issue_narrative_mode", newMode);
+    }
+  };
 
   return (
     <section className="space-y-4" aria-label="AI Narrative Analysis">
@@ -27,7 +43,7 @@ export function NarrativeCard({ username }: NarrativeCardProps) {
           </p>
         </div>
 
-        <ModePillToggle mode={mode} onModeChange={setMode} />
+        <ModePillToggle mode={mode} onModeChange={handleModeChange} />
       </div>
 
       <NarrativeStream key={`${username}-${mode}`} username={username} mode={mode} />
