@@ -18,7 +18,7 @@ uv run uvicorn app.main:app --reload --port 8000
 | Var | Required for | Notes |
 | --- | --- | --- |
 | `GITHUB_TOKEN` | every `/analyze` request | Classic PAT or fine-grained token. Stored only in `.env` (gitignored). |
-| `OPENAI_API_KEY` | v0.3.0+ (narrative layer) | Not used yet in v0.1.0/v0.2.0. |
+| `OPENAI_API_KEY` | v0.4.0+ (narrative layer) | Not used by the deterministic engine. Reserved for Roast/Mentor modes landing in v0.4.0. |
 | `CORS_ALLOW_ORIGINS` | optional | Comma-separated allowed origins. Defaults to `http://localhost:3000`. |
 | `CORS_ALLOW_ORIGIN_REGEX` | optional | Regex matched against `Origin` for preview deploys. Used in production to allow Vercel preview URLs. |
 
@@ -45,7 +45,8 @@ Layout:
 - `tests/github/test_client.py` — REST + GraphQL + rate-limit retry (respx-mocked)
 - `tests/test_ingestion.py` — Profile assembly
 - `tests/scoring/test_*.py` — one file per scorer, fixture-driven
-- `tests/test_analyze_e2e.py` — full ASGI route exercise; regression guard for the v0.1.0 crashes
+- `tests/test_analyze_e2e.py` — full ASGI route exercise; regression guard for the v0.1.0 crashes and the v0.3.0 shape change (`tier` + `badges`)
+- `tests/scoring/test_tiers.py`, `tests/scoring/test_badges.py`, `tests/scoring/test_depth.py` — v0.3.0 tier ladder, 8 badges, tier-gated depth dispatch
 
 ## Lint + format
 

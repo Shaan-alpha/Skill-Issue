@@ -74,18 +74,48 @@ These are the voice anchors. New prompts should produce lines that fit this cali
 
 ---
 
-## Developer categories
+## Identity model — tier ladder + badges (v0.3.0+)
 
-The category engine assigns one of six identities based on the score profile and activity shape. Categories are descriptive, not judgmental.
+Identity has two orthogonal axes. **Tier** is *what you are right now* on the engineering ladder. **Badges** are *what you do* — signal-driven, deterministic, stackable.
 
-| Category | Signals | Headline feedback |
+### Tier ladder (single axis, total-score based)
+
+A profile lands in exactly one of seven tiers, derived purely from the 100-pt total. Bands are `[lower, upper)` half-open; Principal Engineer is the only band that includes its upper bound `[90, 100]`. Each tier also exposes an intra-tier sub-rank (0–100) describing how far through the band the score sits — rendered context-aware so a score at the band floor reads "Just promoted to Senior" rather than "0/100".
+
+| Tier | Band | Signals | Headline feedback |
+| --- | --- | --- | --- |
+| 🌑 **Hobbyist** | `[0, 20)` | first repos, exploration, no shape yet | "Curiosity present. Engineering muscle still warming up." |
+| 🌱 **Student Builder** | `[20, 35)` | experimentation, rapid stack switching, portfolio-heavy, inconsistent structure | "Curiosity level: dangerously high. Architecture stability: negotiable." |
+| 🧑‍💻 **Entry-Level Engineer** | `[35, 50)` | cleaner repos, deployment attempts, improving docs, CI/CD starting | "Graduating from tutorial survivor to engineering practitioner." |
+| ⚙️ **Professional Developer** | `[50, 65)` | maintainable repos, testing, issue management, consistency | "This GitHub profile has attended sprint retrospectives unwillingly." |
+| 🏛 **Senior Engineer** | `[65, 80)` | scalable architecture, reusable tooling, mentoring signals | "This repository structure files taxes on time." |
+| 🏛️ **Staff Engineer** | `[80, 90)` | cross-repo refactor, deep CI culture, high-volume reviews | "Operates on the codebase the way pianists operate on a keyboard." |
+| 🏛️ **Principal Engineer** | `[90, 100]` | sustained, multi-year, cross-org, deep-signal saturation | "Walks into a repo and the linter sits up straighter." |
+
+### Badge catalog (v1 — eight badges, stackable)
+
+Badges fire whenever their deterministic trigger is met. A profile collects every badge it qualifies for — no priority ordering, no exclusivity.
+
+| Badge | Trigger | Reads as |
 | --- | --- | --- |
-| 🌱 **Student Builder** | experimentation, rapid stack switching, portfolio-heavy, inconsistent structure | "Curiosity level: dangerously high. Architecture stability: negotiable." |
-| 🧑‍💻 **Entry-Level Engineer** | cleaner repos, deployment attempts, improving docs, CI/CD starting | "Graduating from tutorial survivor to engineering practitioner." |
-| ⚙️ **Professional Developer** | maintainable repos, testing, issue management, consistency | "This GitHub profile has attended sprint retrospectives unwillingly." |
-| 🏛 **Senior Engineer** | scalable architecture, reusable tooling, OSS presence, mentoring signals | "This repository structure files taxes on time." |
-| 🧪 **OSS Contributor** | PR activity, reviews, issue discussions, upstream collaboration | "Comfortable entering unfamiliar codebases without detonating CI." |
-| 🚀 **Indie Hacker** | rapid shipping, launch velocity, product experimentation, demo-first | "Deployment frequency suggests caffeine has replaced blood." |
+| 🤝 **OSS Contributor** | `external_prs_merged ≥ 10` | "Merged 12 external PRs across 3 orgs" |
+| 🔁 **PR Master** | `external_prs_merged ≥ 50` | "82 external PRs merged (top-decile volume)" |
+| 👀 **Maintainer** | `external_reviews ≥ 25` | "Reviewed 60 external PRs" |
+| ⭐ **Star Magnet** | any non-fork repo `stars ≥ 1000` | "alice/zinc has 4,200 stars" |
+| 🌐 **Polyglot** | ≥ 4 languages each ≥ 5% of total bytes | "Significant in 4 languages: Python, Go, TypeScript, Rust" |
+| ⏳ **Long-haul** | account age ≥ 8 yrs AND commit in last 365 d | "Active for 11.2 years, still committing" |
+| 🚀 **Indie Hacker** | `consistency ≥ 8` AND `blog` set AND `hireable=false` AND no `company` | "Consistent solo shipper with a public portfolio" |
+| 🛠 **Toolmaker** | ≥ 2 non-fork repos with `stars ≥ 200` each | "3 repos with ≥200 stars" |
+
+### Tier-gated depth signals
+
+Higher tiers unlock progressively deeper enrichment. The 100-pt ceiling never changes — depth signals add evidence-richness and (in one case) unlock the deferred 4-pt licence signal at Pro+.
+
+- **Professional+ (≥ 50):** licence SPDX detection (4 pts), CI workflow file count, README quality
+- **Senior+ (≥ 65):** PR review depth (avg body length), dependency-ecosystem detection
+- **Staff+ (≥ 80):** commit-message quality sampling, cross-repo refactor signal
+
+A profile right under a tier threshold won't get the next tier's signals even if those signals would push it over. Self-limiting and explainable: your tier on this run earned this depth of analysis, and that's the only depth applied.
 
 ---
 

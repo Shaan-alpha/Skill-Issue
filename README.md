@@ -10,17 +10,19 @@ Engineering insight first. AI flavor second. Scoring is deterministic and explai
 
 ## What it does
 
-- **Profile analysis** — pinned repos, contribution rhythm, README quality, CI/CD, deployment maturity, testing culture
-- **Developer category engine** — Student Builder, Entry-Level, Professional, Senior, OSS Contributor, Indie Hacker
+- **Profile analysis** — pinned repos, contribution rhythm, README quality, CI/CD, deployment maturity, testing culture, licence detection
 - **Engineering score (100 pts)** — Repo Quality 30 · Engineering Maturity 20 · OSS/Collab 15 · Consistency 10 · Recruiter Signal 15 · Learning Trajectory 10
-- **Analysis modes** — Roast, Mentor, Recruiter, CTO, Career
-- **GitHub Receipts™** — shareable scorecards for LinkedIn, X, portfolios
+- **7-tier identity ladder** — Hobbyist · Student Builder · Entry-Level · Professional · Senior · Staff · Principal Engineer, with intra-tier sub-rank
+- **Stackable badges** — OSS Contributor, PR Master, Maintainer, Star Magnet, Polyglot, Long-haul, Indie Hacker, Toolmaker (signal-driven, deterministic, multi-earnable)
+- **Tier-gated depth** — higher tiers unlock richer signals (licence SPDX, CI workflows, README quality, PR review depth, commit-message quality, cross-repo refactor)
+- **Analysis modes (v0.4.0+)** — Roast, Mentor, Recruiter, CTO, Career
+- **GitHub Receipts™ (v0.7.0+)** — shareable scorecards for LinkedIn, X, portfolios
 
 ---
 
 ## Status
 
-Pre-alpha. Latest shipped release is **v0.2.0** (Frontend shell + backend hardening): Next.js 16 / React 19 app with landing + results route, schema-aligned types, CORS, username validation, error boundaries, and a fix for previously-dormant scoring signals (README / tests / CI / deployment detection). **v0.3.0 — AI narrative layer** is the next slice. See [`CHANGELOG.md`](./CHANGELOG.md) for shipped slices, [`PLAN.md`](./PLAN.md) for the full roadmap, and [`docs/PROGRESS_LOG.md`](./docs/PROGRESS_LOG.md) for the most recent session handoff.
+Pre-alpha. Latest shipped release is **v0.3.0** (Identity Signals): 7-tier ladder replacing the old category enum, intra-tier sub-rank with context-aware chip label, position bar with tier dividers, 8 stackable badges with hover tooltips, tier-gated depth enrichment, and the deferred 4-pt licence signal finally firing so the 100/100 ceiling is reachable. **v0.4.0 — AI narrative layer (Roast + Mentor)** is the next slice. See [`CHANGELOG.md`](./CHANGELOG.md) for shipped slices, [`PLAN.md`](./PLAN.md) for the full roadmap, and [`docs/PROGRESS_LOG.md`](./docs/PROGRESS_LOG.md) for the most recent session handoff.
 
 ---
 
@@ -53,7 +55,7 @@ cp .env.example .env        # then edit .env and add your GITHUB_TOKEN
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
-Verify: `curl http://localhost:8000/health` → `{"status":"ok","version":"0.2.0"}`.
+Verify: `curl http://localhost:8000/health` → `{"status":"ok","version":"0.3.0"}`.
 Hit the analyzer: `curl http://localhost:8000/analyze/octocat`.
 
 ### Frontend (`:3000`)

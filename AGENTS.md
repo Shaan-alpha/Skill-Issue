@@ -10,7 +10,7 @@ These are not suggestions. They are the contract.
 
 ### 1. Modern tools and modern design — always
 
-- Use current stable major versions: **Next.js 15+, React 19, TailwindCSS 4 (where stable), shadcn/ui, Framer Motion, FastAPI, Python 3.12+**. Do not pin to deprecated versions without a written reason in `docs/PROGRESS_LOG.md`.
+- Use current stable major versions: **Next.js 16+, React 19, TailwindCSS 4 (where stable), shadcn/ui, Base UI, Framer Motion, FastAPI, Python 3.12+**. Do not pin to deprecated versions without a written reason in `docs/PROGRESS_LOG.md`.
 - UI must feel **cinematic, premium, intelligent** — Apple HIG, Linear, Arc, Stripe-tier polish.
 - Animation philosophy: **subtle, intentional, physics-aware** (spring easing, not linear). No gradient-soup, no neon glow, no crypto-dashboard aesthetics, no emoji-driven UI.
 - When in doubt, reference [`docs/PRODUCT_VISION.md`](./docs/PRODUCT_VISION.md).

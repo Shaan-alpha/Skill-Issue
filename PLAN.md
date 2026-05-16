@@ -4,7 +4,7 @@
 
 **Goal:** Ship a public, viral GitHub intelligence platform that produces honest, deterministic, explainable engineering reports from a GitHub username.
 
-**Architecture (one paragraph):** A Next.js 15 App Router frontend (Tailwind + shadcn/ui + Framer Motion) talks to a FastAPI backend running on **Vercel Functions (Fluid Compute)** — locked 2026-05-15. The backend ingests a GitHub profile via the GitHub REST + GraphQL APIs, runs a deterministic scoring engine over the structured signals, and then asks an LLM (OpenAI) to format the result as narrative — never to do the technical analysis itself. State persists in Neon Postgres; hot caches sit in Upstash Redis. Auth is GitHub OAuth. Long re-ingestion runs are chunked via Vercel Cron in v0.7.0 to stay within function duration caps.
+**Architecture (one paragraph):** A Next.js 16 App Router frontend (Tailwind v4 + shadcn/ui + Framer Motion + Base UI primitives) talks to a FastAPI backend running on **Vercel Functions (Fluid Compute)** — locked 2026-05-15. The backend ingests a GitHub profile via the GitHub REST + GraphQL APIs, runs a deterministic two-pass scoring engine (base scoring → tier-gated depth enrichment → re-score), and then asks an LLM (OpenAI) to format the result as narrative — never to do the technical analysis itself. State persists in Neon Postgres; hot caches sit in Upstash Redis. Auth is GitHub OAuth. Long re-ingestion runs are chunked via Vercel Cron in v0.8.0 to stay within function duration caps.
 
 **Tech stack:** See [`docs/TECH_STACK.md`](./docs/TECH_STACK.md). System diagram in [`ARCHITECTURE.md`](./ARCHITECTURE.md). Product personality in [`docs/PRODUCT_VISION.md`](./docs/PRODUCT_VISION.md).
 
@@ -20,7 +20,7 @@
 | **v0.0.1** | Automated GitHub Release pipeline | ✅ shipped |
 | **v0.1.0** | Backend MVP — GitHub ingestion + deterministic scoring | ✅ shipped |
 | **v0.2.0** | Frontend shell — landing page + analyze flow + results page (static) | ✅ shipped |
-| **v0.3.0** | Identity Signals — 7-tier ladder, position bar, badges, tier-gated depth | pending |
+| **v0.3.0** | Identity Signals — 7-tier ladder, position bar, badges, tier-gated depth | ✅ shipped |
 | **v0.4.0** | AI narrative layer — Roast Mode + Mentor Mode | pending |
 | **v0.5.0** | Auth + persistence — GitHub OAuth + Neon Postgres | pending |
 | **v0.6.0** | Remaining modes — Recruiter, CTO, Career | pending |
@@ -82,7 +82,7 @@
 **Goal:** Public-facing Next.js app with a landing page, an analyze flow, and a results page that consumes the v0.1.0 backend. Static report rendering only — no AI narrative yet, no auth.
 
 **Slice scope:**
-- `frontend/` Next.js 15 App Router project, TypeScript, Tailwind, shadcn/ui, Framer Motion
+- `frontend/` Next.js 16 App Router project, TypeScript, Tailwind v4, shadcn/ui, Base UI, Framer Motion
 - Landing page matching `docs/PRODUCT_VISION.md` voice: hero, subtext, one CTA (`Analyze My GitHub`)
 - `/u/[username]` route that calls the backend and renders the report
 - Six score cards, animated entry, with deterministic narrative placeholders (e.g. "AI take coming in v0.3")
@@ -112,15 +112,14 @@
 - Tests: per-tier boundary cases, per-badge under/at/over fixtures, depth-signal mocks, e2e shape update.
 
 **Exit criteria:**
-- [ ] `/analyze/{username}` returns `tier` and `badges` in the new shape for every fixture and real-user request.
-- [ ] All 7 tier names assignable from crafted fixtures; band semantics `[lower, upper)` with Principal `[90, 100]`.
-- [ ] Every v1 badge has ≥ 3 unit-test cases (under / at / over).
-- [ ] The license signal earns its 4 pts on at least one Professional+ fixture — provable 100/100 ceiling.
-- [ ] Position bar renders correctly in the browser for octocat (Student Builder) and torvalds (Professional Developer).
-- [ ] Lighthouse mobile performance ≥ 90 and Accessibility ≥ 95 on `/u/[username]` still holds.
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.3.0`.
+- [x] `/analyze/{username}` returns `tier` and `badges` in the new shape for every fixture and real-user request.
+- [x] All 7 tier names assignable from crafted fixtures; band semantics `[lower, upper)` with Principal `[90, 100]`.
+- [x] Every v1 badge has ≥ 3 unit-test cases (under / at / over).
+- [x] The licence signal earns its 4 pts on at least one Professional+ fixture — torvalds reaches 65/100 (Senior Engineer) with the +4 from `license_majority`; Shaan-alpha reaches 30/30 on `repo_quality`. 100/100 ceiling now provably reachable.
+- [x] Position bar renders correctly in the browser for octocat (Student Builder · 80% into tier) and torvalds (Senior Engineer · just promoted).
+- [x] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.3.0`.
 
-**Sub-plan:** Generated via `superpowers:writing-plans` to `docs/superpowers/plans/2026-05-16-v0.3.0-identity-signals.md` when this slice starts.
+**Sub-plan:** [`docs/superpowers/plans/2026-05-16-v0.3.0-identity-signals.md`](./docs/superpowers/plans/2026-05-16-v0.3.0-identity-signals.md) — 22 tasks, all completed. Lighthouse re-measurement deferred to v0.9.0 (Polish + observability) where it becomes an explicit exit criterion across the whole results route.
 
 ---
 

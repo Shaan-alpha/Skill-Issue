@@ -11,7 +11,7 @@ Two separate Vercel projects, both pointing at this monorepo with different **Ro
 | `skill-issue-frontend` | `frontend/` | Next.js 16 app | Next.js (auto-detected) |
 | `skill-issue-backend` | `backend/` | FastAPI on Vercel Functions (Python) | Other (uses `backend/vercel.json`) |
 
-Two projects keeps deploys independent, simplifies framework detection, and matches the version slices in [`PLAN.md`](../PLAN.md). A monorepo single-project move is on the table when v0.4.0 brings shared auth, but premature for v0.2.0.
+Two projects keeps deploys independent, simplifies framework detection, and matches the version slices in [`PLAN.md`](../PLAN.md). A monorepo single-project move is on the table when v0.5.0 brings shared auth, but premature for v0.3.0.
 
 ## One-time setup (~10 min)
 
@@ -58,7 +58,7 @@ cd backend
 uv export --no-hashes --no-emit-project --no-dev --format requirements-txt > requirements.txt
 ```
 
-Regenerate it whenever you add or remove a runtime dependency. Until v0.8.0 introduces CI to enforce this, the developer who bumps a dep is responsible for committing both files.
+Regenerate it whenever you add or remove a runtime dependency. Until v0.9.0 introduces CI to enforce this, the developer who bumps a dep is responsible for committing both files.
 
 ## Verifying a deploy
 
@@ -67,7 +67,7 @@ After both projects are deployed:
 ```bash
 # Health check
 curl https://skill-issue-backend.vercel.app/health
-# -> {"status":"ok","version":"0.1.0"}
+# -> {"status":"ok","version":"0.3.0"}
 
 # Real analyze (warm; cold may take longer due to Python cold start)
 curl https://skill-issue-backend.vercel.app/analyze/octocat
@@ -87,14 +87,14 @@ If the browser console shows a CORS error:
 1. Check the backend's deployed `CORS_ALLOW_ORIGINS` and `CORS_ALLOW_ORIGIN_REGEX`.
 2. Open the response in DevTools → Network → look at the `Access-Control-Allow-Origin` header.
 
-## Known limits in v0.2.0
+## Known limits as of v0.3.0
 
-- **First-paint LCP is bottlenecked by the GitHub ingestion** (~5s warm, longer on Vercel cold start). This is fundamental until v0.7.0 adds Upstash Redis caching of `/analyze` responses. Lighthouse Performance will reflect this.
-- **No rate limiting.** Anyone can hit `/analyze` and burn through your GitHub token budget. v0.9.0 territory.
-- **No auth.** Public read-only API. Add `read:user` GitHub OAuth in v0.4.0.
+- **First-paint LCP is bottlenecked by the GitHub ingestion** (~5–10s warm, longer on Vercel cold start; Senior+ profiles add another ~20–40 HTTP calls for tier-gated depth enrichment). This is fundamental until v0.8.0 adds Upstash Redis caching of `/analyze` responses. Lighthouse Performance will reflect this — that's why the explicit Lighthouse exit criterion now lives in v0.9.0 (Polish + observability).
+- **No rate limiting.** Anyone can hit `/analyze` and burn through your GitHub token budget. v0.10.0 territory.
+- **No auth.** Public read-only API. Add `read:user` GitHub OAuth in v0.5.0.
 
 ## What's intentionally not here yet
 
-- **Neon Postgres + Upstash Redis** integration via the Vercel Marketplace — v0.4.0 (Postgres) and v0.7.0 (Redis).
-- **Cron jobs** for background re-ingestion — v0.7.0.
+- **Neon Postgres + Upstash Redis** integration via the Vercel Marketplace — v0.5.0 (Postgres) and v0.8.0 (Redis).
+- **Cron jobs** for background re-ingestion — v0.8.0.
 - **Custom domain** — v1.0.0.

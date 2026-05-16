@@ -19,24 +19,43 @@ Format:
 
 ---
 
-## 2026-05-16 — Claude (Opus 4.7) — v0.3.0 Identity Signals shipped
+## 2026-05-16 — Claude (Opus 4.7) — v0.3.0 Identity Signals shipped + post-release doc audit
 
-**Slice:** v0.3.0 (shipping)
+**Slice:** v0.3.0 (shipped — tag `v0.3.0`, release `https://github.com/Shaan-alpha/Skill-Issue/releases/tag/v0.3.0`)
 
 **Done:**
-- Implemented the full v0.3.0 design from [`docs/superpowers/specs/2026-05-16-v0.3.0-identity-signals-design.md`](./superpowers/specs/2026-05-16-v0.3.0-identity-signals-design.md). 7-tier ladder + intra-tier sub-rank, 8 deterministic badges, tier-gated depth enrichment (license / workflows / README / review depth / dep files / commit quality / cross-repo).
-- Two-pass scoring engine: base pass → tier-gated enrichment → final pass + badges. License signal (4 pts) finally fires, so the 100/100 ceiling is reachable.
-- Frontend `PositionBar` + `BadgeRow` components mounted on the results page. Loading skeleton updated.
-- Breaking change to `/analyze/{username}` response shape: `category` removed; `tier` + `badges` added. No live persistence yet, so no migration.
+- Implemented the full v0.3.0 design from [`docs/superpowers/specs/2026-05-16-v0.3.0-identity-signals-design.md`](./superpowers/specs/2026-05-16-v0.3.0-identity-signals-design.md) via the 22-task plan at [`docs/superpowers/plans/2026-05-16-v0.3.0-identity-signals.md`](./superpowers/plans/2026-05-16-v0.3.0-identity-signals.md). 7-tier ladder (Hobbyist → Principal Engineer) + intra-tier sub-rank with context-aware chip label ("Just promoted to Senior", "Top of the ladder", etc.), 8 deterministic stackable badges, tier-gated depth enrichment (licence / workflows / README quality / PR review depth / dep files / commit quality / cross-repo refactor).
+- Two-pass scoring engine: base pass → `enrich_for_tier()` → final pass + tier + badges. Deferred 4-pt `repo_quality.license_majority` signal finally fires for Pro+ profiles, so the 100/100 ceiling is reachable for the first time.
+- Frontend: new `PositionBar` (`role="progressbar"`, tier dividers, animated marker via framer-motion `m` namespace) and `BadgeRow` (Base UI `Tooltip` with 150ms delay, glass popup, badge name + evidence on hover/focus). Loading skeleton extended. Tier hero in the score card uses gradient text at `text-2xl/3xl`.
+- Breaking change to `/analyze/{username}` response shape: `category: DeveloperCategory` removed; `tier: TierInfo` and `badges: list[Badge]` added. No live persistence yet, so no migration.
+
+**Post-release polish (commit `402ae23`):**
+- **Fixed a Senior+ crash.** `REVIEW_DEPTH` GraphQL query had `orderBy: {direction: DESC, field: OCCURRED_AT}` — GitHub's `ContributionOrder` input only accepts `direction`, not `field`. Every profile that reached Senior tier threw 500 during enrichment. Dropped `orderBy` (API returns recent contributions first anyway). Headless tests passed because they mock the response, not the query string — caught by live testing only.
+- **Fixed invisible accent.** `--accent: #27272a` (same as `--muted`) rendered as black-on-black for every `text-accent` / `bg-accent` element: position-bar marker, badge pills, "GitHub API" indicator. Switched to `#60a5fa` (blue-400) which matches the existing landing-page blob.
+- **Fixed `0/100 IN TIER` UX bug.** torvalds scored exactly 65 (the Senior band floor), so sub_rank computed to 0 and the chip read "0/100 IN TIER" — looked punitive. Added `tierChipLabel()`: shows "Just promoted to Senior" at floor, "Top of the ladder" at Principal ceiling, "%N into tier" otherwise.
+- Rewrote all 6 score-card descriptions from dry labels to on-voice questions ("Do your repos look maintained — READMEs, tests, deploys, licences?"). Bumped two stale version chips (footer v0.1.0 → v0.3.0; landing v0.2.0 → v0.3.0).
+
+**Post-release doc audit (this entry):**
+- README.md, PLAN.md (version map + v0.3.0 exit criteria), ARCHITECTURE.md, PRODUCT_VISION.md, TECH_STACK.md, DEPLOY.md all carried stale "Next.js 15", "DeveloperCategory", and pre-shift slice numbers (auth was v0.4.0 but is now v0.5.0, caching was v0.7.0 but is now v0.8.0, etc. — every slice after v0.3.0 shifted +1). Updated in one pass. ARCHITECTURE's component diagram now shows the two-pass engine and tier/badges block; PRODUCT_VISION's old "Developer categories" section is replaced with the tier ladder + badge catalog matching the shipped product.
 
 **Decisions:**
 - Re-score *after* enrichment with the same scorers, rather than expanding scorer ceilings. Keeps the 100-pt cap and means depth signals' impact lands at the scorer that owns the signal.
 - Tier-gating uses the **base** total (not the enriched total) to decide which depth calls to make. A profile right under a threshold won't get the next tier's signals even if those signals would push it over — deterministic and explainable.
+- Tier chip copy uses three explicit edge-case strings (Hobbyist floor, mid-tier %, Principal ceiling) rather than a single template. Costs nothing, removes the punitive "0/100" reading at every band floor.
+
+**Learned / surprises:**
+- E2E tests that mock the GraphQL endpoint's *response* (not the *request body*) cannot catch a malformed query string. The Senior+ crash slipped through 93/93 pytest because every test mocked the response shape. Worth memo-ing: for GraphQL queries we hand-write, either a fixture-driven schema check or a live smoke run is mandatory before tagging.
+- `--accent` had been an alias of `--muted` since v0.2.0 — the bug existed for two releases but was invisible until v0.3.0 because v0.2.0's UI didn't render anything with `text-accent` or `bg-accent`. Lesson: changing semantic tokens is silently load-bearing for downstream components.
 
 **Verified:**
-- `uv run pytest -q` → all green.
+- `uv run pytest -q` → 93/93 green. `uv run ruff check .` → clean.
 - `npm run build` and `npm run lint` → clean.
-- Smoke test against octocat / torvalds / one Staff-tier real profile in the browser; tier names, sub-ranks, badges, position bar render as designed. (Smoke test verification is Task 21 — this log entry assumes it's about to happen.)
+- Live smoke test in browser against octocat (Student Builder · 80% into tier), torvalds (Senior Engineer · Just promoted), Shaan-alpha (Senior Engineer · 47% into tier · all six badge slugs visible). Position bar marker animates correctly; badge tooltips show name + evidence on hover.
+- GitHub Release `v0.3.0` published; release workflow ran 7s, success.
+
+**Blocked / open:**
+- Lighthouse mobile re-measurement on `/u/[username]` deferred to v0.9.0 (Polish + observability) — the v0.3.0 slice exit criterion was moved to that slice when the depth-enrichment cost showed up (Senior+ profiles now make ~+20-40 extra HTTP calls per analysis; raw Lighthouse without caching will reflect that). Caching lands in v0.8.0 first.
+- Stale remote branches `feat/v0.1.0-backend-mvp` and `feat/v0.2.0-frontend-shell` still exist on origin (no open PRs). Delete with `git push origin --delete <branch>` when ready.
 
 **Next:**
 - v0.4.0 — AI narrative layer (Roast Mode + Mentor Mode).

@@ -14,16 +14,17 @@
 | **TailwindCSS** | `^4` | Utility-first; `@tailwindcss/postcss` is the v4 pipeline. No tailwind.config — config lives in `globals.css` via `@theme`. |
 | **tw-animate-css** | `^1.4` | v4-compatible replacement for `tailwindcss-animate` |
 | **shadcn/ui** | `^4.7` (devDependency, CLI only) | Component baseline; we own the source. The package is a CLI scaffolder — *do not* import from it at runtime. Style: `base-nova` (Base UI primitives, not Radix). |
-| **Framer Motion** | `^12.38` | Animation; prefer spring physics over linear easings |
+| **Framer Motion** | `^12.38` | Animation; prefer spring physics over linear easings. Use `LazyMotion` + `m.*` namespace, not `motion.*`, to keep the initial bundle lean. |
+| **@base-ui/react** | `^1.4` | Headless primitives (Progress, Tooltip) — accessible and unstyled; we own the visual layer. Used for the v0.3.0 position-bar Progress and badge-row Tooltip. |
 | **lucide-react** | `^1.16` | Icon set. **Branded icons (`Github`, `Twitter`, etc.) were removed in 1.x** — substitute generic equivalents (`ExternalLink`) or inline an SVG. |
 | **Magic UI / Aceternity** | latest, on-demand | Motion accents — used sparingly |
-| **@vercel/og** | latest | OG card generation (v0.6.0) |
+| **@vercel/og** | latest | OG card generation (v0.7.0) |
 | **next-themes** | latest | Dark-mode default with light variant |
 | **zod** | latest | Runtime schema validation at API boundaries |
 
 **Bundler:** Turbopack (Next.js default in 16+).
 
-**Linting / formatting:** **ESLint** via `eslint-config-next` 16.2.6. Decision logged 2026-05-15 — chosen because the Next.js codemods and recommended rules ship through this config. Revisit Biome at v0.7.0 if perf or DX warrants.
+**Linting / formatting:** **ESLint** via `eslint-config-next` 16.2.6. Decision logged 2026-05-15 — chosen because the Next.js codemods and recommended rules ship through this config. Revisit Biome at v0.8.0 if perf or DX warrants.
 
 ---
 
@@ -36,13 +37,13 @@
 | **Pydantic** | `2.13` | Models for every API boundary and every scorer output |
 | **pydantic-settings** | `2.14` | `.env` + env-var loading for `Settings` |
 | **httpx** | `0.28` (with `h2`) | Async HTTP client with HTTP/2 multiplexing |
-| **uvicorn[standard]** | `0.47` | ASGI server in dev; production server decided in v0.4.0 |
+| **uvicorn[standard]** | `0.47` | ASGI server in dev; production server decided in v0.5.0 |
 | **uv** | `0.11.12+` | Package + venv management — significantly faster than pip |
 | **pytest** | `9.x` | Test runner with async support |
 | **pytest-asyncio** | `1.3` | `asyncio_mode = "auto"` so async tests don't need decorators |
 | **respx** | `0.23` | httpx mocking for GitHub client + e2e tests |
 | **ruff** | `0.15.13` | Linter + formatter — one tool for both. Configured in `backend/ruff.toml` (py312, line 100, E/F/I/UP/B/SIM/TCH/RUF). |
-| Static typing | deferred — ruff covers the lint surface | The mypy/pyright pick was punted past v0.1.0; revisit at v0.4.0 when ORM types land |
+| Static typing | deferred — ruff covers the lint surface | The mypy/pyright pick was punted past v0.1.0; revisit at v0.5.0 when ORM types land |
 
 **Package manager:** `uv` (not pip, not poetry). Faster, simpler, lockfile-first.
 
@@ -54,7 +55,7 @@
 | --- | --- |
 | **Neon Postgres** | Primary store (users, analyses, narratives, share tokens). Branch-per-PR for migrations. |
 | **Upstash Redis** | Edge-friendly cache and rate-limit token buckets |
-| **Alembic** _or_ **Drizzle** | Migrations — decide in v0.4.0 based on backend host |
+| **Alembic** _or_ **Drizzle** | Migrations — decide in v0.5.0 based on backend host |
 
 ---
 
@@ -82,8 +83,8 @@
 
 | Surface | Host | Notes |
 | --- | --- | --- |
-| Frontend | **Vercel** | Native Next.js 15 support, edge OG, runtime cache |
-| Backend | **Vercel Functions (Fluid Compute)** | Locked 2026-05-15. Same dashboard as frontend, OIDC env handoff, native marketplace integration with Neon + Upstash. Long re-ingestion runs split via Vercel Cron in v0.7.0 to stay within function duration caps. |
+| Frontend | **Vercel** | Native Next.js 16 support, edge OG, runtime cache |
+| Backend | **Vercel Functions (Fluid Compute)** | Locked 2026-05-15. Same dashboard as frontend, OIDC env handoff, native marketplace integration with Neon + Upstash. Long re-ingestion runs split via Vercel Cron in v0.8.0 to stay within function duration caps. |
 | DB | **Neon** | Vercel Marketplace install when ready |
 | Cache | **Upstash Redis** | Vercel Marketplace install when ready |
 | DNS / domain | Vercel-managed | Custom domain decided pre-v1.0 |
@@ -94,10 +95,10 @@
 
 | Tool | Role | Slice |
 | --- | --- | --- |
-| **Sentry** | Error tracking (frontend + backend) | v0.8.0 |
-| **PostHog** or **Plausible** | Product analytics — preference: privacy-first, no third-party cookies | v0.8.0 |
-| Structured logs | Backend routes emit JSON logs to host's log pipe | v0.8.0 |
-| Sentry budget alerts | Cost ceiling on OpenAI | v0.3.0 onward |
+| **Sentry** | Error tracking (frontend + backend) | v0.9.0 |
+| **PostHog** or **Plausible** | Product analytics — preference: privacy-first, no third-party cookies | v0.9.0 |
+| Structured logs | Backend routes emit JSON logs to host's log pipe | v0.9.0 |
+| Sentry budget alerts | Cost ceiling on OpenAI | v0.4.0 onward |
 
 ---
 
