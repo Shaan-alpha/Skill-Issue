@@ -49,7 +49,7 @@ REVIEW_DEPTH = """
 query($login: String!) {
   user(login: $login) {
     contributionsCollection {
-      pullRequestReviewContributions(first: 25, orderBy: {direction: DESC, field: OCCURRED_AT}) {
+      pullRequestReviewContributions(first: 25) {
         nodes { pullRequestReview { bodyText } }
       }
     }

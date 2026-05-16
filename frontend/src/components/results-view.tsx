@@ -15,9 +15,21 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress, ProgressLabel } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Report, ScoreResult } from "@/types";
+import { Report, ScoreResult, TierInfo } from "@/types";
 import { PositionBar } from "@/components/position-bar";
 import { BadgeRow } from "@/components/badge-row";
+
+function tierChipLabel(tier: TierInfo): string {
+  // Sub-rank is the % position inside the current band. "0/100" reads as
+  // "you scored zero" rather than "you just crossed the threshold"; "100/100"
+  // is the inverse problem. Give both endpoints meaningful labels.
+  const short = tier.name.replace(/ (Engineer|Developer|Builder)$/, "");
+  if (tier.sub_rank === 0 && tier.prev_tier === null) return "Starting the ladder";
+  if (tier.sub_rank === 0) return `Just promoted to ${short}`;
+  if (tier.sub_rank === 100 && tier.next_tier === null) return "Top of the ladder";
+  if (tier.sub_rank === 100) return `Edge of ${short} — promotion soon`;
+  return `${tier.sub_rank}% into tier`;
+}
 
 interface ScoreCardProps {
   title: string;
@@ -66,37 +78,37 @@ export function ResultsView({ report }: { report: Report }) {
       name: "Repo Quality",
       result: breakdown.repo_quality,
       icon: <Terminal />,
-      desc: "README quality, folder structure, and license hygiene.",
+      desc: "Do your repos look maintained — READMEs, tests, deploys, licenses?",
     },
     {
       name: "Engineering Maturity",
       result: breakdown.engineering_maturity,
       icon: <Layers />,
-      desc: "Testing culture, CI/CD usage, and modular design.",
+      desc: "Typed languages, CI pipelines, real architecture — not just scripts.",
     },
     {
       name: "OSS & Collaboration",
       result: breakdown.oss_collab,
       icon: <GitPullRequest />,
-      desc: "External PRs, issue discussions, and community engagement.",
+      desc: "Do you ship into other people's codebases, or only your own?",
     },
     {
       name: "Consistency",
       result: breakdown.consistency,
       icon: <Zap />,
-      desc: "Commit cadence and long-term project maintenance.",
+      desc: "Commit rhythm over months — momentum, not a single sprint.",
     },
     {
       name: "Recruiter Signal",
       result: breakdown.recruiter_signal,
       icon: <Target />,
-      desc: "Profile README, portfolio presence, and stack relevance.",
+      desc: "What a hiring manager sees in eight seconds: bio, pin, stars, links.",
     },
     {
       name: "Learning Trajectory",
       result: breakdown.learning_trajectory,
       icon: <Award />,
-      desc: "Skill evolution and project complexity growth.",
+      desc: "Are you levelling up? New stacks, bigger projects, year over year.",
     },
   ];
 
@@ -176,15 +188,16 @@ export function ResultsView({ report }: { report: Report }) {
               </svg>
               <span className="absolute text-5xl font-bold sm:text-6xl">{report.total}</span>
             </div>
-            <div className="space-y-1">
-              <h2 className="text-lg font-semibold sm:text-xl">
+            <div className="space-y-2 text-center">
+              <h2 className="text-2xl font-semibold tracking-tight text-gradient sm:text-3xl">
                 {report.tier.name}
-                <span className="ml-2 text-sm font-normal text-muted-foreground">
-                  · {report.tier.sub_rank}/100
-                </span>
               </h2>
-              <p className="break-all text-xs text-muted-foreground">
-                ID: SKILL-ISSUE-{report.username.toUpperCase()}-01
+              <div className="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-1 font-mono text-xs uppercase tracking-widest text-accent">
+                <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true" />
+                {tierChipLabel(report.tier)}
+              </div>
+              <p className="break-all pt-1 text-xs text-muted-foreground/70">
+                ID · SKILL-ISSUE-{report.username.toUpperCase()}-01
               </p>
             </div>
           </m.div>
@@ -202,8 +215,9 @@ export function ResultsView({ report }: { report: Report }) {
               </h2>
             </div>
             <p className="text-base leading-relaxed text-muted-foreground sm:text-lg">
-              {report.total} / 100 across six signals. Every point is backed by evidence — no
-              hallucinations, no vibes. AI narrative arrives in v0.3.0.
+              <span className="text-foreground">{report.total} of 100</span> across six signals.
+              Every point is backed by evidence — no hallucinations, no vibes. Roast and Mentor
+              modes land in v0.4.0.
             </p>
             <div className="grid grid-cols-2 gap-4 pt-2 sm:grid-cols-4 sm:pt-4">
               <div className="space-y-1">
@@ -257,7 +271,7 @@ export function ResultsView({ report }: { report: Report }) {
         </section>
 
         <footer className="space-y-2 pt-8 text-center text-xs uppercase tracking-widest text-muted-foreground sm:pt-12">
-          <p>Skill Issue — GitHub Reputation Protocol v0.1.0</p>
+          <p>Skill Issue — GitHub Reputation Protocol v0.3.0</p>
         </footer>
       </main>
 
