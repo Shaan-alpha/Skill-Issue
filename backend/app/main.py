@@ -1,5 +1,5 @@
 import logging
-import re
+from typing import Annotated
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,7 +33,7 @@ async def health() -> dict[str, str]:
 
 @app.get("/analyze/{username}", response_model=Report)
 async def analyze_user(
-    report: Report = Depends(get_report_for_user),
+    report: Annotated[Report, Depends(get_report_for_user)],
 ) -> Report:
     """Ingest a GitHub user and return the deterministic scoring report."""
     return report

@@ -8,6 +8,18 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
+## [Unreleased]
+
+### Changed
+- Refactored `NarrativeCard`'s mode persistence to use `useSyncExternalStore` against `localStorage`, eliminating the cascading-render warning under React 19's `react-hooks/set-state-in-effect` rule. Cross-tab synchronisation is now handled by the native `storage` event for free.
+- Migrated FastAPI route handlers (`/analyze`, `/narrative`) from `Depends()` in argument defaults to the modern `Annotated[T, Depends(...)]` pattern recommended since FastAPI 0.95.
+- Bumped `react` and `react-dom` from `19.2.4` to `19.2.6` (patch).
+
+### Fixed
+- Cleared all backend lint warnings: removed dead `import re` from `app/main.py`, stripped four unused imports and three unused locals from the narrative test suite, prefixed two intentionally-discarded budget tuple fields with `_` in `NarrativeService.stream_narrative`, and added a focused `RUF001` carve-out for `app/narrative/prompts.py` so the deliberate en-dash typography in user-facing prompts is preserved.
+
+---
+
 ## [0.4.0] — 2026-05-16
 
 ### Added

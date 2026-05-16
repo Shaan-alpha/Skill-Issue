@@ -7,7 +7,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app import dependencies as dep_module
 from app import main as app_module
-from app.models import Badge, Report, ScoreBreakdown, ScoreResult, TierInfo
+from app.models import Report, ScoreBreakdown, ScoreResult, TierInfo
 from app.narrative.budget import DailyBudget
 from app.narrative.cache import NarrativeCache
 from app.narrative.llm import FakeNarrativeLLM

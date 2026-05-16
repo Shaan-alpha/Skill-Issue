@@ -1,6 +1,6 @@
 import json
 from collections.abc import AsyncIterator
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -15,9 +15,9 @@ router = APIRouter(tags=["narrative"])
 @router.get("/narrative/{username}")
 async def get_narrative(
     username: str,
+    report: Annotated[Report, Depends(get_report_for_user)],
+    service: Annotated[NarrativeService, Depends(get_narrative_service)],
     mode: str = Query("roast", description="Narrative mode: roast or mentor"),
-    report: Report = Depends(get_report_for_user),
-    service: NarrativeService = Depends(get_narrative_service),
 ) -> StreamingResponse:
     """Stream AI narrative critique or mentorship over Server-Sent Events
     (SSE)."""

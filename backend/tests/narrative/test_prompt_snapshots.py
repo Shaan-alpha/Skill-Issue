@@ -7,7 +7,6 @@ from app.narrative.prompts import build_messages
 
 
 def _stable_report() -> Report:
-    z = ScoreResult(points=0, max_points=1)
     b = ScoreBreakdown(
         repo_quality=ScoreResult(points=25, max_points=30),
         engineering_maturity=ScoreResult(points=15, max_points=20),

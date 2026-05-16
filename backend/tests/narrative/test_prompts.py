@@ -12,7 +12,6 @@ from app.narrative.prompts import (
 
 
 def _report() -> Report:
-    z = ScoreResult(points=0, max_points=1)
     breakdown = ScoreBreakdown(
         repo_quality=ScoreResult(points=20, max_points=30),
         engineering_maturity=ScoreResult(points=10, max_points=20),

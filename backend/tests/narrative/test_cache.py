@@ -2,7 +2,6 @@ from datetime import UTC, datetime
 
 from app.models import (
     Badge,
-    Profile,
     Report,
     ScoreBreakdown,
     ScoreResult,
@@ -12,7 +11,6 @@ from app.narrative.cache import NarrativeCache
 
 
 def _report(total: int = 65, badge_slugs: list[str] | None = None) -> Report:
-    z = ScoreResult(points=0, max_points=1)
     breakdown = ScoreBreakdown(
         repo_quality=ScoreResult(points=total - 35, max_points=30),
         engineering_maturity=ScoreResult(points=10, max_points=20),
