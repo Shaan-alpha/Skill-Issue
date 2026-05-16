@@ -104,6 +104,7 @@ export function NarrativeStream({ username, mode }: NarrativeStreamProps) {
             {displayText ? (
               <AnimatePresence mode="popLayout">
                 <m.span
+                  key="content-text"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ duration: 0.3 }}
@@ -112,6 +113,7 @@ export function NarrativeStream({ username, mode }: NarrativeStreamProps) {
                 </m.span>
                 {status === "streaming" && (
                   <m.span
+                    key="cursor-blink"
                     animate={{ opacity: [1, 0.2, 1] }}
                     transition={{ repeat: Infinity, duration: 1 }}
                     className="inline-block w-2 h-3 ml-1 bg-white/70 align-middle"

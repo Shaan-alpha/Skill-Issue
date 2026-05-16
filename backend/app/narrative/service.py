@@ -62,10 +62,10 @@ class NarrativeService:
                 yield chunk
         except Exception as e:
             logger.error(
-                f"LLM streaming failed for {report.username} ({mode}): {e}",
+                f"LLM streaming failed for {report.username} ({mode}): {e}. Activating fallback narrative.",
                 exc_info=True,
             )
-            yield f"\n\n[Stream interrupted by upstream error: {e}]"
+            yield fallback_narrative(mode, report)
             return
 
         # 4. Cache successful result
