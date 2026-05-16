@@ -19,6 +19,61 @@ Format:
 
 ---
 
+## 2026-05-16 — Claude (Opus 4.7) — v0.4.0 design + plan ready for cold execution
+
+**Slice:** v0.4.0 (designed, not yet implemented)
+
+**Done:**
+- Brainstormed the AI Narrative Layer slice end-to-end. All seven major decisions locked: OpenAI provider, SSE streaming, in-process LRU cache, GPT-4o + per-day cap with deterministic fallback, narrative replaces the v0.3.0 right hero card, pill-tab mode toggle, full Report visible to the LLM (with prompt-injection mitigations).
+- Wrote the design spec at [`docs/superpowers/specs/2026-05-16-v0.4.0-narrative-design.md`](./superpowers/specs/2026-05-16-v0.4.0-narrative-design.md). Covers backend module layout (`app/narrative/{cache,budget,prompts,fallback,llm,service}.py`), the `/narrative/{username}` SSE endpoint shape with three event kinds (`token`, `fallback`, `done`), prompt strategy (system + few-shot from `docs/PRODUCT_VISION.md` calibration set + JSON-encoded user payload), cache + budget design with documented multi-instance caveat, frontend `NarrativeCard` composition, and exit criteria.
+- Generated the implementation plan at [`docs/superpowers/plans/2026-05-16-v0.4.0-narrative.md`](./superpowers/plans/2026-05-16-v0.4.0-narrative.md) — 18 TDD tasks, one-action-per-step, complete code in every step, `FakeNarrativeLLM` test double so tests never hit the network.
+- Updated `PLAN.md` v0.4.0 section with links to the spec + plan, expanded scope summary, and new exit criteria.
+
+**Decisions:**
+- **OpenAI with daily cap + graceful fallback** (chosen over switching to a free-tier provider). Default `NARRATIVE_DAILY_LIMIT=50/day`. Cap is per-Vercel-instance; true global cap is `limit × instance_count`. Documented as a known imprecision; Redis-backed shared counter lands with v0.8.0 caching.
+- **GPT-4o** (chosen over 4o-mini and 4.1-mini) per the user's "go for best, lesser tokens for a day is fine but it has to be free" — quality first, cost controlled by the cap, not the model.
+- **SSE streaming** (chosen over batch). Frontend uses native `EventSource`; works fine because `/narrative` is a public GET.
+- **In-process LRU dict** (chosen over filesystem or no cache). 256 entries. Survives within a single FastAPI process. Same-user mode toggling within a session is instant.
+- **Replaces the v0.3.0 right hero card** (chosen over above-score or below-score placement). The status grid (Reliability / Insights / Mode / Verified) moves into the NarrativeCard footer.
+- **Pill tabs** (chosen over segmented control or dropdown). Scales naturally to 5 modes when v0.6.0 adds Recruiter / CTO / Career.
+- **Full Report to the LLM** (chosen over minimal). Includes the per-bucket points and badge evidence strings so the model can reference specifics. Username + report ride in a JSON-encoded `user` message; system prompt explicitly instructs the model to treat JSON as data not instructions. Combined with the existing `_USERNAME_RE` regex this gives two layers of prompt-injection mitigation.
+- **No persistence** of generated narratives across instances. Reach for v0.8.0 Upstash for that. Today's cache is per-process.
+- **Re-run ingestion inside `/narrative`** rather than caching `Report` objects from `/analyze`. Frontend always calls `/analyze` first so this is one extra ingestion per fresh narrative — accepted as a known cost; revisit if real-world latency complains.
+
+**For the cold agent picking this up next session:**
+
+1. Read [`AGENTS.md`](../AGENTS.md) (rules of engagement) and the v0.4.0 spec listed above.
+2. Open the plan: [`docs/superpowers/plans/2026-05-16-v0.4.0-narrative.md`](./superpowers/plans/2026-05-16-v0.4.0-narrative.md). It is 18 TDD-disciplined tasks with complete code in every step. Branch starts on `feat/v0.3.0-identity-signals` (the v0.3.0 ship branch); Task 18 has the rename + tag + release dance.
+3. Execution path: invoke `superpowers:subagent-driven-development` with the plan file. Fresh subagent per task. Cheap models (haiku) are fine for Tasks 1–6, 9–14, 17 — they're mechanical TDD. Tasks 7 (service orchestrator), 8 (SSE route), 15 (ResultsView wiring) benefit from a stronger model (sonnet).
+4. Verification gates:
+   - After each task: `uv run pytest -q` and `uv run ruff check .` must stay green; the new test count grows by exactly the tests this task added.
+   - Task 16 is a **live OpenAI smoke test** that uses real API calls — confirm `OPENAI_API_KEY` is set in `backend/.env` first. The test deliberately hits the live model so you see real Roast / Mentor output before tagging.
+   - Task 18 is **release** — only run after Task 16 passes. The release workflow at `.github/workflows/release.yml` extracts the `## [0.4.0]` CHANGELOG section as the public release body.
+5. Things that the spec accepted but might bite:
+   - Multi-instance budget imprecision — accept it, fix in v0.8.0.
+   - Re-ingestion inside `/narrative` — accept it, fix only if it's slow in practice.
+   - `Literal["roast","mentor"]` in the FastAPI route signature returns 422 on invalid values; the route's explicit `if mode not in (...)` block exists to return 400 instead. If FastAPI's validation runs first you'll see 422 in the test — switch the parameter type to `str` and rely on the explicit check (Task 8 step 8.4 documents this).
+   - Native `EventSource` only supports GET, no headers. Today that's fine. When we add auth in v0.5.0 the SSE helper switches to `fetch + ReadableStream` (separate task in that slice).
+6. Things explicitly out of scope (do **not** silently expand):
+   - Recruiter / CTO / Career modes — v0.6.0.
+   - Persistent narrative cache across instances — v0.8.0.
+   - Per-user rate limiting — v0.10.0.
+   - Active provider abstraction (multi-provider swap) — kept as a single-file `narrative/llm.py` boundary but not actively dual-providered.
+
+**Verified at end of this session:**
+- Backend test suite: 93/93 pass; ruff clean (carrying over from v0.3.0 — no v0.4.0 code yet).
+- Frontend `npm run build` + `npm run lint` clean.
+- Working tree only has `docs/superpowers/specs/2026-05-16-v0.4.0-narrative-design.md` and `docs/superpowers/plans/2026-05-16-v0.4.0-narrative.md` as untracked-and-staged-this-commit; PLAN.md and PROGRESS_LOG.md updated to point at them.
+
+**Blocked / open:**
+- None for v0.4.0. The slice is fully scoped.
+- Stale remote branches `feat/v0.1.0-backend-mvp` and `feat/v0.2.0-frontend-shell` still exist on origin (no open PRs). Delete with `git push origin --delete <branch>` whenever convenient.
+
+**Next:**
+- v0.4.0 implementation. Estimated ~8–12 hours of focused execution time across the 18 tasks.
+
+---
+
 ## 2026-05-16 — Claude (Opus 4.7) — v0.3.0 Identity Signals shipped + post-release doc audit
 
 **Slice:** v0.3.0 (shipped — tag `v0.3.0`, release `https://github.com/Shaan-alpha/Skill-Issue/releases/tag/v0.3.0`)

@@ -125,22 +125,29 @@
 
 ## v0.4.0 — AI narrative layer
 
-**Goal:** Roast Mode and Mentor Mode produce written narrative that wraps the deterministic score *without altering it*.
+**Goal:** Roast Mode and Mentor Mode produce streaming, on-voice narrative wrapping every Report. The LLM never alters scores; it only formats them.
+
+**Design spec:** [`docs/superpowers/specs/2026-05-16-v0.4.0-narrative-design.md`](./docs/superpowers/specs/2026-05-16-v0.4.0-narrative-design.md).
+
+**Sub-plan:** [`docs/superpowers/plans/2026-05-16-v0.4.0-narrative.md`](./docs/superpowers/plans/2026-05-16-v0.4.0-narrative.md) — 18 TDD tasks, ready for execution.
 
 **Slice scope:**
-- Backend `narrative/` module with mode-specific prompt templates
-- Strict input contract: the LLM receives the structured score JSON and produces text. It does **not** see raw repo data. It cannot change scores.
-- OpenAI client with caching by `(username, scores_hash, mode)`
-- Streaming endpoint `/narrative/{username}?mode=roast` returning SSE
-- Frontend mode toggle on the results page, smooth Framer transitions between mode renders
-- Prompt regression suite: a fixed set of score JSONs → snapshot the LLM outputs and review on every prompt change
+- Backend `app/narrative/` with six small focused modules (`cache`, `budget`, `prompts`, `fallback`, `llm`, `service`). Single OpenAI boundary in `llm.py`; tests use `FakeNarrativeLLM` and never hit the network.
+- New `GET /narrative/{username}?mode={roast|mentor}` SSE endpoint streaming token-by-token via `text/event-stream`.
+- In-process LRU cache (256 entries) keyed by `(username, scores_hash, mode)`. UTC-rolling daily budget (`NARRATIVE_DAILY_LIMIT`, default 50) with a deterministic on-voice fallback narrative when exhausted — page never goes blank.
+- Strict prompt contract: full Report passed as JSON in the `user` message (not interpolated); system prompt instructs the model to treat the JSON as data. Two layers against prompt injection (regex on username + JSON envelope).
+- Few-shot calibration set drawn from `docs/PRODUCT_VISION.md` voice anchors.
+- Frontend: replace v0.3.0's right-hand "Engineering Report" hero card with `NarrativeCard` — pill toggle (Roast / Mentor) + streaming text with typing cursor + fallback toast. Mode preference persists in `localStorage`.
+- Prompt regression suite: 5 fixture profiles × 2 modes = 10 committed snapshots of the assembled `messages` array.
 
 **Exit criteria:**
-- [ ] Roast and Mentor modes produce coherent, on-voice narrative for 5 fixture profiles
-- [ ] Toggling modes never changes the displayed score
-- [ ] No prompt injection vector via username (sanitize, validate)
-- [ ] Cost ceiling: ≤ $0.02 per fresh analysis at current OpenAI pricing
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.4.0`
+- [ ] `/narrative/{username}?mode=roast` streams a valid SSE response for all 5 fixture profiles (Hobbyist → Staff).
+- [ ] `mode=mentor` produces tonally distinct output from `mode=roast` for the same profile (snapshot diff asserts the prompt diverges; live smoke confirms the output diverges).
+- [ ] Toggling modes on `/u/{username}` never changes the displayed score, tier, badges, or position bar.
+- [ ] `NARRATIVE_DAILY_LIMIT=0` makes every request hit the fallback path; UI shows the offline badge; rest of the page unaffected.
+- [ ] No prompt-injection succeeds for adversarial usernames or report fields (regex + JSON envelope verified by tests).
+- [ ] Second call with same `(username, scores_hash, mode)` returns in < 200ms, no LLM call (LRU cache hit).
+- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.4.0`.
 
 ---
 
