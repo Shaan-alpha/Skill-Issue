@@ -18,5 +18,17 @@ class Settings(BaseSettings):
     narrative_model: str = "gpt-4o"
     narrative_daily_limit: int = 50
 
+    # v0.5.0 — Auth + persistence
+    database_url: str | None = None
+    database_direct_url: str | None = None
+    github_oauth_client_id: str | None = None
+    github_oauth_client_secret: str | None = None
+    oauth_redirect_url: str | None = None
+    session_token_enc_key: str | None = None
+    session_cookie_name: str = "si_session"
+    session_ttl_days: int = 30
+    cookie_domain: str | None = None
+    cookie_secure: bool = False
+
 
 settings = Settings()
