@@ -23,6 +23,17 @@ Format:
 
 **Slice:** v0.5.0 (designed + planned; not yet implemented). v0.4.0 (shipped to main + GitHub Release).
 
+### 🚀 Cold-agent quick start
+
+You're picking up a fully-planned slice. Everything you need is on the working branch.
+
+1. **Check out the work branch**: `git checkout feat/v0.5.0-auth-persistence` (pushed to origin; 3 commits ahead of `main`).
+2. **Read in order**: [`AGENTS.md`](../AGENTS.md) → this entry → [`v0.5.0 spec`](./superpowers/specs/2026-05-16-v0.5.0-auth-persistence-design.md) → [`v0.5.0 plan`](./superpowers/plans/2026-05-16-v0.5.0-auth-persistence.md).
+3. **Prerequisite**: export `TEST_DATABASE_URL` (local Postgres or Neon dev branch). Task 3's `db` fixture hard-fails without it.
+4. **Execute**: invoke `superpowers:subagent-driven-development` with the plan file. 27 TDD tasks, complete code in every step. Model hints + dependency order are in the plan's "Cold-agent execution guide" section at the bottom.
+5. **Ask the user before**: (a) installing the Neon Marketplace integration on Vercel (Task 27.3), (b) pushing main + tagging v0.5.0 (Task 27.10). AGENTS.md rule 5.
+6. **Out of scope** (do not silently expand): Recruiter/CTO/Career (v0.6.0), OG cards (v0.7.0), caching/cron (v0.8.0), Sentry/PostHog (v0.9.0), rate limiting (v0.10.0).
+
 **Done:**
 - **Shipped v0.4.0 to main.** Pre-v0.5.0 audit work surfaced that `main` was sitting at v0.0.1 since the release pipeline went in — every v0.1–v0.4 tag had fired the GitHub Release workflow off a tag push, but `main` itself was never advanced. Fast-forwarded `main` (via a `--no-ff` merge of the v0.4.0 tag commit `ab57230`) so it now reflects v0.4.0; pushed the v0.4.0 tag for the first time. The release workflow fired in 8s and published [v0.4.0](https://github.com/Shaan-alpha/Skill-Issue/releases/tag/v0.4.0) with the CHANGELOG-extracted body. The audit + v0.5.0 design + plan commits stayed on the feature branch — they'll land on main with the v0.5.0 ship per AGENTS.md rule 3 discipline.
 - Generated the implementation plan at [`docs/superpowers/plans/2026-05-16-v0.5.0-auth-persistence.md`](./superpowers/plans/2026-05-16-v0.5.0-auth-persistence.md). 27 TDD-disciplined tasks, complete code in every step, with explicit cross-task dependency notes (e.g. Task 10's callback test depends on Task 13's `upsert_user_from_github_payload`). Spec-coverage map at the bottom traces every §11 exit criterion to a task.
