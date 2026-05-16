@@ -16,6 +16,7 @@ import pytest
 import respx
 from httpx import ASGITransport, AsyncClient, Response
 
+from app import dependencies as dep_module
 from app import main as app_module
 from app.settings import Settings
 
@@ -23,7 +24,12 @@ from app.settings import Settings
 @pytest.fixture
 def _settings_with_token(monkeypatch: pytest.MonkeyPatch) -> None:
     """Force the app to see a github_token without touching the real .env."""
-    monkeypatch.setattr(app_module, "settings", Settings(github_token="ghs_test"))
+    monkeypatch.setattr(
+        app_module, "settings", Settings(github_token="ghs_test")
+    )
+    monkeypatch.setattr(
+        dep_module, "settings", Settings(github_token="ghs_test")
+    )
 
 
 def _user_payload(login: str = "testuser") -> dict[str, Any]:
@@ -40,7 +46,9 @@ def _user_payload(login: str = "testuser") -> dict[str, Any]:
     }
 
 
-def _repo_payload(name: str, *, language: str, days_since_push: int = 5) -> dict[str, Any]:
+def _repo_payload(
+    name: str, *, language: str, days_since_push: int = 5
+) -> dict[str, Any]:
     pushed = (datetime.now(UTC) - timedelta(days=days_since_push)).isoformat()
     return {
         "name": name,
@@ -72,13 +80,15 @@ def _mock_github_for_testuser(
     )
     encoded = base64.b64encode(b"# Hello world").decode("ascii")
     respx.get("https://api.github.com/repos/testuser/testuser/readme").mock(
-        return_value=Response(200, json={"content": encoded, "encoding": "base64"})
+        return_value=Response(
+            200, json={"content": encoded, "encoding": "base64"}
+        )
     )
     for repo in repos:
         owner, name = str(repo["full_name"]).split("/", 1)
-        respx.get(f"https://api.github.com/repos/{owner}/{name}/languages").mock(
-            return_value=Response(200, json={repo["language"]: 1000})
-        )
+        respx.get(
+            f"https://api.github.com/repos/{owner}/{name}/languages"
+        ).mock(return_value=Response(200, json={repo["language"]: 1000}))
         respx.get(
             url__startswith=f"https://api.github.com/repos/{owner}/{name}/commits"
         ).mock(return_value=Response(200, json=commits_by_repo.get(name, [])))
@@ -133,7 +143,9 @@ def _mock_github_for_testuser(
                             "isDeveloperProgramMember": False,
                             "pullRequests": {"totalCount": 0, "nodes": []},
                             "contributionsCollection": {
-                                "pullRequestReviewContributions": {"totalCount": 0}
+                                "pullRequestReviewContributions": {
+                                    "totalCount": 0
+                                }
                             },
                         }
                     }
@@ -171,8 +183,11 @@ def _mock_github_for_testuser(
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_analyze_returns_complete_report(_settings_with_token: None) -> None:
-    """Happy path: every scorer runs, breakdown is complete, total = sum of parts."""
+async def test_analyze_returns_complete_report(
+    _settings_with_token: None,
+) -> None:
+    """Happy path: every scorer runs, breakdown is complete, total = sum of
+    parts."""
     repos = [
         _repo_payload("alpha", language="TypeScript"),
         _repo_payload("beta", language="Python"),
@@ -235,7 +250,9 @@ async def test_analyze_returns_complete_report(_settings_with_token: None) -> No
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_analyze_unknown_user_returns_404(_settings_with_token: None) -> None:
+async def test_analyze_unknown_user_returns_404(
+    _settings_with_token: None,
+) -> None:
     respx.get("https://api.github.com/users/ghost").mock(
         return_value=Response(404, json={"message": "Not Found"})
     )
@@ -275,8 +292,15 @@ async def test_analyze_rejects_invalid_username(
 
 
 @pytest.mark.asyncio
-async def test_analyze_without_token_returns_500(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(app_module, "settings", Settings(github_token=None))
+async def test_analyze_without_token_returns_500(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        app_module, "settings", Settings(github_token=None)
+    )
+    monkeypatch.setattr(
+        dep_module, "settings", Settings(github_token=None)
+    )
     transport = ASGITransport(app=app_module.app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.get("/analyze/anybody")
