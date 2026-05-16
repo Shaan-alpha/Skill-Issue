@@ -19,6 +19,46 @@ Format:
 
 ---
 
+## 2026-05-16 — Claude (Opus 4.7) — v0.5.0 plan ready for cold execution + v0.4.0 shipped to main
+
+**Slice:** v0.5.0 (designed + planned; not yet implemented). v0.4.0 (shipped to main + GitHub Release).
+
+**Done:**
+- **Shipped v0.4.0 to main.** Pre-v0.5.0 audit work surfaced that `main` was sitting at v0.0.1 since the release pipeline went in — every v0.1–v0.4 tag had fired the GitHub Release workflow off a tag push, but `main` itself was never advanced. Fast-forwarded `main` (via a `--no-ff` merge of the v0.4.0 tag commit `ab57230`) so it now reflects v0.4.0; pushed the v0.4.0 tag for the first time. The release workflow fired in 8s and published [v0.4.0](https://github.com/Shaan-alpha/Skill-Issue/releases/tag/v0.4.0) with the CHANGELOG-extracted body. The audit + v0.5.0 design + plan commits stayed on the feature branch — they'll land on main with the v0.5.0 ship per AGENTS.md rule 3 discipline.
+- Generated the implementation plan at [`docs/superpowers/plans/2026-05-16-v0.5.0-auth-persistence.md`](./superpowers/plans/2026-05-16-v0.5.0-auth-persistence.md). 27 TDD-disciplined tasks, complete code in every step, with explicit cross-task dependency notes (e.g. Task 10's callback test depends on Task 13's `upsert_user_from_github_payload`). Spec-coverage map at the bottom traces every §11 exit criterion to a task.
+
+**Decisions:**
+- **`main` discipline going forward.** Each version tag's commit fast-forwards (or `--no-ff` merges) into main as part of its release task. We do not let main drift again. Every future plan's final task includes the `git push origin <branch>`, `git checkout main`, `git merge --no-ff <branch>`, `git push origin main`, `git tag vX.Y.Z`, `git push origin vX.Y.Z` ritual.
+- **27 tasks over 20-25.** Granular tasks make subagent dispatch cleaner — a haiku-class agent can knock out the mechanical TDD tasks (crypto, persistence functions, single-route handlers) in isolation. Sonnet-class for the orchestration tasks (callback, /analyze persistence wiring, frontend results-view integration).
+
+**Learned / surprises:**
+- `main` had drifted further than expected. Worth a memo for any future repo audit: tag presence ≠ branch advancement; the two are independent state.
+- The `9fdb35a` (on feat) and `7676f6b` (on main) "fix(ci): portable awk extraction" commits had **identical** release.yml content but different SHAs — independently committed against diverged branches. Merge resolved cleanly because git diffs file content, not commit graph. Cherry-pick parallelism is a real failure mode of "tag-first, merge-later" workflows.
+
+**For the agent picking up implementation:**
+1. Read [`AGENTS.md`](../AGENTS.md) (the five rules) and the v0.5.0 spec listed in the previous progress entry.
+2. Open the plan: [`docs/superpowers/plans/2026-05-16-v0.5.0-auth-persistence.md`](./superpowers/plans/2026-05-16-v0.5.0-auth-persistence.md). 27 tasks. Each task is self-contained TDD with full code, expected test output, and a commit message.
+3. Execution path: invoke `superpowers:subagent-driven-development` with the plan file. Fresh subagent per task. Cheap (haiku) for Tasks 1, 2, 6, 7, 13, 15 (mechanical TDD); sonnet for Tasks 10, 16, 20, 21, 23, 26, 27 (orchestration / multi-component wiring).
+4. **Before starting**: provision `TEST_DATABASE_URL` for the test fixture. Local Postgres via docker or a Neon dev branch both work. The plan's `db` fixture refuses to run without it.
+5. **Before Task 27**: ASK the user before installing the Neon Marketplace integration on Vercel. AGENTS.md rule 5 is strict.
+6. Things accepted but might bite — §12 in the spec: no session-id rotation on sign-in, no CSRF tokens on state-changing routes (rely on SameSite=Lax), no rate limiting, no "sign out everywhere" UI. All deferred deliberately.
+7. **Cross-task dependency**: Task 10's `/auth/callback` imports from Task 13's `app/persistence/users.py`. Execute 13 before 10, or stub then re-implement. The plan documents both options in its "Known cross-task dependencies" section.
+
+**Verified at end of this session:**
+- v0.4.0 release live at https://github.com/Shaan-alpha/Skill-Issue/releases/tag/v0.4.0.
+- Backend: `uv run ruff check .` clean, `uv run pytest -q` 124/124 pass.
+- Frontend: `npm run lint` clean, `npm run build` clean.
+- Working tree: plan + this entry staged for the next commit.
+
+**Blocked / open:**
+- TEST_DATABASE_URL provisioning required before Task 3's `db` fixture works. Either local Postgres or a Neon dev branch.
+- Old remote branches `feat/v0.1.0-backend-mvp`, `feat/v0.2.0-frontend-shell`, `feat/v0.3.0-identity-signals` still exist on origin (no open PRs). Delete with `git push origin --delete <branch>` whenever convenient — non-urgent.
+
+**Next:**
+- v0.5.0 implementation. Estimated ~10–14 hours of focused execution across the 27 tasks. After Task 12 (auth dependencies) the implementation moves quickly because every downstream task plugs into a stable foundation.
+
+---
+
 ## 2026-05-16 — Claude (Opus 4.7) — v0.5.0 design + pre-slice audit pass
 
 **Slice:** v0.5.0 (designed, not yet implemented)
