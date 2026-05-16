@@ -8,6 +8,17 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
+## [0.4.0] — 2026-05-16
+
+### Added
+- **AI Narrative Layer** with real-time streaming Roast Mode and Mentor Mode breakdowns wrapping every engineering report.
+- **SSE Streaming API (`/narrative/{username}`)** delivering prompt-injection-hardened, on-voice AI commentary token by token with zero perceived latency.
+- **In-process LRU Caching** ensuring instant repeat visits and seamless mode toggling.
+- **Daily Budget & Fallback Engine** protecting OpenAI quotas while maintaining a 100% resilient UI via high-quality deterministic fallback copy when offline.
+- **Cinematic UI Controls** featuring a smooth `layoutId`-animated Mode Pill Toggle, live typing cursor indicator, and ambient glow effects matching the Apple HIG / Linear aesthetic standard.
+
+---
+
 ## [0.3.0] — 2026-05-16
 
 ### Added

@@ -15,13 +15,10 @@ export function NarrativeStream({ username, mode }: NarrativeStreamProps) {
   const [text, setText] = useState("");
   const [status, setStatus] = useState<
     "idle" | "streaming" | "complete" | "error"
-  >("idle");
+  >("streaming");
   const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
-    setText("");
-    setStatus("streaming");
-
     const cleanup = createNarrativeEventSource(
       username,
       mode,
@@ -58,7 +55,11 @@ export function NarrativeStream({ username, mode }: NarrativeStreamProps) {
             We encountered a hiccup while streaming your AI analysis.
           </p>
           <button
-            onClick={() => setRetryKey((k) => k + 1)}
+            onClick={() => {
+              setText("");
+              setStatus("streaming");
+              setRetryKey((k) => k + 1);
+            }}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/15 text-xs text-white font-medium transition-colors border border-white/10"
           >
             <RotateCcw className="w-3 h-3" />

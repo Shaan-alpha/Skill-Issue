@@ -22,7 +22,7 @@ Engineering insight first. AI flavor second. Scoring is deterministic and explai
 
 ## Status
 
-Pre-alpha. Latest shipped release is **v0.3.0** (Identity Signals): 7-tier ladder replacing the old category enum, intra-tier sub-rank with context-aware chip label, position bar with tier dividers, 8 stackable badges with hover tooltips, tier-gated depth enrichment, and the deferred 4-pt licence signal finally firing so the 100/100 ceiling is reachable. **v0.4.0 — AI narrative layer (Roast + Mentor)** is the next slice. See [`CHANGELOG.md`](./CHANGELOG.md) for shipped slices, [`PLAN.md`](./PLAN.md) for the full roadmap, and [`docs/PROGRESS_LOG.md`](./docs/PROGRESS_LOG.md) for the most recent session handoff.
+Pre-alpha. Latest shipped release is **v0.4.0** (AI Narrative Layer): real-time streaming Roast Mode and Mentor Mode narrative synthesis wrapping every Report. Powered by OpenAI (`gpt-4o`) via an SSE endpoint (`/narrative`), with in-process LRU caching, robust prompt injection defense, and a daily token/call budget backed by deterministic on-voice fallback narratives so the UI never goes blank. **v0.5.0 — Auth + persistence (GitHub OAuth + Neon Postgres)** is the next slice. See [`CHANGELOG.md`](./CHANGELOG.md) for shipped slices, [`PLAN.md`](./PLAN.md) for the full roadmap, and [`docs/PROGRESS_LOG.md`](./docs/PROGRESS_LOG.md) for the most recent session handoff.
 
 ---
 
@@ -51,11 +51,11 @@ You need two terminals — the FastAPI backend and the Next.js frontend run side
 ```bash
 cd backend
 uv sync
-cp .env.example .env        # then edit .env and add your GITHUB_TOKEN
+cp .env.example .env        # then edit .env and add your GITHUB_TOKEN and OPENAI_API_KEY
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
-Verify: `curl http://localhost:8000/health` → `{"status":"ok","version":"0.3.0"}`.
+Verify: `curl http://localhost:8000/health` → `{"status":"ok","version":"0.4.0"}`.
 Hit the analyzer: `curl http://localhost:8000/analyze/octocat`.
 
 ### Frontend (`:3000`)

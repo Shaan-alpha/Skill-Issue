@@ -18,7 +18,7 @@ uv run uvicorn app.main:app --reload --port 8000
 | Var | Required for | Notes |
 | --- | --- | --- |
 | `GITHUB_TOKEN` | every `/analyze` request | Classic PAT or fine-grained token. Stored only in `.env` (gitignored). |
-| `OPENAI_API_KEY` | v0.4.0+ (narrative layer) | Not used by the deterministic engine. Reserved for Roast/Mentor modes landing in v0.4.0. |
+| `OPENAI_API_KEY` | `GET /narrative` | OpenAI API key for streaming Roast/Mentor modes. |
 | `CORS_ALLOW_ORIGINS` | optional | Comma-separated allowed origins. Defaults to `http://localhost:3000`. |
 | `CORS_ALLOW_ORIGIN_REGEX` | optional | Regex matched against `Origin` for preview deploys. Used in production to allow Vercel preview URLs. |
 
@@ -28,10 +28,12 @@ uv run uvicorn app.main:app --reload --port 8000
 | --- | --- |
 | `GET /health` | Liveness + version |
 | `GET /analyze/{username}` | Full ingestion → scoring → report. Returns 400 (invalid username), 404 (no such GitHub user), 502 (GitHub upstream error), or 500 (anything else, with traceback logged). |
+| `GET /narrative/{username}?mode={roast\|mentor}` | SSE streaming endpoint. Token-by-token narrative breakdown. Includes LRU caching, daily budget limits, and deterministic on-voice fallbacks. |
 
 ```bash
 curl http://localhost:8000/health
 curl http://localhost:8000/analyze/octocat
+curl -N http://localhost:8000/narrative/octocat?mode=roast
 ```
 
 ## Tests
@@ -47,6 +49,7 @@ Layout:
 - `tests/scoring/test_*.py` — one file per scorer, fixture-driven
 - `tests/test_analyze_e2e.py` — full ASGI route exercise; regression guard for the v0.1.0 crashes and the v0.3.0 shape change (`tier` + `badges`)
 - `tests/scoring/test_tiers.py`, `tests/scoring/test_badges.py`, `tests/scoring/test_depth.py` — v0.3.0 tier ladder, 8 badges, tier-gated depth dispatch
+- `tests/narrative/test_*.py` — v0.4.0 in-process LRU cache, daily budget, LLM streaming, SSE route, and prompt digest locking
 
 ## Lint + format
 

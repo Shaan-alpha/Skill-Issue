@@ -27,6 +27,7 @@ You only do this once per project. After this, every git push deploys a preview 
    - **Build Command:** leave blank (Vercel reads `backend/vercel.json`)
 3. **Environment Variables** (Production, Preview, *and* Development):
    - `GITHUB_TOKEN` — your GitHub PAT (the value currently in `backend/.env`).
+   - `OPENAI_API_KEY` — your OpenAI API key for streaming Roast/Mentor modes.
    - `CORS_ALLOW_ORIGINS` — `http://localhost:3000,https://skill-issue-frontend.vercel.app`
    - `CORS_ALLOW_ORIGIN_REGEX` — `https://skill-issue-frontend(-[a-z0-9-]+)?\.vercel\.app` (allows every preview URL of the frontend project, nothing else on `vercel.app`).
 4. **Deploy.** First deploy installs `backend/requirements.txt` and exposes `backend/api/index.py` (which re-exports the FastAPI app).
@@ -67,10 +68,13 @@ After both projects are deployed:
 ```bash
 # Health check
 curl https://skill-issue-backend.vercel.app/health
-# -> {"status":"ok","version":"0.3.0"}
+# -> {"status":"ok","version":"0.4.0"}
 
 # Real analyze (warm; cold may take longer due to Python cold start)
 curl https://skill-issue-backend.vercel.app/analyze/octocat
+
+# Real narrative stream (SSE)
+curl -N "https://skill-issue-backend.vercel.app/narrative/octocat?mode=roast"
 
 # Frontend
 open https://skill-issue-frontend.vercel.app
@@ -80,14 +84,14 @@ If the frontend results page shows the **Analysis failed** boundary:
 
 1. Open the frontend deployment in the Vercel dashboard → **Runtime Logs**. The page throw should show the actual HTTP status from the backend.
 2. Confirm `NEXT_PUBLIC_BACKEND_URL` is set on the frontend project and matches the backend URL.
-3. Confirm the backend has `GITHUB_TOKEN` and isn't returning 500.
+3. Confirm the backend has `GITHUB_TOKEN` and `OPENAI_API_KEY` and isn't returning 500.
 
 If the browser console shows a CORS error:
 
 1. Check the backend's deployed `CORS_ALLOW_ORIGINS` and `CORS_ALLOW_ORIGIN_REGEX`.
 2. Open the response in DevTools → Network → look at the `Access-Control-Allow-Origin` header.
 
-## Known limits as of v0.3.0
+## Known limits as of v0.4.0
 
 - **First-paint LCP is bottlenecked by the GitHub ingestion** (~5–10s warm, longer on Vercel cold start; Senior+ profiles add another ~20–40 HTTP calls for tier-gated depth enrichment). This is fundamental until v0.8.0 adds Upstash Redis caching of `/analyze` responses. Lighthouse Performance will reflect this — that's why the explicit Lighthouse exit criterion now lives in v0.9.0 (Polish + observability).
 - **No rate limiting.** Anyone can hit `/analyze` and burn through your GitHub token budget. v0.10.0 territory.

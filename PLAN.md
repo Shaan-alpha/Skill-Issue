@@ -21,7 +21,7 @@
 | **v0.1.0** | Backend MVP — GitHub ingestion + deterministic scoring | ✅ shipped |
 | **v0.2.0** | Frontend shell — landing page + analyze flow + results page (static) | ✅ shipped |
 | **v0.3.0** | Identity Signals — 7-tier ladder, position bar, badges, tier-gated depth | ✅ shipped |
-| **v0.4.0** | AI narrative layer — Roast Mode + Mentor Mode | pending |
+| **v0.4.0** | AI narrative layer — Roast Mode + Mentor Mode | ✅ shipped |
 | **v0.5.0** | Auth + persistence — GitHub OAuth + Neon Postgres | pending |
 | **v0.6.0** | Remaining modes — Recruiter, CTO, Career | pending |
 | **v0.7.0** | GitHub Receipts™ — shareable OG cards | pending |
@@ -141,13 +141,13 @@
 - Prompt regression suite: 5 fixture profiles × 2 modes = 10 committed snapshots of the assembled `messages` array.
 
 **Exit criteria:**
-- [ ] `/narrative/{username}?mode=roast` streams a valid SSE response for all 5 fixture profiles (Hobbyist → Staff).
-- [ ] `mode=mentor` produces tonally distinct output from `mode=roast` for the same profile (snapshot diff asserts the prompt diverges; live smoke confirms the output diverges).
-- [ ] Toggling modes on `/u/{username}` never changes the displayed score, tier, badges, or position bar.
-- [ ] `NARRATIVE_DAILY_LIMIT=0` makes every request hit the fallback path; UI shows the offline badge; rest of the page unaffected.
-- [ ] No prompt-injection succeeds for adversarial usernames or report fields (regex + JSON envelope verified by tests).
-- [ ] Second call with same `(username, scores_hash, mode)` returns in < 200ms, no LLM call (LRU cache hit).
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.4.0`.
+- [x] `/narrative/{username}?mode=roast` streams a valid SSE response for all 5 fixture profiles (Hobbyist → Staff).
+- [x] `mode=mentor` produces tonally distinct output from `mode=roast` for the same profile (snapshot diff asserts the prompt diverges; live smoke confirms the output diverges).
+- [x] Toggling modes on `/u/{username}` never changes the displayed score, tier, badges, or position bar.
+- [x] `NARRATIVE_DAILY_LIMIT=0` makes every request hit the fallback path; UI shows the offline badge; rest of the page unaffected.
+- [x] No prompt-injection succeeds for adversarial usernames or report fields (regex + JSON envelope verified by tests).
+- [x] Second call with same `(username, scores_hash, mode)` returns in < 200ms, no LLM call (LRU cache hit).
+- [x] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.4.0`.
 
 ---
 

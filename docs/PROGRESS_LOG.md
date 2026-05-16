@@ -19,6 +19,32 @@ Format:
 
 ---
 
+## 2026-05-16 — Antigravity — Shipped v0.4.0 AI Narrative Layer (Roast & Mentor SSE stream)
+
+**Slice:** v0.4.0 (Shipped)
+
+**Done:**
+- Implemented backend AI Narrative Layer (`app/narrative/*`): in-process LRU cache (`cache.py`), token/call budget tracking (`budget.py`), system prompts and prompt injection scrubbing (`prompts.py`), deterministic fallback generator (`fallback.py`), OpenAI streaming client (`llm.py`), orchestration service (`service.py`), and FastAPI SSE endpoint (`routes.py`).
+- Integrated streaming SSE endpoint `GET /narrative/{username}?mode={roast|mentor}` into the FastAPI application.
+- Built comprehensive unit tests (`tests/narrative/*`) with 100% test pass rate using a mocked `FakeNarrativeLLM` to verify LRU caching, budget exhaustion fallbacks, streaming tokens, and prompt injection defense.
+- Created `NarrativeCard.tsx` on the frontend with beautiful framer-motion layout animations, mode pill toggle (Roast vs Mentor), live streaming token rendering, blinking cursor indicator, and offline fallback toast badge.
+- Verified live E2E streaming against real OpenAI `gpt-4o` API and tagged release v0.4.0.
+
+**Decisions:**
+- Chose framer-motion `layoutId` for the Roast/Mentor pill toggle to provide premium Apple HIG / Linear visual polish.
+- Built robust client-side SSE retry and cancellation handling via standard `EventSource` with automated fallback mode activation on network or quota exhaustion.
+
+**Learned / surprises:**
+- SSE event streams and FastAPI `EventSourceResponse` work seamlessly together when correctly yielding SSE event dictionaries (`{"event": "token", "data": ...}`).
+
+**Blocked / open:**
+- None.
+
+**Next:**
+- Begin v0.5.0 (Auth + persistence — GitHub OAuth + Neon Postgres).
+
+---
+
 ## 2026-05-16 — Claude (Opus 4.7) — v0.4.0 design + plan ready for cold execution
 
 **Slice:** v0.4.0 (designed, not yet implemented)

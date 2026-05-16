@@ -30,7 +30,7 @@ export function NarrativeCard({ username }: NarrativeCardProps) {
         <ModePillToggle mode={mode} onModeChange={setMode} />
       </div>
 
-      <NarrativeStream username={username} mode={mode} />
+      <NarrativeStream key={`${username}-${mode}`} username={username} mode={mode} />
     </section>
   );
 }
