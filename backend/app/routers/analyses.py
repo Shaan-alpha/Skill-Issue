@@ -19,7 +19,20 @@ router = APIRouter(prefix="/analyses", tags=["analyses"])
 
 
 def _public_share_url(slug: str) -> str:
-    base = (settings.oauth_redirect_url or "").rsplit("/auth/callback", 1)[0]
+    """Construct the public-facing share URL on the frontend origin.
+
+    Uses CORS_ALLOW_ORIGINS as the source of truth — that env var holds the
+    frontend origin(s) by definition. The previous implementation derived
+    the base from OAUTH_REDIRECT_URL, which on multi-service Vercel deploys
+    includes the `/_/backend` service prefix and ended up pointing the share
+    URL at the backend's raw JSON endpoint instead of the frontend page.
+    """
+    origins = [
+        o.strip()
+        for o in settings.cors_allow_origins.split(",")
+        if o.strip()
+    ]
+    base = origins[0] if origins else ""
     return f"{base}/share/{slug}"
 
 
