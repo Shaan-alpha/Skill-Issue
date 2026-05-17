@@ -32,7 +32,11 @@ async def login() -> RedirectResponse:
         secure=settings.cookie_secure,
         samesite="lax",
         domain=settings.cookie_domain,
-        path="/auth",
+        # Cookie must be sent back on the callback. On Vercel multi-service the
+        # callback URL is `/_/backend/auth/callback`, which would not match a
+        # `/auth` cookie path. `/` is the safe default — the cookie is 10-minute
+        # TTL anyway, so the narrower scope buys very little.
+        path="/",
     )
     return redirect
 
@@ -48,7 +52,7 @@ async def callback(
     # User cancelled the OAuth flow.
     if error == "access_denied":
         resp = RedirectResponse("/?auth=cancelled", status_code=302)
-        resp.delete_cookie(_OAUTH_STATE_COOKIE, path="/auth")
+        resp.delete_cookie(_OAUTH_STATE_COOKIE, path="/")
         return resp
 
     if not code or not state:
@@ -91,7 +95,7 @@ async def callback(
         domain=cfg.cookie_domain,
         path="/",
     )
-    resp.delete_cookie(_OAUTH_STATE_COOKIE, path="/auth")
+    resp.delete_cookie(_OAUTH_STATE_COOKIE, path="/")
     return resp
 
 
