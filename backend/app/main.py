@@ -2,9 +2,11 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.db.engine import engine
 from app.dependencies import get_report_for_user
@@ -27,6 +29,14 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Skill Issue API", version=VERSION, lifespan=lifespan)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def _http_exc_handler(_request: Request, exc: StarletteHTTPException):
+    if isinstance(exc.detail, dict) and "error" in exc.detail:
+        return JSONResponse(exc.detail, status_code=exc.status_code)
+    return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+
 
 app.add_middleware(
     CORSMiddleware,

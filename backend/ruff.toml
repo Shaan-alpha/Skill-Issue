@@ -12,6 +12,9 @@ ignore = ["E501"]
 "app/db/models.py" = ["TC003"]
 # Test file uses semicolons for compact async test setup (intentional formatting)
 "tests/db/test_models.py" = ["E702"]
+# FastAPI routers: SQLAlchemy session types must be runtime imports because FastAPI
+# resolves Depends() annotations via get_type_hints() at startup, not statically.
+"app/routers/*.py" = ["TC002"]
 
 [lint.flake8-type-checking]
 runtime-evaluated-base-classes = ["pydantic.BaseModel"]
