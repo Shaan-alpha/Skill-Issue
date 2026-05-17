@@ -15,6 +15,8 @@ ignore = ["E501"]
 # FastAPI routers: SQLAlchemy session types must be runtime imports because FastAPI
 # resolves Depends() annotations via get_type_hints() at startup, not statically.
 "app/routers/*.py" = ["TC002"]
+# FastAPI auth dependencies: same reason as routers — User and AsyncSession must be runtime
+"app/auth/dependencies.py" = ["TC001", "TC002"]
 
 [lint.flake8-type-checking]
 runtime-evaluated-base-classes = ["pydantic.BaseModel"]
