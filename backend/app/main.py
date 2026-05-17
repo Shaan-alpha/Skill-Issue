@@ -9,7 +9,7 @@ from sqlalchemy import text
 from app.db.engine import engine
 from app.dependencies import get_report_for_user
 from app.models import Report
-from app.routers import narrative
+from app.routers import auth, narrative
 from app.settings import VERSION, settings
 
 logger = logging.getLogger(__name__)
@@ -40,6 +40,7 @@ app.add_middleware(
 )
 
 app.include_router(narrative.router)
+app.include_router(auth.router)
 
 
 @app.get("/health")
