@@ -55,3 +55,35 @@ export interface Report {
 
 export type NarrativeMode = "roast" | "mentor";
 
+export type Session =
+  | { user: { id: number; login: string; name: string | null; avatar_url: string | null } }
+  | null;
+
+export interface SavedAnalysis {
+  id: number;
+  target_login: string;
+  is_public: boolean;
+  share_slug: string | null;
+  latest_run: {
+    total_score: number;
+    tier_name: string;
+    completed_at: string;
+  } | null;
+}
+
+export interface MeAnalysesResponse {
+  analyses: SavedAnalysis[];
+  page: number;
+  total: number;
+}
+
+export interface ShareResponse {
+  share_slug: string;
+  share_url: string;
+}
+
+export interface SharedAnalysisPayload {
+  report: Report;
+  owner: { login: string; avatar_url: string | null };
+  shared_at: string;
+}
