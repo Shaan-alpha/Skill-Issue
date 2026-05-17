@@ -73,7 +73,13 @@ function ScoreItem({ title, result, icon, description, delay }: ScoreCardProps) 
   );
 }
 
-export function ResultsView({ report }: { report: Report }) {
+interface ResultsViewProps {
+  report: Report;
+  username?: string;
+  sharedNarrative?: boolean; // Task 25/26 — skip live SSE stream on share pages
+}
+
+export function ResultsView({ report }: ResultsViewProps) {
   const { breakdown } = report;
   const items = [
     {
