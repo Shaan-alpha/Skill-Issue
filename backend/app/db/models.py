@@ -85,7 +85,13 @@ class Analysis(Base):
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     share_slug: Mapped[str | None] = mapped_column(Text, unique=True)
     latest_run_id: Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("analysis_runs.id", ondelete="SET NULL", use_alter=True)
+        BigInteger,
+        ForeignKey(
+            "analysis_runs.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_analyses_latest_run_id",
+        ),
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
