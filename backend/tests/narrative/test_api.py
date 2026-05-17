@@ -113,3 +113,77 @@ async def test_narrative_sse_streaming_format(_override_deps: None) -> None:
         assert lines[i].startswith("data: ")
         data = json.loads(lines[i][6:])
         assert data["chunk"] == tok
+
+
+async def test_signed_in_narrative_persists(db, monkeypatch):
+    """When a session is present, the assembled narrative is saved to `narratives`."""
+    import base64
+    import secrets
+
+    from httpx import ASGITransport, AsyncClient
+    from sqlalchemy import select
+
+    monkeypatch.setenv("SESSION_TOKEN_ENC_KEY", base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())
+    monkeypatch.setenv("GITHUB_TOKEN", "p")
+
+    from app.auth.sessions import create_session
+    from app.db.models import Narrative, User
+    from app.main import app
+
+    u = User(github_id=1, github_login="me")
+    db.add(u)
+    await db.flush()
+    sid = await create_session(db, user_id=u.id, github_access_token="t", ttl_days=30)
+    await db.commit()
+
+    from app import dependencies as deps
+    from app.narrative import service as nsvc
+
+    def fake_score(profile):
+        from datetime import UTC, datetime
+
+        from app.models import Report, ScoreBreakdown, ScoreResult, TierInfo
+        return Report(
+            username=profile.login,
+            tier=TierInfo(name="Senior Engineer", sub_rank=50, band=[65, 80],
+                          next_tier="Staff Engineer", chip_label="50% into tier"),
+            badges=[],
+            breakdown=ScoreBreakdown(
+                repo_quality=ScoreResult(points=25, max_points=30),
+                engineering_maturity=ScoreResult(points=15, max_points=20),
+                oss_collab=ScoreResult(points=10, max_points=15),
+                consistency=ScoreResult(points=8, max_points=10),
+                recruiter_signal=ScoreResult(points=12, max_points=15),
+                learning_trajectory=ScoreResult(points=8, max_points=10),
+            ),
+            total=78,
+            generated_at=datetime.now(UTC),
+        )
+    async def fake_ingest(uname, gh):
+        return type("P", (), {"login": uname})()
+    async def fake_run_engine(profile, gh):
+        return fake_score(profile)
+    async def fake_stream(self, mode, report):
+        for tok in ("Hello ", "world."):
+            yield tok
+    monkeypatch.setattr(deps, "ingest_profile", fake_ingest)
+    monkeypatch.setattr(deps, "run_scoring_engine", fake_run_engine)
+    monkeypatch.setattr(nsvc.NarrativeService, "stream_narrative", fake_stream)
+
+    from app.db.session import get_db
+    async def _o(): yield db
+    app.dependency_overrides[get_db] = _o
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+        ac.cookies.set("si_session", sid)
+        r = await ac.get("/narrative/octocat?mode=roast")
+        assert r.status_code == 200
+        async for _ in r.aiter_text():
+            pass
+    app.dependency_overrides.clear()
+
+    n = await db.scalar(select(Narrative).where(Narrative.mode == "roast"))
+    assert n is not None
+    assert "Hello" in n.text
+    assert n.provider == "openai"
+    assert n.is_fallback is False
