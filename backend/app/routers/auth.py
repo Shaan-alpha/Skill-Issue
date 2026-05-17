@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Query
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, status
+from fastapi.responses import RedirectResponse, Response
 from httpx import HTTPStatusError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.auth.oauth as _oauth_mod
 from app.auth.oauth import build_authorize_url, generate_state_token
-from app.auth.sessions import create_session
+from app.auth.sessions import create_session, delete_session
 from app.db.session import get_db
 from app.persistence.users import upsert_user_from_github_payload
 from app.settings import Settings, settings
@@ -92,4 +92,20 @@ async def callback(
         path="/",
     )
     resp.delete_cookie(_OAUTH_STATE_COOKIE, path="/auth")
+    return resp
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    si_session: Annotated[str | None, Cookie()] = None,
+) -> Response:
+    if si_session:
+        await delete_session(db, si_session)
+    resp = Response(status_code=204)
+    resp.delete_cookie(
+        settings.session_cookie_name,
+        domain=settings.cookie_domain,
+        path="/",
+    )
     return resp

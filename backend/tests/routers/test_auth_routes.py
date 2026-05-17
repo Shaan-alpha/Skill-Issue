@@ -128,3 +128,40 @@ async def test_callback_user_cancelled_redirects_to_root(db):
     app.dependency_overrides.clear()
     assert r.status_code == 302
     assert r.headers["location"] == "/?auth=cancelled"
+
+
+async def test_logout_deletes_session_and_clears_cookie(db, monkeypatch):
+    import base64
+    import secrets
+
+    from sqlalchemy import select
+
+    from app.auth.sessions import create_session
+    from app.db.models import Session, User
+
+    monkeypatch.setenv(
+        "SESSION_TOKEN_ENC_KEY",
+        base64.urlsafe_b64encode(secrets.token_bytes(32)).decode(),
+    )
+
+    u = User(github_id=1, github_login="x")
+    db.add(u)
+    await db.flush()
+    sid = await create_session(db, user_id=u.id, github_access_token="t", ttl_days=30)
+    await db.commit()
+
+    await _seed_db_override(db)
+
+    async with await _client() as ac:
+        ac.cookies.set("si_session", sid)
+        r = await ac.post("/auth/logout")
+    app.dependency_overrides.clear()
+
+    assert r.status_code == 204
+    assert (await db.scalar(select(Session).where(Session.id == sid))) is None
+
+
+async def test_logout_idempotent_without_cookie():
+    async with await _client() as ac:
+        r = await ac.post("/auth/logout")
+    assert r.status_code == 204
