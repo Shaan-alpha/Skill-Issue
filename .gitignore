@@ -58,3 +58,8 @@ coverage/
 
 # --- Misc ---
 *.local
+
+.vercel
+.env*.local
+.env.production
+.env.development

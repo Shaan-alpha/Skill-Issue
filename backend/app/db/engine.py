@@ -10,11 +10,49 @@ from sqlalchemy.ext.asyncio import (
 from app.settings import settings
 
 
+def _normalize_async_url(url: str) -> tuple[str, bool]:
+    """Coerce common Neon/Postgres URL schemes to the SQLAlchemy asyncpg dialect.
+
+    Neon's Vercel integration emits `postgres://...` and `postgresql://...`;
+    neither resolves to the asyncpg driver. Strip any sync `psycopg2`/`psycopg`
+    suffix and ensure the `+asyncpg` driver is present.
+
+    Returns (normalized_url, ssl_required). `ssl_required` is True when the
+    original URL signalled TLS (`sslmode=require|verify-*`) — asyncpg uses
+    its own `ssl` connect arg rather than libpq's `sslmode` query param.
+    """
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://") :]
+    if url.startswith("postgresql://"):
+        url = "postgresql+asyncpg://" + url[len("postgresql://") :]
+    elif url.startswith("postgresql+psycopg2://"):
+        url = "postgresql+asyncpg://" + url[len("postgresql+psycopg2://") :]
+    elif url.startswith("postgresql+psycopg://"):
+        url = "postgresql+asyncpg://" + url[len("postgresql+psycopg://") :]
+
+    ssl_required = False
+    if "?" in url:
+        base, qs = url.split("?", 1)
+        kept: list[str] = []
+        for kv in qs.split("&"):
+            if kv.lower().startswith("sslmode="):
+                _, mode = kv.split("=", 1)
+                if mode.lower() in {"require", "verify-ca", "verify-full", "prefer"}:
+                    ssl_required = True
+                continue
+            kept.append(kv)
+        url = base + (f"?{'&'.join(kept)}" if kept else "")
+    return url, ssl_required
+
+
 def _build_engine(url: str) -> AsyncEngine:
+    normalized, ssl_required = _normalize_async_url(url)
+    connect_args: dict[str, object] = {"statement_cache_size": 0}
+    if ssl_required:
+        connect_args["ssl"] = True
     return create_async_engine(
-        url,
-        # asyncpg + pgBouncer transaction pooling: must disable prepared statements.
-        connect_args={"statement_cache_size": 0},
+        normalized,
+        connect_args=connect_args,
         pool_size=5,
         max_overflow=5,
         pool_pre_ping=True,
