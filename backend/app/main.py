@@ -11,7 +11,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.db.engine import engine
 from app.dependencies import get_report_for_user
 from app.models import Report
-from app.routers import analyses, auth, me, narrative
+from app.routers import analyses, auth, me, narrative, share
 from app.settings import VERSION, settings
 
 logger = logging.getLogger(__name__)
@@ -53,6 +53,7 @@ app.include_router(narrative.router)
 app.include_router(auth.router)
 app.include_router(me.router)
 app.include_router(analyses.router)
+app.include_router(share.router)
 
 
 @app.get("/health")
