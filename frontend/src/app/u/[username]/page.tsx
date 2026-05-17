@@ -38,7 +38,10 @@ async function loadAuthHints(
     const body = (await r.json()) as {
       analyses: Array<{ id: number; target_login: string; share_slug: string | null }>;
     };
-    const match = body.analyses.find((a) => a.target_login === username);
+    const needle = username.toLowerCase();
+    const match = body.analyses.find(
+      (a) => a.target_login.toLowerCase() === needle,
+    );
     return {
       analysisId: match?.id ?? null,
       shareSlug: match?.share_slug ?? null,
@@ -61,7 +64,15 @@ export default async function AnalysisPage({
     .join("; ");
 
   const report = await getAnalysis(username, cookieHeader);
-  const { analysisId, shareSlug } = await loadAuthHints(username, cookieHeader);
+  // Use the canonical login from the backend response, not the URL slug —
+  // GitHub logins are case-insensitive in URLs but the backend stores the
+  // canonical case (e.g. URL `/u/shaan-alpha`, stored target_login
+  // `Shaan-alpha`). Matching by the URL slug would miss the row and leave
+  // the share button disabled.
+  const { analysisId, shareSlug } = await loadAuthHints(
+    report.username,
+    cookieHeader,
+  );
 
   return (
     <ResultsView
