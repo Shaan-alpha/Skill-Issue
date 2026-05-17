@@ -21,14 +21,15 @@ class NarrativeLLM:
         self,
         messages: list[dict[str, str]],
         *,
-        max_output_tokens: int = 320,
+        max_output_tokens: int = 600,
+        temperature: float = 0.7,
     ) -> AsyncIterator[str]:
         stream = await self._client.chat.completions.create(
             model=self._model,
             messages=messages,
             stream=True,
             max_tokens=max_output_tokens,
-            temperature=0.7,
+            temperature=temperature,
         )
         async for chunk in stream:
             delta = chunk.choices[0].delta.content
@@ -48,9 +49,12 @@ class FakeNarrativeLLM:
         self,
         messages: list[dict[str, str]],
         *,
-        max_output_tokens: int = 320,
+        max_output_tokens: int = 600,
+        temperature: float = 0.7,
     ) -> AsyncIterator[str]:
         self.calls += 1
         self.last_messages = messages
+        self.last_max_output_tokens = max_output_tokens
+        self.last_temperature = temperature
         for tok in self._tokens:
             yield tok

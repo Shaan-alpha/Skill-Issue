@@ -13,6 +13,12 @@ logger = logging.getLogger(__name__)
 
 Mode = Literal["roast", "mentor"]
 
+# Per-mode sampling. Roast wants surprise + edge; mentor wants directness.
+_TEMPERATURE_BY_MODE: dict[Mode, float] = {
+    "roast": 0.95,
+    "mentor": 0.55,
+}
+
 
 class NarrativeService:
     """Orchestrates caching, daily budgeting, prompt construction, and LLM
@@ -57,7 +63,9 @@ class NarrativeService:
         messages = build_messages(mode, report)
         acc: list[str] = []
         try:
-            async for chunk in self._llm.stream_chat(messages):
+            async for chunk in self._llm.stream_chat(
+                messages, temperature=_TEMPERATURE_BY_MODE[mode]
+            ):
                 acc.append(chunk)
                 yield chunk
         except Exception as e:

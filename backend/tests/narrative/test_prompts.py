@@ -67,7 +67,12 @@ def test_payload_contains_all_six_breakdown_buckets() -> None:
     payload = json.loads(msgs[-1]["content"])
     b = payload["breakdown"]
     assert len(b) == 6
-    assert b["repo_quality"] == 20
+    # Each bucket is now a dict with points/max_points/evidence rather than
+    # a bare integer — the model needs the evidence array to write specific
+    # critique, not just point totals.
+    assert b["repo_quality"]["points"] == 20
+    assert b["repo_quality"]["max_points"] == 30
+    assert isinstance(b["repo_quality"]["evidence"], list)
 
 
 def test_system_prompts_contain_anti_injection_clause() -> None:
