@@ -30,15 +30,43 @@ def _normalize_async_url(url: str) -> tuple[str, bool]:
     elif url.startswith("postgresql+psycopg://"):
         url = "postgresql+asyncpg://" + url[len("postgresql+psycopg://") :]
 
+    # libpq-only query params that asyncpg does NOT accept. Strip them so the
+    # connect call doesn't raise TypeError("unexpected keyword argument …").
+    libpq_only_keys = {
+        "sslmode",
+        "sslcompression",
+        "sslcert",
+        "sslkey",
+        "sslrootcert",
+        "sslcrl",
+        "sslcrldir",
+        "sslpassword",
+        "channel_binding",
+        "gssencmode",
+        "target_session_attrs",
+        "krbsrvname",
+        "service",
+        "options",
+    }
+
     ssl_required = False
     if "?" in url:
         base, qs = url.split("?", 1)
         kept: list[str] = []
         for kv in qs.split("&"):
-            if kv.lower().startswith("sslmode="):
-                _, mode = kv.split("=", 1)
-                if mode.lower() in {"require", "verify-ca", "verify-full", "prefer"}:
-                    ssl_required = True
+            if "=" in kv:
+                key, value = kv.split("=", 1)
+            else:
+                key, value = kv, ""
+            key_lower = key.lower()
+            if key_lower == "sslmode" and value.lower() in {
+                "require",
+                "verify-ca",
+                "verify-full",
+                "prefer",
+            }:
+                ssl_required = True
+            if key_lower in libpq_only_keys:
                 continue
             kept.append(kv)
         url = base + (f"?{'&'.join(kept)}" if kept else "")
