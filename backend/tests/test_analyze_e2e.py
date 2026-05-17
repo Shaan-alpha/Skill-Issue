@@ -307,3 +307,118 @@ async def test_analyze_without_token_returns_500(
 
     assert resp.status_code == 500
     assert "GITHUB_TOKEN" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_signed_in_analyze_persists_run(db, monkeypatch):
+    """When a session cookie is sent, /analyze writes an analyses + analysis_runs row."""
+    import base64
+    import secrets
+
+    from httpx import ASGITransport, AsyncClient
+    monkeypatch.setenv("SESSION_TOKEN_ENC_KEY", base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())
+    monkeypatch.setenv("GITHUB_TOKEN", "project-token")
+
+    from sqlalchemy import select
+
+    from app.auth.sessions import create_session
+    from app.db.models import Analysis, AnalysisRun, User
+    from app.main import app
+
+    u = User(github_id=1, github_login="me")
+    db.add(u)
+    await db.flush()
+    sid = await create_session(db, user_id=u.id, github_access_token="user-token", ttl_days=30)
+    await db.commit()
+
+    from app import dependencies as deps
+    async def fake_ingest(username, gh): return type("P", (), {"login": username})()
+    async def fake_run_engine(profile, gh):
+        from datetime import UTC, datetime
+
+        from app.models import Report, ScoreBreakdown, ScoreResult, TierInfo
+        return Report(
+            username=profile.login,
+            tier=TierInfo(name="Senior Engineer", sub_rank=50, band=[65, 80],
+                          next_tier="Staff Engineer", chip_label="50% into tier"),
+            badges=[],
+            breakdown=ScoreBreakdown(
+                repo_quality=ScoreResult(points=20, max_points=30),
+                engineering_maturity=ScoreResult(points=10, max_points=20),
+                oss_collab=ScoreResult(points=10, max_points=15),
+                consistency=ScoreResult(points=5, max_points=10),
+                recruiter_signal=ScoreResult(points=10, max_points=15),
+                learning_trajectory=ScoreResult(points=5, max_points=10),
+            ),
+            total=60,
+            generated_at=datetime.now(UTC),
+        )
+    monkeypatch.setattr(deps, "ingest_profile", fake_ingest)
+    monkeypatch.setattr(deps, "run_scoring_engine", fake_run_engine)
+
+    from app.db.session import get_db
+    async def _o(): yield db
+    app.dependency_overrides[get_db] = _o
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+        ac.cookies.set("si_session", sid)
+        r = await ac.get("/analyze/octocat")
+    app.dependency_overrides.clear()
+    assert r.status_code == 200
+
+    analysis = await db.scalar(select(Analysis).where(
+        Analysis.user_id == u.id, Analysis.target_login == "octocat"
+    ))
+    assert analysis is not None
+    run = await db.scalar(select(AnalysisRun).where(AnalysisRun.analysis_id == analysis.id))
+    assert run is not None
+    assert run.total_score == 60
+    assert run.tier_name == "Senior Engineer"
+    assert analysis.latest_run_id == run.id
+
+
+@pytest.mark.asyncio
+async def test_anonymous_analyze_does_not_persist(db, monkeypatch):
+    """Anonymous /analyze writes nothing — landing-page demo flow unchanged."""
+    from httpx import ASGITransport, AsyncClient
+    from sqlalchemy import func, select
+
+    from app import dependencies as deps
+    from app.db.models import Analysis
+    from app.main import app
+
+    monkeypatch.setenv("GITHUB_TOKEN", "project-token")
+    async def fake_ingest(username, gh): return type("P", (), {"login": username})()
+    async def fake_run_engine(profile, gh):
+        from datetime import UTC, datetime
+
+        from app.models import Report, ScoreBreakdown, ScoreResult, TierInfo
+        return Report(
+            username=profile.login,
+            tier=TierInfo(name="Hobbyist", sub_rank=10, band=[0, 30],
+                          next_tier="Student Builder", chip_label="10% into tier"),
+            badges=[],
+            breakdown=ScoreBreakdown(
+                repo_quality=ScoreResult(points=0, max_points=30),
+                engineering_maturity=ScoreResult(points=0, max_points=20),
+                oss_collab=ScoreResult(points=0, max_points=15),
+                consistency=ScoreResult(points=0, max_points=10),
+                recruiter_signal=ScoreResult(points=0, max_points=15),
+                learning_trajectory=ScoreResult(points=0, max_points=10),
+            ),
+            total=0,
+            generated_at=datetime.now(UTC),
+        )
+    monkeypatch.setattr(deps, "ingest_profile", fake_ingest)
+    monkeypatch.setattr(deps, "run_scoring_engine", fake_run_engine)
+
+    from app.db.session import get_db
+    async def _o(): yield db
+    app.dependency_overrides[get_db] = _o
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
+        r = await ac.get("/analyze/octocat")
+    app.dependency_overrides.clear()
+    assert r.status_code == 200
+    count = await db.scalar(select(func.count()).select_from(Analysis))
+    assert count == 0
