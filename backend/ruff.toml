@@ -10,8 +10,9 @@ ignore = ["E501"]
 "app/narrative/prompts.py" = ["RUF001"]
 # SQLAlchemy models: datetime import must be runtime (not TYPE_CHECKING) for SQLAlchemy annotation resolution
 "app/db/models.py" = ["TC003"]
-# Test file uses semicolons for compact async test setup (intentional formatting)
+# Test files use semicolons for compact async test setup (intentional formatting)
 "tests/db/test_models.py" = ["E702"]
+"tests/persistence/test_analyses.py" = ["E702"]
 # FastAPI routers: SQLAlchemy session types must be runtime imports because FastAPI
 # resolves Depends() annotations via get_type_hints() at startup, not statically.
 "app/routers/*.py" = ["TC002"]
