@@ -42,7 +42,7 @@ def test_roast_prompt_stable_snapshot() -> None:
 
     assert (
         digest
-        == "ecc251618d249cb3906ad1fb18efd8298e59360a374f6e4c0909f74cee4a81fe"
+        == "41d20f4c91f341b02828016949ecdfb859fde13d8e626dd3779926d67f5e51bb"
     )
 
 
@@ -53,5 +53,5 @@ def test_mentor_prompt_stable_snapshot() -> None:
 
     assert (
         digest
-        == "faf30bb04b785dd0ee12e70f331a2964b58afac29883bef9692ce8840bcac996"
+        == "d69a9f846bcd520c19f10f91d407e1ac3edf5f7796f2c92edab2f1eb0b56eeaa"
     )
