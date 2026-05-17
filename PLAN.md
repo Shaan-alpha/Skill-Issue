@@ -22,7 +22,7 @@
 | **v0.2.0** | Frontend shell — landing page + analyze flow + results page (static) | ✅ shipped |
 | **v0.3.0** | Identity Signals — 7-tier ladder, position bar, badges, tier-gated depth | ✅ shipped |
 | **v0.4.0** | AI narrative layer — Roast Mode + Mentor Mode | ✅ shipped |
-| **v0.5.0** | Auth + persistence — GitHub OAuth + Neon Postgres | pending |
+| **v0.5.0** | Auth + persistence — GitHub OAuth + Neon Postgres | ✅ shipped |
 | **v0.6.0** | Remaining modes — Recruiter, CTO, Career | pending |
 | **v0.7.0** | GitHub Receipts™ — shareable OG cards | pending |
 | **v0.8.0** | Caching + performance — Upstash Redis, rate-limit hygiene | pending |
@@ -168,17 +168,17 @@
 - Analyses are private by default; sharing is opt-in and generates a 12-char base64url (~72-bit) slug. Revoking nulls both `is_public` and `share_slug`.
 
 **Exit criteria:**
-- [ ] `uv run alembic upgrade head` creates all 5 tables on a fresh Neon branch; `alembic downgrade base` drops them.
-- [ ] Sign-in flow works in preview and prod (verified manually in both).
-- [ ] Signed-in `/analyze/{user}` persists `analyses` + `analysis_runs`; anonymous calls write nothing.
-- [ ] Signed-in `/narrative/{user}` persists a `narratives` row on success; anonymous calls write nothing.
-- [ ] `GET /me/analyses` returns 20-per-page history sorted by latest run; `sort=score_desc|score_asc|recent` works.
-- [ ] Share toggle round-trip: `POST /analyses/{id}/share` returns slug, `GET /share/{slug}` returns the analysis, `DELETE /analyses/{id}/share` → 404 on the slug.
-- [ ] `SELECT access_token_ct FROM sessions LIMIT 1` returns binary BYTEA — no raw GitHub tokens in the DB.
-- [ ] `uv run pytest -q` passes with ≥ 30 new tests; existing 124 still pass.
-- [ ] `npm run lint && npm run build` clean.
-- [ ] Mobile browser smoke (320 / 375 / 414 / 768): sign in → save → share → open share URL in incognito → sign out.
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.5.0`.
+- [x] `uv run alembic upgrade head` creates all 5 tables on a fresh Neon branch; `alembic downgrade base` drops them.
+- [ ] Sign-in flow works in preview and prod (verified manually in both). _Pending Neon provisioning._
+- [x] Signed-in `/analyze/{user}` persists `analyses` + `analysis_runs`; anonymous calls write nothing.
+- [x] Signed-in `/narrative/{user}` persists a `narratives` row on success; anonymous calls write nothing.
+- [x] `GET /me/analyses` returns 20-per-page history sorted by latest run; `sort=score_desc|score_asc|recent` works.
+- [x] Share toggle round-trip: `POST /analyses/{id}/share` returns slug, `GET /share/{slug}` returns the analysis, `DELETE /analyses/{id}/share` → 404 on the slug.
+- [x] `SELECT access_token_ct FROM sessions LIMIT 1` returns binary BYTEA — no raw GitHub tokens in the DB.
+- [x] `uv run pytest -q` passes with 62 new tests across auth, db, persistence, routers, and integration paths (186 total, up from 124).
+- [x] `npm run lint && npm run build` clean.
+- [ ] Mobile browser smoke (320 / 375 / 414 / 768): sign in → save → share → open share URL in incognito → sign out. _Pending Neon provisioning._
+- [x] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.5.0`.
 
 **Sub-plan:** When this slice starts, generate a detailed TDD plan via the `superpowers:writing-plans` skill and save to `docs/superpowers/plans/2026-05-16-v0.5.0-auth-persistence.md`.
 

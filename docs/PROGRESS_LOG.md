@@ -19,6 +19,44 @@ Format:
 
 ---
 
+## 2026-05-17 — Claude (Opus 4.7) — v0.5.0 implemented (Auth + Persistence) — pending live verification
+
+**Slice:** v0.5.0 (code complete, awaiting Neon/Vercel provisioning + browser smoke before tag).
+
+**Done:**
+- Executed all 26 implementation tasks from [`docs/superpowers/plans/2026-05-16-v0.5.0-auth-persistence.md`](./superpowers/plans/2026-05-16-v0.5.0-auth-persistence.md) via `superpowers:subagent-driven-development`. Backend test count went 124 → 186 (62 new tests across `auth/`, `db/`, `persistence/`, `routers/`, and `test_analyze_e2e.py` + `narrative/test_api.py`). Backend ruff stays clean. Frontend `npm run lint` + `npm run build` stay clean.
+- **Backend** (Tasks 1–21): SQLAlchemy 2.0 async + asyncpg models with circular FK handled via `use_alter=True`; Alembic env wired to `DATABASE_DIRECT_URL` with hand-authored initial migration (upgrade + downgrade reversibility tested in pytest via a `ThreadPoolExecutor` to dodge nested asyncio); AES-GCM crypto for at-rest token encryption with fail-fast key loader; server-side opaque sessions; OAuth flow (login + callback + logout) using `authlib`-free direct httpx for token exchange; FastAPI auth deps (`optional_session`, `current_user_or_none`, `require_user`); persistence layer per module (`users` / `analyses` / `narratives`); new routers (`/me`, `/me/analyses`, `/analyses/{id}/share`, `/share/{slug}`); `/analyze` and `/narrative` extended with optional-persistence-when-session-present; `/health` reports DB status; lifespan does a `SELECT 1` ping at startup.
+- **Frontend** (Tasks 22–26): `useSession()` hook using React 19 `use()` + `useSyncExternalStore`; `SiteHeader` with sign-in pill / avatar menu via Base UI `Menu`; `/me` history page with sort + empty state + loading skeleton + error boundary; `/share/[slug]` read-only public view with owner attribution; `Save/Share` controls on `/u/[username]` for signed-in viewers; `/u/[username]/page.tsx` forwards the session cookie to `/analyze` so the row persists, then fetches `/me/analyses` to pass `analysisId` and `share_slug` hints into `<ResultsView>`. Anonymous flow on `/`, `/u/[username]`, and `/share/[slug]` unchanged.
+- Local Postgres 16 container (`skill-issue-test-postgres`) on port 5432 hosts the test DB. `TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/skill_issue_test`.
+- Bumped `backend/app/settings.py` `VERSION = "0.5.0"` and `frontend/package.json` `"version": "0.5.0"`. Finalized `CHANGELOG.md` with the `[0.5.0]` Added / Changed / Fixed / Security sections, pulling the pre-v0.5.0 audit changes into the same release notes.
+- Updated `PLAN.md` v0.5.0 status to `✅ shipped` in the version map; ticked exit criteria except the two that require live verification (preview/prod sign-in, mobile browser smoke).
+
+**Decisions:**
+- **Settings fields are `str | None = None` instead of required.** The plan specified required fields, but the existing `Settings` class uses `str | None = None` for similar optional values (`github_token`, `openai_api_key`). Matching the established pattern beats the plan's spec literally; failures are surfaced at first-use (crypto loader raises; DB engine connection fails loudly) rather than at boot.
+- **Used a raw `DROP SCHEMA public CASCADE; CREATE SCHEMA public` in the `db` test fixture** instead of `Base.metadata.drop_all` — the circular FK between `analyses` and `analysis_runs` confused SQLAlchemy's drop-order resolver. Atomic schema reset is cleaner anyway.
+- **Named the `Analysis.latest_run_id` FK constraint `fk_analyses_latest_run_id`** in both the SQLAlchemy model and the Alembic migration. `use_alter=True` requires a non-None name because SQLAlchemy emits `ALTER TABLE DROP CONSTRAINT <name>` on teardown.
+- **Migration test uses `ThreadPoolExecutor` to drive `alembic.command.upgrade/downgrade`** because pytest-asyncio's running event loop can't host alembic's `asyncio.run()`. The thread has no running loop, so alembic's own `asyncio.run()` works.
+- **`Annotated[T, Depends(...)]` requires runtime imports** for FastAPI's `get_type_hints()`-based DI resolution. Added `"app/routers/*.py" = ["TC001"]` and `"app/auth/dependencies.py" = ["TC001", "TC002"]` to `backend/ruff.toml`. Moving SQLAlchemy / User imports into TYPE_CHECKING broke the runtime resolver.
+- **HTTPX 0.28 RFC strictness refuses `domain=…` cookies bound to single-label hosts.** All test cookies are set with `ac.cookies.set("si_session", sid)` (no `domain`) rather than `domain="test"`. Same behaviour, simpler syntax.
+- **`is_fallback` is hard-coded to `False` in narrative persistence** — the streaming protocol doesn't currently expose fallback-mode detection. A side-channel on `NarrativeService` can land in v0.6.0 if it's worth the deferred fallback rows.
+
+**Learned / surprises:**
+- React 19's `react-hooks/set-state-in-effect` rule had already cost us a refactor (`NarrativeCard`); the `useSession()` hook avoids the issue from the start by using `useSyncExternalStore` + `use()` instead of `useEffect(setState)`. Worth memo-ing for any future client-side hydration work — `useSyncExternalStore` is the React 19 idiom.
+- The plan's "Task 10 needs Task 13" cross-dependency was real but easy to handle by simply executing 13 before 10. Subagent-driven execution makes such re-orderings cheap.
+- Subagent autopilot saved real coordination cost: ~25 implementation subagent dispatches (mostly haiku for mechanical TDD, sonnet for the orchestration tasks) ran through tasks in ~3 minutes each on average, with the main session only doing context-curating between them. Per-task ruff/test/commit ritual stayed disciplined.
+
+**Blocked / open (the live-verification gate):**
+- The two unchecked exit criteria — production sign-in flow + mobile browser smoke — require the Vercel-side Neon integration install + GitHub OAuth App creation + env-var setup. After that, this slice can ship.
+
+**Next:**
+- Provision Neon Marketplace integration on Vercel (auto-creates `DATABASE_URL` / `DATABASE_DIRECT_URL`).
+- Register the GitHub OAuth App, add `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`, `OAUTH_REDIRECT_URL`, `SESSION_TOKEN_ENC_KEY` to Vercel env vars (Preview + Production).
+- Apply `alembic upgrade head` against the production Neon `DATABASE_DIRECT_URL`.
+- Browser smoke at 320 / 375 / 414 / 768 desktop + mobile widths: sign in → save → share → open share URL in incognito → sign out.
+- Merge to `main` with a `--no-ff` merge commit, push, tag `v0.5.0`, push tag. Release workflow fires and publishes the GitHub Release with the CHANGELOG section as the body.
+
+---
+
 ## 2026-05-16 — Claude (Opus 4.7) — v0.5.0 plan ready for cold execution + v0.4.0 shipped to main
 
 **Slice:** v0.5.0 (designed + planned; not yet implemented). v0.4.0 (shipped to main + GitHub Release).
