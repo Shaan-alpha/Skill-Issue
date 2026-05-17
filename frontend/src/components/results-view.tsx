@@ -19,6 +19,7 @@ import { Report, ScoreResult, TierInfo } from "@/types";
 import { PositionBar } from "@/components/position-bar";
 import { BadgeRow } from "@/components/badge-row";
 import { NarrativeCard } from "@/components/narrative-card";
+import { SaveShareControls } from "@/components/save-share-controls";
 
 
 function tierChipLabel(tier: TierInfo): string {
@@ -73,7 +74,20 @@ function ScoreItem({ title, result, icon, description, delay }: ScoreCardProps) 
   );
 }
 
-export function ResultsView({ report }: { report: Report }) {
+interface ResultsViewProps {
+  report: Report;
+  username?: string;
+  sharedNarrative?: boolean; // Task 25/26 — skip live SSE stream on share pages
+  analysisId?: number | null;
+  initialShareSlug?: string | null;
+}
+
+export function ResultsView({
+  report,
+  sharedNarrative,
+  analysisId,
+  initialShareSlug,
+}: ResultsViewProps) {
   const { breakdown } = report;
   const items = [
     {
@@ -144,6 +158,13 @@ export function ResultsView({ report }: { report: Report }) {
             </Link>
           </div>
         </header>
+
+        {!sharedNarrative && (
+          <SaveShareControls
+            analysisId={analysisId ?? null}
+            initialShareSlug={initialShareSlug ?? null}
+          />
+        )}
 
         <PositionBar tier={report.tier} total={report.total} />
         <BadgeRow badges={report.badges} />

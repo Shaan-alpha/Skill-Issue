@@ -1,32 +1,46 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useSyncExternalStore } from "react";
 import { NarrativeMode } from "@/types";
 import { ModePillToggle } from "./mode-pill-toggle";
 import { NarrativeStream } from "./narrative-stream";
+
+const STORAGE_KEY = "skill_issue_narrative_mode";
+const MODE_CHANGE_EVENT = "skill-issue:narrative-mode-change";
+
+function subscribe(callback: () => void) {
+  window.addEventListener("storage", callback);
+  window.addEventListener(MODE_CHANGE_EVENT, callback);
+  return () => {
+    window.removeEventListener("storage", callback);
+    window.removeEventListener(MODE_CHANGE_EVENT, callback);
+  };
+}
+
+function getSnapshot(): NarrativeMode {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  return saved === "mentor" ? "mentor" : "roast";
+}
+
+function getServerSnapshot(): NarrativeMode {
+  return "roast";
+}
+
+function useNarrativeMode(): [NarrativeMode, (next: NarrativeMode) => void] {
+  const mode = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const setMode = (next: NarrativeMode) => {
+    localStorage.setItem(STORAGE_KEY, next);
+    window.dispatchEvent(new Event(MODE_CHANGE_EVENT));
+  };
+  return [mode, setMode];
+}
 
 interface NarrativeCardProps {
   username: string;
 }
 
 export function NarrativeCard({ username }: NarrativeCardProps) {
-  const [mode, setMode] = useState<NarrativeMode>("roast");
-  const [isClient, setIsClient] = useState(false);
-
-  useEffect(() => {
-    setIsClient(true);
-    const saved = localStorage.getItem("skill_issue_narrative_mode");
-    if (saved === "roast" || saved === "mentor") {
-      setMode(saved);
-    }
-  }, []);
-
-  const handleModeChange = (newMode: NarrativeMode) => {
-    setMode(newMode);
-    if (isClient) {
-      localStorage.setItem("skill_issue_narrative_mode", newMode);
-    }
-  };
+  const [mode, setMode] = useNarrativeMode();
 
   return (
     <section className="space-y-4" aria-label="AI Narrative Analysis">
@@ -43,7 +57,7 @@ export function NarrativeCard({ username }: NarrativeCardProps) {
           </p>
         </div>
 
-        <ModePillToggle mode={mode} onModeChange={handleModeChange} />
+        <ModePillToggle mode={mode} onModeChange={setMode} />
       </div>
 
       <NarrativeStream key={`${username}-${mode}`} username={username} mode={mode} />

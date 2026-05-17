@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from app.models import Badge, Report, ScoreBreakdown, ScoreResult, TierInfo
+from app.models import Report, ScoreBreakdown, ScoreResult, TierInfo
 from app.narrative.budget import DailyBudget
 from app.narrative.cache import NarrativeCache
 from app.narrative.llm import FakeNarrativeLLM

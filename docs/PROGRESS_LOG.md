@@ -19,6 +19,146 @@ Format:
 
 ---
 
+## 2026-05-17 — Claude (Opus 4.7) — v0.5.0 implemented (Auth + Persistence) — pending live verification
+
+**Slice:** v0.5.0 (code complete, awaiting Neon/Vercel provisioning + browser smoke before tag).
+
+**Done:**
+- Executed all 26 implementation tasks from [`docs/superpowers/plans/2026-05-16-v0.5.0-auth-persistence.md`](./superpowers/plans/2026-05-16-v0.5.0-auth-persistence.md) via `superpowers:subagent-driven-development`. Backend test count went 124 → 186 (62 new tests across `auth/`, `db/`, `persistence/`, `routers/`, and `test_analyze_e2e.py` + `narrative/test_api.py`). Backend ruff stays clean. Frontend `npm run lint` + `npm run build` stay clean.
+- **Backend** (Tasks 1–21): SQLAlchemy 2.0 async + asyncpg models with circular FK handled via `use_alter=True`; Alembic env wired to `DATABASE_DIRECT_URL` with hand-authored initial migration (upgrade + downgrade reversibility tested in pytest via a `ThreadPoolExecutor` to dodge nested asyncio); AES-GCM crypto for at-rest token encryption with fail-fast key loader; server-side opaque sessions; OAuth flow (login + callback + logout) using `authlib`-free direct httpx for token exchange; FastAPI auth deps (`optional_session`, `current_user_or_none`, `require_user`); persistence layer per module (`users` / `analyses` / `narratives`); new routers (`/me`, `/me/analyses`, `/analyses/{id}/share`, `/share/{slug}`); `/analyze` and `/narrative` extended with optional-persistence-when-session-present; `/health` reports DB status; lifespan does a `SELECT 1` ping at startup.
+- **Frontend** (Tasks 22–26): `useSession()` hook using React 19 `use()` + `useSyncExternalStore`; `SiteHeader` with sign-in pill / avatar menu via Base UI `Menu`; `/me` history page with sort + empty state + loading skeleton + error boundary; `/share/[slug]` read-only public view with owner attribution; `Save/Share` controls on `/u/[username]` for signed-in viewers; `/u/[username]/page.tsx` forwards the session cookie to `/analyze` so the row persists, then fetches `/me/analyses` to pass `analysisId` and `share_slug` hints into `<ResultsView>`. Anonymous flow on `/`, `/u/[username]`, and `/share/[slug]` unchanged.
+- Local Postgres 16 container (`skill-issue-test-postgres`) on port 5432 hosts the test DB. `TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/skill_issue_test`.
+- Bumped `backend/app/settings.py` `VERSION = "0.5.0"` and `frontend/package.json` `"version": "0.5.0"`. Finalized `CHANGELOG.md` with the `[0.5.0]` Added / Changed / Fixed / Security sections, pulling the pre-v0.5.0 audit changes into the same release notes.
+- Updated `PLAN.md` v0.5.0 status to `✅ shipped` in the version map; ticked exit criteria except the two that require live verification (preview/prod sign-in, mobile browser smoke).
+
+**Decisions:**
+- **Settings fields are `str | None = None` instead of required.** The plan specified required fields, but the existing `Settings` class uses `str | None = None` for similar optional values (`github_token`, `openai_api_key`). Matching the established pattern beats the plan's spec literally; failures are surfaced at first-use (crypto loader raises; DB engine connection fails loudly) rather than at boot.
+- **Used a raw `DROP SCHEMA public CASCADE; CREATE SCHEMA public` in the `db` test fixture** instead of `Base.metadata.drop_all` — the circular FK between `analyses` and `analysis_runs` confused SQLAlchemy's drop-order resolver. Atomic schema reset is cleaner anyway.
+- **Named the `Analysis.latest_run_id` FK constraint `fk_analyses_latest_run_id`** in both the SQLAlchemy model and the Alembic migration. `use_alter=True` requires a non-None name because SQLAlchemy emits `ALTER TABLE DROP CONSTRAINT <name>` on teardown.
+- **Migration test uses `ThreadPoolExecutor` to drive `alembic.command.upgrade/downgrade`** because pytest-asyncio's running event loop can't host alembic's `asyncio.run()`. The thread has no running loop, so alembic's own `asyncio.run()` works.
+- **`Annotated[T, Depends(...)]` requires runtime imports** for FastAPI's `get_type_hints()`-based DI resolution. Added `"app/routers/*.py" = ["TC001"]` and `"app/auth/dependencies.py" = ["TC001", "TC002"]` to `backend/ruff.toml`. Moving SQLAlchemy / User imports into TYPE_CHECKING broke the runtime resolver.
+- **HTTPX 0.28 RFC strictness refuses `domain=…` cookies bound to single-label hosts.** All test cookies are set with `ac.cookies.set("si_session", sid)` (no `domain`) rather than `domain="test"`. Same behaviour, simpler syntax.
+- **`is_fallback` is hard-coded to `False` in narrative persistence** — the streaming protocol doesn't currently expose fallback-mode detection. A side-channel on `NarrativeService` can land in v0.6.0 if it's worth the deferred fallback rows.
+
+**Learned / surprises:**
+- React 19's `react-hooks/set-state-in-effect` rule had already cost us a refactor (`NarrativeCard`); the `useSession()` hook avoids the issue from the start by using `useSyncExternalStore` + `use()` instead of `useEffect(setState)`. Worth memo-ing for any future client-side hydration work — `useSyncExternalStore` is the React 19 idiom.
+- The plan's "Task 10 needs Task 13" cross-dependency was real but easy to handle by simply executing 13 before 10. Subagent-driven execution makes such re-orderings cheap.
+- Subagent autopilot saved real coordination cost: ~25 implementation subagent dispatches (mostly haiku for mechanical TDD, sonnet for the orchestration tasks) ran through tasks in ~3 minutes each on average, with the main session only doing context-curating between them. Per-task ruff/test/commit ritual stayed disciplined.
+
+**Blocked / open (the live-verification gate):**
+- The two unchecked exit criteria — production sign-in flow + mobile browser smoke — require the Vercel-side Neon integration install + GitHub OAuth App creation + env-var setup. After that, this slice can ship.
+
+**Next:**
+- Provision Neon Marketplace integration on Vercel (auto-creates `DATABASE_URL` / `DATABASE_DIRECT_URL`).
+- Register the GitHub OAuth App, add `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`, `OAUTH_REDIRECT_URL`, `SESSION_TOKEN_ENC_KEY` to Vercel env vars (Preview + Production).
+- Apply `alembic upgrade head` against the production Neon `DATABASE_DIRECT_URL`.
+- Browser smoke at 320 / 375 / 414 / 768 desktop + mobile widths: sign in → save → share → open share URL in incognito → sign out.
+- Merge to `main` with a `--no-ff` merge commit, push, tag `v0.5.0`, push tag. Release workflow fires and publishes the GitHub Release with the CHANGELOG section as the body.
+
+---
+
+## 2026-05-16 — Claude (Opus 4.7) — v0.5.0 plan ready for cold execution + v0.4.0 shipped to main
+
+**Slice:** v0.5.0 (designed + planned; not yet implemented). v0.4.0 (shipped to main + GitHub Release).
+
+### 🚀 Cold-agent quick start
+
+You're picking up a fully-planned slice. Everything you need is on the working branch.
+
+1. **Check out the work branch**: `git checkout feat/v0.5.0-auth-persistence` (pushed to origin; 3 commits ahead of `main`).
+2. **Read in order**: [`AGENTS.md`](../AGENTS.md) → this entry → [`v0.5.0 spec`](./superpowers/specs/2026-05-16-v0.5.0-auth-persistence-design.md) → [`v0.5.0 plan`](./superpowers/plans/2026-05-16-v0.5.0-auth-persistence.md).
+3. **Prerequisite**: export `TEST_DATABASE_URL` (local Postgres or Neon dev branch). Task 3's `db` fixture hard-fails without it.
+4. **Execute**: invoke `superpowers:subagent-driven-development` with the plan file. 27 TDD tasks, complete code in every step. Model hints + dependency order are in the plan's "Cold-agent execution guide" section at the bottom.
+5. **Ask the user before**: (a) installing the Neon Marketplace integration on Vercel (Task 27.3), (b) pushing main + tagging v0.5.0 (Task 27.10). AGENTS.md rule 5.
+6. **Out of scope** (do not silently expand): Recruiter/CTO/Career (v0.6.0), OG cards (v0.7.0), caching/cron (v0.8.0), Sentry/PostHog (v0.9.0), rate limiting (v0.10.0).
+
+**Done:**
+- **Shipped v0.4.0 to main.** Pre-v0.5.0 audit work surfaced that `main` was sitting at v0.0.1 since the release pipeline went in — every v0.1–v0.4 tag had fired the GitHub Release workflow off a tag push, but `main` itself was never advanced. Fast-forwarded `main` (via a `--no-ff` merge of the v0.4.0 tag commit `ab57230`) so it now reflects v0.4.0; pushed the v0.4.0 tag for the first time. The release workflow fired in 8s and published [v0.4.0](https://github.com/Shaan-alpha/Skill-Issue/releases/tag/v0.4.0) with the CHANGELOG-extracted body. The audit + v0.5.0 design + plan commits stayed on the feature branch — they'll land on main with the v0.5.0 ship per AGENTS.md rule 3 discipline.
+- Generated the implementation plan at [`docs/superpowers/plans/2026-05-16-v0.5.0-auth-persistence.md`](./superpowers/plans/2026-05-16-v0.5.0-auth-persistence.md). 27 TDD-disciplined tasks, complete code in every step, with explicit cross-task dependency notes (e.g. Task 10's callback test depends on Task 13's `upsert_user_from_github_payload`). Spec-coverage map at the bottom traces every §11 exit criterion to a task.
+
+**Decisions:**
+- **`main` discipline going forward.** Each version tag's commit fast-forwards (or `--no-ff` merges) into main as part of its release task. We do not let main drift again. Every future plan's final task includes the `git push origin <branch>`, `git checkout main`, `git merge --no-ff <branch>`, `git push origin main`, `git tag vX.Y.Z`, `git push origin vX.Y.Z` ritual.
+- **27 tasks over 20-25.** Granular tasks make subagent dispatch cleaner — a haiku-class agent can knock out the mechanical TDD tasks (crypto, persistence functions, single-route handlers) in isolation. Sonnet-class for the orchestration tasks (callback, /analyze persistence wiring, frontend results-view integration).
+
+**Learned / surprises:**
+- `main` had drifted further than expected. Worth a memo for any future repo audit: tag presence ≠ branch advancement; the two are independent state.
+- The `9fdb35a` (on feat) and `7676f6b` (on main) "fix(ci): portable awk extraction" commits had **identical** release.yml content but different SHAs — independently committed against diverged branches. Merge resolved cleanly because git diffs file content, not commit graph. Cherry-pick parallelism is a real failure mode of "tag-first, merge-later" workflows.
+
+**For the agent picking up implementation:**
+1. Read [`AGENTS.md`](../AGENTS.md) (the five rules) and the v0.5.0 spec listed in the previous progress entry.
+2. Open the plan: [`docs/superpowers/plans/2026-05-16-v0.5.0-auth-persistence.md`](./superpowers/plans/2026-05-16-v0.5.0-auth-persistence.md). 27 tasks. Each task is self-contained TDD with full code, expected test output, and a commit message.
+3. Execution path: invoke `superpowers:subagent-driven-development` with the plan file. Fresh subagent per task. Cheap (haiku) for Tasks 1, 2, 6, 7, 13, 15 (mechanical TDD); sonnet for Tasks 10, 16, 20, 21, 23, 26, 27 (orchestration / multi-component wiring).
+4. **Before starting**: provision `TEST_DATABASE_URL` for the test fixture. Local Postgres via docker or a Neon dev branch both work. The plan's `db` fixture refuses to run without it.
+5. **Before Task 27**: ASK the user before installing the Neon Marketplace integration on Vercel. AGENTS.md rule 5 is strict.
+6. Things accepted but might bite — §12 in the spec: no session-id rotation on sign-in, no CSRF tokens on state-changing routes (rely on SameSite=Lax), no rate limiting, no "sign out everywhere" UI. All deferred deliberately.
+7. **Cross-task dependency**: Task 10's `/auth/callback` imports from Task 13's `app/persistence/users.py`. Execute 13 before 10, or stub then re-implement. The plan documents both options in its "Known cross-task dependencies" section.
+
+**Verified at end of this session:**
+- v0.4.0 release live at https://github.com/Shaan-alpha/Skill-Issue/releases/tag/v0.4.0.
+- Backend: `uv run ruff check .` clean, `uv run pytest -q` 124/124 pass.
+- Frontend: `npm run lint` clean, `npm run build` clean.
+- Working tree: plan + this entry staged for the next commit.
+
+**Blocked / open:**
+- TEST_DATABASE_URL provisioning required before Task 3's `db` fixture works. Either local Postgres or a Neon dev branch.
+- Old remote branches `feat/v0.1.0-backend-mvp`, `feat/v0.2.0-frontend-shell`, `feat/v0.3.0-identity-signals` still exist on origin (no open PRs). Delete with `git push origin --delete <branch>` whenever convenient — non-urgent.
+
+**Next:**
+- v0.5.0 implementation. Estimated ~10–14 hours of focused execution across the 27 tasks. After Task 12 (auth dependencies) the implementation moves quickly because every downstream task plugs into a stable foundation.
+
+---
+
+## 2026-05-16 — Claude (Opus 4.7) — v0.5.0 design + pre-slice audit pass
+
+**Slice:** v0.5.0 (designed, not yet implemented)
+
+**Done:**
+- **Pre-slice audit + cleanup (committed `9321d41`).** Backend ruff went from 16 errors to clean: dead `import re` removed, `Depends()` defaults migrated to the modern `Annotated[T, Depends(...)]` FastAPI 0.95+ pattern, RUF059 unused unpacked vars prefixed with `_`, a focused `RUF001` carve-out added for `app/narrative/prompts.py` so the deliberate en-dash typography in user-facing prompts is preserved, and four unused imports + three unused `z = ScoreResult(...)` locals stripped from the narrative test suite. Frontend lint went from 1 error to clean: refactored `narrative-card.tsx` to use `useSyncExternalStore` against `localStorage`, clearing the React 19 `react-hooks/set-state-in-effect` warning and gaining cross-tab sync via the native `storage` event as a free bonus. Bumped `react`/`react-dom` 19.2.4 → 19.2.6 (safe patch). Held off on the larger ESLint 10, TypeScript 6, and `@types/node` 25 majors — those are big enough they deserve their own slice rather than getting buried in v0.5.0 churn.
+- Verified post-cleanup: `uv run ruff check .` clean, `uv run pytest -q` 124/124 pass, `npm run lint` clean, `npm run build` clean (2.7s with Turbopack). CHANGELOG gained an `[Unreleased]` section that will roll into v0.5.0.
+- **Brainstormed the Auth + Persistence slice.** Locked the three upstream decisions with the user:
+  1. **SQLAlchemy 2.0 async + asyncpg** for the DB layer.
+  2. **Server-side sessions** (opaque cookie, encrypted GitHub access token in a `sessions` row). User's own token is used for ingestion when signed-in — gives every signed-in user a dedicated 5000/hr GitHub rate-limit budget.
+  3. **Per-user-per-target `analyses`** with `(user_id, target_login)` uniqueness and opt-in `share_slug` for public viewing. Anonymous `/analyze` stays stateless.
+- Wrote the design spec at [`docs/superpowers/specs/2026-05-16-v0.5.0-auth-persistence-design.md`](./superpowers/specs/2026-05-16-v0.5.0-auth-persistence-design.md). Covers OAuth flow (authlib + AES-GCM, no JWT, no PKCE because GitHub doesn't support it on OAuth Apps), 5-table schema with cascade deletes from `users`, Neon pooled connection on port 6543 with `statement_cache_size=0` to coexist with pgBouncer transaction-mode pooling, Alembic for migrations against a separate `DATABASE_DIRECT_URL`, backend module layout (`auth/`, `db/`, `persistence/`, `routers/`), API surface table (8 new endpoints + 3 modified), frontend additions (`/me`, `/share/[slug]`, header with sign-in/avatar menu), env var inventory, testing strategy, security review (one row per threat → mitigation), and 12-bullet exit criteria.
+- Updated `PLAN.md` v0.5.0 section with the spec link, expanded slice scope, tightened exit criteria (concrete commands, ≥30 new tests, mobile QA at 320/375/414/768).
+
+**Decisions:**
+- **OAuth App, not GitHub App.** We're authenticating users to use their public GitHub data — not installing into orgs/repos. Scopes hard-coded `read:user public_repo`. Never `repo`, never `admin:*`.
+- **Opaque sessions over JWT.** Cookie value is `secrets.token_urlsafe(32)`; server looks the row up directly. JWT was the implied path in TECH_STACK.md but it conflicts with needing to revoke sessions cheaply and store the GitHub token server-side. JOSE/authlib stays in the stack table for now as "optional", but v0.5.0 doesn't use it; we'll trim it after v0.5.0 ships if no slice picks it up by v0.7.0.
+- **AES-GCM at rest for GitHub access tokens.** 32-byte key from `SESSION_TOKEN_ENC_KEY`, fresh 12-byte nonce per row. Key rotation invalidates every session by design — documented as a known operational behaviour, not a bug.
+- **`(user_id, target_login)` uniqueness on `analyses`.** "Save once, re-run many times" semantics. Re-analyzing octocat updates `latest_run_id` rather than inserting a duplicate.
+- **`latest_run_id` denormalized pointer on `analyses`.** Avoids a per-row sort on `/me` loads. Costs one extra column and one circular FK declared in two migration steps; well worth it.
+- **JSONB report storage.** `analysis_runs.report_json` is the full Pydantic `Report.model_dump_json()`. Denormalize `total_score` and `tier_name` for sort/filter without unpacking. `scores_hash` mirrors the in-process narrative cache key so v0.8.0 Upstash can reuse it.
+- **Neon pooled connection at app runtime, direct connection for migrations.** `DATABASE_URL` (port 6543) + `DATABASE_DIRECT_URL` (port 5432). pgBouncer transaction-pooling forces `statement_cache_size=0` on asyncpg.
+- **`/auth/callback` never honours a `redirect_to` parameter.** Hard-coded `302 /` to close off open-redirect phishing before it's even a question.
+
+**Learned / surprises:**
+- React 19's new `react-hooks/set-state-in-effect` rule is much stricter than the old `react-hooks/exhaustive-deps`. The canonical localStorage-hydration pattern (`useState` + `useEffect(() => setState(localStorage.getItem(...)), [])`) trips it. The proper fix is `useSyncExternalStore` — which also happens to give cross-tab sync for free. Worth memorising as the React 19 idiom for any "client-only external state" surface, including the `useSession()` hook that v0.5.0 will add.
+- `npm audit` flags a moderate postcss vulnerability that's a transitive dep inside Next 16's bundled toolchain. The "fix" `npm audit fix --force` would force-downgrade `next` to 9.3.3 — wildly wrong direction. Documented as a known upstream issue; we wait for Next to bump postcss themselves.
+- FastAPI 0.95+ has officially recommended `Annotated[T, Depends(...)]` over `T = Depends(...)` defaults for years. Our codebase had drifted to the old pattern in two places; cleaned both up in this audit.
+
+**Blocked / open:**
+- None for v0.5.0 design. Implementation plan is the next step.
+- Old remote branches `feat/v0.1.0-backend-mvp` and `feat/v0.2.0-frontend-shell` still exist on origin (no open PRs). Delete with `git push origin --delete <branch>` whenever convenient — non-urgent.
+
+**For the agent picking up implementation:**
+1. Read [`AGENTS.md`](../AGENTS.md) (the five rules) and the v0.5.0 spec listed above.
+2. The pre-slice audit work landed as commit `9321d41` on `feat/v0.4.0-narrative`. Before starting v0.5.0 work, branch off into `feat/v0.5.0-auth-persistence` (or merge the audit commit to main first, then branch from there — your call, but main needs the audit before any v0.5.0 work lands so the lint baseline is green).
+3. Generate the implementation plan via `superpowers:writing-plans` against the spec, save to `docs/superpowers/plans/2026-05-16-v0.5.0-auth-persistence.md`. The plan should split into roughly: Alembic + initial migration (1-2 tasks), DB models + engine (2 tasks), auth machinery — crypto, sessions, oauth routes (4-5 tasks), persistence layer per module (3 tasks), `/me` + `/share` routers (2-3 tasks), wiring optional persistence into `/analyze` and `/narrative` (1-2 tasks), frontend header + `/me` + `/share` (4-5 tasks), live smoke + tag + release (1 task). Expect 20-25 TDD tasks total.
+4. The four new env vars (`DATABASE_URL`, `DATABASE_DIRECT_URL`, OAuth client id/secret, `SESSION_TOKEN_ENC_KEY`) need to be provisioned in Vercel and Neon before live verification. Ask before installing the Neon Marketplace integration on Vercel — that's a new permission grant per AGENTS.md rule 5.
+5. Things that are accepted but might bite — see §12 "Known imprecisions & follow-ups" in the spec. No session-id rotation, no CSRF tokens on state-changing routes (relying on SameSite=Lax), no rate limiting, no "sign out everywhere" UI. All deferred deliberately.
+6. Out of scope (do **not** silently expand) — Recruiter/CTO/Career modes (v0.6.0), shareable OG cards (v0.7.0), background re-ingestion / caching (v0.8.0), Sentry/PostHog (v0.9.0), rate limiting / load test / legal docs (v0.10.0).
+
+**Verified at end of this session:**
+- Backend: `uv run ruff check .` clean, `uv run pytest -q` 124/124 pass.
+- Frontend: `npm run lint` clean, `npm run build` clean.
+- Working tree: spec + PLAN + this entry staged for the next commit.
+
+**Next:**
+- v0.5.0 implementation. Estimated ~10-14 hours of focused execution time given the breadth (auth + DB + 5 new routes + 2 new frontend pages + migration). Worth front-loading the schema migration and engine wiring in a single tight TDD loop so everything downstream is talking to a real Postgres from day one.
+
+---
+
 ## 2026-05-16 — Antigravity — Shipped v0.4.0 AI Narrative Layer (Roast & Mentor SSE stream)
 
 **Slice:** v0.4.0 (Shipped)

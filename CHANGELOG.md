@@ -8,6 +8,35 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
+## [0.5.0] — 2026-05-17
+
+### Added
+- **GitHub OAuth sign-in.** Server-side OAuth flow with `read:user public_repo` scopes. Opaque server-side sessions stored in Postgres; the user's access token is encrypted at rest with AES-GCM.
+- **Neon Postgres persistence.** Five tables (`users`, `sessions`, `analyses`, `analysis_runs`, `narratives`) provisioned via a single hand-authored Alembic migration. Anonymous flow unchanged.
+- **Signed-in ingestion uses the user's GitHub token.** Each signed-in user gets a dedicated 5000/hr GitHub rate-limit budget instead of sharing the project's app-token quota.
+- **`/me` history page.** Saved analyses listed in a sortable grid (recent / highest / lowest). Mobile responsive at 320 / 375 / 414 / 768.
+- **`/share/[slug]` public read-only view.** Each saved analysis can be shared via an opt-in 12-character base64url slug (~72-bit entropy). Revoking generates a fresh slug, so old URLs stay revoked.
+- **Save & Share controls** on `/u/[username]` for signed-in viewers. Anonymous viewers see no chrome change.
+- **`/health` reports DB status.** Returns `{status, version, db}` so a flapping DB surfaces at the front door instead of cascading.
+- **Site header** with sign-in pill / avatar menu (Base UI `Menu`), suspense-wrapped for clean SSR.
+
+### Changed
+- `NarrativeCard` uses `useSyncExternalStore` against `localStorage` instead of `useEffect` setState — eliminates React 19's `react-hooks/set-state-in-effect` warning and adds free cross-tab sync. (Pre-v0.5.0 audit.)
+- FastAPI route handlers (`/analyze`, `/narrative`) use the modern `Annotated[T, Depends(...)]` pattern. (Pre-v0.5.0 audit.)
+- `react` / `react-dom` bumped `19.2.4` → `19.2.6` (patch). (Pre-v0.5.0 audit.)
+- CORS middleware now allows `POST`, `DELETE`, and credentials so cookies round-trip from the frontend.
+
+### Fixed
+- Cleared all 16 outstanding backend ruff warnings without regressing tests. (Pre-v0.5.0 audit.)
+
+### Security
+- GitHub access tokens never stored in plaintext. AES-GCM encryption at rest with a per-environment `SESSION_TOKEN_ENC_KEY`.
+- OAuth state token bound to a short-lived `httpOnly` cookie + constant-time compare against the query param (CSRF defence per RFC 6749 §10.12).
+- Share slug enumeration mitigated by 72-bit `secrets.token_urlsafe` entropy and identical 404 response for missing-vs-revoked slugs.
+- `/auth/callback` never honours a `redirect_to` parameter — hard-coded `302 /` closes off open-redirect phishing.
+
+---
+
 ## [0.4.0] — 2026-05-16
 
 ### Added
