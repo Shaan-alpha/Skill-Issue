@@ -4,11 +4,17 @@ from openai import AsyncOpenAI
 
 
 class NarrativeLLM:
-    """Single-file boundary to OpenAI. Swap providers here without touching
-    the rest of the codebase."""
+    """Single-file boundary to OpenAI-compatible chat APIs.
 
-    def __init__(self, *, api_key: str, model: str) -> None:
-        self._client = AsyncOpenAI(api_key=api_key)
+    Passing `base_url` points the client at any OpenAI-compatible endpoint
+    (Groq, OpenRouter, Cerebras, vLLM/Ollama for local dev, etc.) so we can
+    swap providers without rewriting the streaming pipeline.
+    """
+
+    def __init__(
+        self, *, api_key: str, model: str, base_url: str | None = None
+    ) -> None:
+        self._client = AsyncOpenAI(api_key=api_key, base_url=base_url)
         self._model = model
 
     async def stream_chat(

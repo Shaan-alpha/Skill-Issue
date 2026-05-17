@@ -42,6 +42,7 @@ def get_narrative_service() -> NarrativeService:
     llm = NarrativeLLM(
         api_key=settings.openai_api_key or "missing-key",
         model=settings.narrative_model,
+        base_url=settings.narrative_base_url,
     )
     return NarrativeService(cache=cache, budget=budget, llm=llm)
 

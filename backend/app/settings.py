@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     # v0.4.0 narrative layer.
     narrative_model: str = "gpt-4o"
     narrative_daily_limit: int = 50
+    # Optional OpenAI-compatible base URL. Set to point at any provider that
+    # ships an OpenAI-compatible chat API (Groq, OpenRouter, Cerebras, vLLM,
+    # Ollama, etc.) instead of OpenAI's default endpoint.
+    narrative_base_url: str | None = None
 
     # v0.5.0 — Auth + persistence
     database_url: str | None = None
