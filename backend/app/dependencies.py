@@ -1,10 +1,12 @@
 import logging
 import re
 from functools import lru_cache
+from typing import TYPE_CHECKING, Annotated
 
 import httpx
-from fastapi import HTTPException
+from fastapi import Depends, HTTPException
 
+from app.auth.dependencies import optional_session
 from app.github.client import GitHubClient
 from app.ingestion.profile import ingest_profile
 from app.models import Report
@@ -14,6 +16,9 @@ from app.narrative.llm import NarrativeLLM
 from app.narrative.service import NarrativeService
 from app.scoring.engine import run_scoring_engine
 from app.settings import settings
+
+if TYPE_CHECKING:
+    from app.auth.dependencies import _ResolvedSession
 
 logger = logging.getLogger(__name__)
 
@@ -41,16 +46,24 @@ def get_narrative_service() -> NarrativeService:
     return NarrativeService(cache=cache, budget=budget, llm=llm)
 
 
-async def get_report_for_user(username: str) -> Report:
+async def get_report_for_user(
+    username: str,
+    session: Annotated["_ResolvedSession | None", Depends(optional_session)] = None,
+) -> Report:
     """Validate username, fetch profile from GitHub, and run scoring engine."""
     if not _USERNAME_RE.fullmatch(username):
         raise HTTPException(status_code=400, detail="Invalid GitHub username")
-    if not settings.github_token:
+
+    access_token = (
+        getattr(session, "access_token", None) if session is not None else None
+    ) or settings.github_token
+
+    if not access_token:
         raise HTTPException(
             status_code=500, detail="GITHUB_TOKEN not configured on backend"
         )
 
-    async with GitHubClient(token=settings.github_token) as gh:
+    async with GitHubClient(token=access_token) as gh:
         try:
             profile = await ingest_profile(username, gh)
         except httpx.HTTPStatusError as e:
