@@ -61,7 +61,7 @@ function HeaderInner() {
 
 export function SiteHeader() {
   return (
-    <header className="absolute top-0 right-0 z-10 p-4 sm:p-6">
+    <header className="sticky top-0 z-30 flex justify-end px-4 py-3 sm:px-6 sm:py-4 bg-background/70 backdrop-blur-md border-b border-white/5">
       <Suspense fallback={null}>
         <HeaderInner />
       </Suspense>

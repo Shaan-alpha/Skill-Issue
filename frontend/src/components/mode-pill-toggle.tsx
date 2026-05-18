@@ -30,7 +30,7 @@ export function ModePillToggle({
         aria-checked={mode === "roast"}
         onClick={() => onModeChange("roast")}
         className={cn(
-          "relative flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium transition-colors z-10",
+          "relative flex items-center justify-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium transition-colors z-10 min-w-[7.5rem]",
           mode === "roast"
             ? "text-white"
             : "text-muted-foreground hover:text-white"
@@ -54,7 +54,7 @@ export function ModePillToggle({
         aria-checked={mode === "mentor"}
         onClick={() => onModeChange("mentor")}
         className={cn(
-          "relative flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium transition-colors z-10",
+          "relative flex items-center justify-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium transition-colors z-10 min-w-[7.5rem]",
           mode === "mentor"
             ? "text-white"
             : "text-muted-foreground hover:text-white"

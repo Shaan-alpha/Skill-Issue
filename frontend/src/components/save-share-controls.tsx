@@ -1,7 +1,9 @@
 "use client";
 
+import { Check, Link2, LogIn, Share2 } from "lucide-react";
 import { useState } from "react";
-import { useSession } from "@/lib/auth";
+
+import { signIn, useSession } from "@/lib/auth";
 import type { ShareResponse } from "@/types";
 
 interface Props {
@@ -16,16 +18,30 @@ function backendUrl(path: string): string {
   return `${base}${path}`;
 }
 
-export function SaveShareControls({
-  initialShareSlug,
-  analysisId,
-}: Props) {
+export function SaveShareControls({ initialShareSlug, analysisId }: Props) {
   const session = useSession();
   const [shareSlug, setShareSlug] = useState<string | null>(initialShareSlug);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  if (!session) return null;
+  // Anonymous viewers see a sign-in CTA so the feature is discoverable.
+  if (!session) {
+    return (
+      <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-white/5 bg-card/30 px-4 py-3 text-sm">
+        <span className="text-muted-foreground">
+          Sign in to save this analysis to your history and share it with a link.
+        </span>
+        <button
+          type="button"
+          onClick={signIn}
+          className="inline-flex items-center gap-2 rounded-full border border-border bg-card/60 px-4 py-1.5 text-xs font-medium hover:bg-card/80 transition-colors"
+        >
+          <LogIn className="size-3.5" aria-hidden="true" />
+          Sign in with GitHub
+        </button>
+      </div>
+    );
+  }
 
   async function toggleShare() {
     if (!analysisId) return;
@@ -56,25 +72,40 @@ export function SaveShareControls({
   }
 
   return (
-    <div className="mt-4 flex items-center gap-2 flex-wrap" role="status" aria-live="polite">
-      <span className="inline-flex items-center gap-2 rounded-full bg-card/40 border border-border px-3 py-1 text-xs">
-        Saved
+    <div
+      className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-white/5 bg-card/30 px-4 py-3"
+      role="status"
+      aria-live="polite"
+    >
+      <span className="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 text-xs font-medium text-emerald-300">
+        <Check className="size-3.5" aria-hidden="true" />
+        Saved to your history
       </span>
       <button
         type="button"
         onClick={toggleShare}
         disabled={busy || !analysisId}
         aria-pressed={!!shareSlug}
-        className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+        className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
           shareSlug
-            ? "bg-accent text-accent-foreground"
-            : "bg-card/40 border border-border hover:bg-card/60"
-        } disabled:opacity-50`}
+            ? "bg-accent/20 border border-accent/30 text-accent"
+            : "bg-card/60 border border-border hover:bg-card/80"
+        }`}
       >
-        {shareSlug ? "Shared — click to revoke" : "Share"}
+        {shareSlug ? (
+          <>
+            <Link2 className="size-3.5" aria-hidden="true" />
+            Shared — click to revoke
+          </>
+        ) : (
+          <>
+            <Share2 className="size-3.5" aria-hidden="true" />
+            Share
+          </>
+        )}
       </button>
       {toast ? (
-        <span className="text-xs text-muted-foreground">{toast}</span>
+        <span className="text-xs text-muted-foreground sm:ml-auto">{toast}</span>
       ) : null}
     </div>
   );
