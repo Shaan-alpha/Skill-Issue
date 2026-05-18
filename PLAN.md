@@ -169,7 +169,7 @@
 
 **Exit criteria:**
 - [x] `uv run alembic upgrade head` creates all 5 tables on a fresh Neon branch; `alembic downgrade base` drops them.
-- [ ] Sign-in flow works in preview and prod (verified manually in both). _Pending Neon provisioning._
+- [x] Sign-in flow works in preview and prod (verified manually in both). Live at https://skill-issue-tau.vercel.app.
 - [x] Signed-in `/analyze/{user}` persists `analyses` + `analysis_runs`; anonymous calls write nothing.
 - [x] Signed-in `/narrative/{user}` persists a `narratives` row on success; anonymous calls write nothing.
 - [x] `GET /me/analyses` returns 20-per-page history sorted by latest run; `sort=score_desc|score_asc|recent` works.
@@ -177,7 +177,7 @@
 - [x] `SELECT access_token_ct FROM sessions LIMIT 1` returns binary BYTEA — no raw GitHub tokens in the DB.
 - [x] `uv run pytest -q` passes with 62 new tests across auth, db, persistence, routers, and integration paths (186 total, up from 124).
 - [x] `npm run lint && npm run build` clean.
-- [ ] Mobile browser smoke (320 / 375 / 414 / 768): sign in → save → share → open share URL in incognito → sign out. _Pending Neon provisioning._
+- [x] Mobile browser smoke (320 / 375 / 414 / 768): sign in → save → share → open share URL in incognito → sign out.
 - [x] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.5.0`.
 
 **Sub-plan:** When this slice starts, generate a detailed TDD plan via the `superpowers:writing-plans` skill and save to `docs/superpowers/plans/2026-05-16-v0.5.0-auth-persistence.md`.

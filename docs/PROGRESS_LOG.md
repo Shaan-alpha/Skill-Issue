@@ -19,6 +19,57 @@ Format:
 
 ---
 
+## 2026-05-18 — Claude (Opus 4.7) — v0.5.0 shipped live (Auth + Persistence + Groq narrator)
+
+**Slice:** v0.5.0 (live at https://skill-issue-tau.vercel.app)
+
+**Done — production cutover and live-verification fixes:**
+- Vercel multi-service project provisioned (`skill-issue` on shaan-alphas-projects). Root `vercel.json` declares both `frontend` and `backend` services via `experimentalServices` — one project hosts both, retiring the previous two-project layout. Neon Marketplace integration installed; auto-injects `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `POSTGRES_URL`, `PGHOST`, `NEON_PROJECT_ID`, and the rest. Manually added `DATABASE_DIRECT_URL` as a copy of `DATABASE_URL_UNPOOLED` to match `Settings.database_direct_url`. GitHub OAuth App registered with callback URL `https://skill-issue-tau.vercel.app/_/backend/auth/callback`. All 11 env vars set in Production + Preview, marked sensitive: `OPENAI_API_KEY`, `GITHUB_TOKEN`, `NEXT_PUBLIC_BACKEND_URL`, `CORS_ALLOW_ORIGINS`, `COOKIE_SECURE`, `SESSION_TOKEN_ENC_KEY`, `OAUTH_REDIRECT_URL`, `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`, `NARRATIVE_MODEL`, `NARRATIVE_BASE_URL`.
+- Alembic migration applied to the prod Neon DB via local `uv run alembic upgrade head` (env var pasted into PowerShell session, never persisted). All 5 tables present with the deferred FK on `analyses.latest_run_id` correctly aliased.
+- **`fix(db) 34b9ebe`**: Vercel's Neon `DATABASE_URL` is `postgresql://...?sslmode=require&channel_binding=require`. SQLAlchemy without explicit dialect tried to load `psycopg2` and the function crashed at module-load with `ModuleNotFoundError`. Added `app.db.engine._normalize_async_url` that coerces any of `postgres://`, `postgresql://`, `postgresql+psycopg2://`, `postgresql+psycopg://` → `postgresql+asyncpg://`, strips libpq-only query params (`sslmode`, `channel_binding`, `gssencmode`, `target_session_attrs`, etc.) asyncpg doesn't accept, and opts into TLS via asyncpg's `ssl=True` connect arg when the original URL signalled it. `migrations/env.py` reuses the same normalizer.
+- **`fix(auth) df02efa`**: OAuth state cookie path was `/auth`, but Vercel multi-service callback URL is `/_/backend/auth/callback` — the browser dropped the cookie and every callback hit returned `{"error":"invalid_state"}`. Cookie path now `/`; 10-min TTL preserved so the broader scope is fine.
+- **`fix(share) d76d8b8`**: `_public_share_url()` derived its base from `OAUTH_REDIRECT_URL`, which on multi-service deploys keeps the `/_/backend` prefix. Share URLs pointed at the backend's raw JSON route instead of the frontend `/share/[slug]` page (opening one dumped JSON instead of rendering the report). Now derives from `CORS_ALLOW_ORIGINS` — the frontend's canonical origin.
+- **`fix(frontend) a6f7b99`**: Save/Share button rendered disabled for signed-in viewers because `/u/[username]/page.tsx` looked up the saved analysis by URL-slug case (`shaan-alpha`) while the backend stores the canonical GitHub case (`Shaan-alpha`). No match → `analysisId = null` → `disabled={!analysisId}`. Now passes `report.username` (canonical case from the backend response) into the hint lookup AND compares case-insensitively as defence in depth.
+
+**Done — narrator provider swap (free tier):**
+- **`feat(narrative) c8c281c`**: `NarrativeLLM` gains an optional `base_url` so it can target any OpenAI-compatible endpoint (Groq, OpenRouter, Cerebras, vLLM/Ollama, etc.). `Settings.narrative_base_url` env var; nothing changes when unset.
+- **Switched to Groq + `llama-3.3-70b-versatile`** after OpenAI account hit `insufficient_quota` (free trial credits expired; user didn't want to add billing yet). Groq's free tier — 30 RPM, 14,400 RPD — covers normal usage with no card on file. Sharpened roast + mentor prompts to match the new model: word target trimmed (roast 120-200, mentor 140-220), explicit failure-modes lists ("if it could appear on a LinkedIn endorsement, delete it"; banned vocabulary "keep grinding"/"you got this"/"exciting journey"/...), soft profanity allowance in roast for emphasis (`shit`, `crap`, `bullshit`, `hell`, `goddamn`, `holy hell`, `jesus`) with hard limits (no slurs, no -isms, no violent language, never insult the human), per-mode temperature (roast 0.95, mentor 0.55), evidence-rich payload now passes the full per-bucket `{points, max_points, evidence[]}` so the model can cite specific signals not just point totals, and tier ladder anchored in both system prompts to prevent invented tier names (a "Senior Builder" hallucination was caught during local testing).
+- **Ship `tools/compare_narratives.py`**: one-command local 4-way Groq model comparison. Runs ingestion + scoring once, then both modes through each candidate model, prints side-by-side outputs. Reasoning-model `<think>...</think>` blocks are stripped. Used to choose `llama-3.3-70b-versatile` as the production model after verifying it produced complete, voice-correct output (`openai/gpt-oss-120b` truncated mid-stream; `llama-4-maverick` and `kimi-k2` weren't on the user's Groq tier).
+
+**Decisions:**
+- **Merged `feat/v0.5.0-auth-persistence` → main as one no-ff merge commit (`bf60f96`) instead of switching the Vercel "production branch" to the feature branch.** The Vercel UI's Production Branch setting wasn't easy to find in the new multi-service flow; merging was one click and keeps the v0.5.0 ship visible as a single `Merge v0.5.0 into main` commit on `main`'s linear history.
+- **Used local PowerShell + `vercel env pull` for the alembic migration instead of bouncing the DB password through chat or unmarking Vercel secrets as non-sensitive.** `vercel env pull` returns `""` for sensitive vars (by design) — user pasted the `DATABASE_URL_UNPOOLED` value once into a PowerShell session, ran `alembic upgrade head`, and the env var died with the shell.
+- **Soft-profanity allowance for roast mode is opt-in via prompt wording, not a separate setting.** Users land on `/u/{username}` already knowing roast mode is the choice — the comedy needs the latitude. Constrained list (~7 words), explicit no-slur/no-violence/no-personal-attack rules.
+- **Groq is the new default provider, not a fallback to OpenAI.** Users with paid OpenAI accounts can set `NARRATIVE_BASE_URL=` (empty) and a `gpt-4o` model id to switch back without code changes. Provider is single-file behind `app/narrative/llm.py` per the original v0.4.0 design contract.
+
+**Learned / surprises:**
+- **Vercel's auto-deploy on push to main was unreliable during this session** — three out of five pushes did NOT trigger a deploy and required a manual `vercel deploy --prod --yes` to force one. The Git integration is connected ("Connected 7h ago"); the trigger seems flaky. Worth opening a Vercel support ticket if it recurs in v0.6.0.
+- **`vercel env pull` returns empty strings for every `Sensitive`-marked variable** — that's the documented security behaviour but it caught me out. The migration ran against the prod DB via a PowerShell-only one-shot env var instead.
+- **GitHub login canonicalisation bites at every layer**. The URL slug `/u/shaan-alpha`, the GitHub API `user.login = "Shaan-alpha"`, and the DB `target_login = "Shaan-alpha"` all have to agree. Lookup by URL slug missed the row. Worth memo-ing: lookups crossing layers always need `lower()` or use the canonical case throughout.
+- **Two reasoning models I assumed were live on Groq (`deepseek-r1-distill-llama-70b`, `qwen-qwq-32b`) were decommissioned**. Groq's deprecation page is the source of truth; LLM training data lags it. Two more I picked as replacements (`llama-4-maverick`, `kimi-k2`) weren't enabled on the user's Hobby tier. `llama-3.3-70b-versatile` is the stable default and produces good output once prompts are sharpened.
+
+**Verified (live on production):**
+- `GET /_/backend/health` → `{"status":"ok","version":"0.5.0","db":"up"}`
+- `GET /_/backend/auth/login` → 302 to GitHub authorize with state cookie
+- Sign-in → callback → session cookie + redirect to `/` flow works end-to-end
+- `GET /_/backend/me` returns 401 when no cookie, 200 with cookie
+- Analyzing octocat / Shaan-alpha as a signed-in user persists rows in `analyses` + `analysis_runs`; `/me` history grid shows them
+- Share toggle: POST returns 12-char slug, share URL renders the frontend `/share/[slug]` page (not raw JSON), DELETE clears the slug and the URL 404s in incognito
+- Narrative streams real Roast / Mentor content from Groq with the new prompts (sample: *"Six repositories with more than two hundred stars… That's not a profile — that's a default GitHub page for new users."*)
+- Mobile browser smoke at 320/375/414/768 — site header, results page, /me grid, /share/[slug] all render cleanly
+
+**Blocked / open:**
+- The user pasted the prod Neon `DATABASE_DIRECT_URL` (with password) into chat earlier in the session while installing alembic. **Rotate that password as the immediately-next action after tagging** — Neon dashboard → branches → main → reset password. Vercel's Neon Marketplace integration auto-syncs the new value into `DATABASE_URL` / `DATABASE_URL_UNPOOLED`; `DATABASE_DIRECT_URL` (our manual copy) needs to be edited manually afterwards.
+- `NARRATIVE_DAILY_LIMIT` is still in-process (per-Vercel-instance) — fine for v0.5.0 traffic but caps could feel inconsistent under bursty load. Shared-counter Upstash variant lands with v0.8.0 caching.
+- Fallback narrative still emits "AI narrator offline — daily cap reached" copy on _any_ LLM failure (budget OR upstream error). Misleading on quota errors but the fallback is rare enough we're shipping as-is; v0.6.0 can tune the message per failure type.
+
+**Next:**
+- **Tag `v0.5.0`** — `git tag v0.5.0 && git push origin v0.5.0`. The release workflow fires, extracts the `## [0.5.0]` CHANGELOG section, publishes the GitHub Release.
+- Rotate the leaked Neon password (immediate, before any other work).
+- v0.6.0 begins: Recruiter, CTO, Career modes. The narrative provider boundary is already general (`NARRATIVE_BASE_URL` + `NARRATIVE_MODEL` env vars), so v0.6.0 is purely prompt + mode-toggle work.
+
+---
+
 ## 2026-05-17 — Claude (Opus 4.7) — v0.5.0 implemented (Auth + Persistence) — pending live verification
 
 **Slice:** v0.5.0 (code complete, awaiting Neon/Vercel provisioning + browser smoke before tag).

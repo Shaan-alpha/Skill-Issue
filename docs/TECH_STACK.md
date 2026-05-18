@@ -72,10 +72,13 @@
 
 | Tool | Role |
 | --- | --- |
-| **OpenAI SDK** | Default narrative provider. Latest GPT class for long narratives, cheap small model for short summaries. |
-| Provider abstraction | All OpenAI calls go through `narrative/llm.py` so swapping providers (Anthropic, local) is a one-file change |
+| **`openai` Python SDK** | OpenAI-compatible client. Used against any provider that ships an OpenAI-compatible chat API, not just OpenAI. |
+| **Groq + `llama-3.3-70b-versatile`** | Production default since v0.5.0. Free tier (30 RPM, 14,400 RPD), faster than GPT-4o, ~95% quality on creative writing. Configured via `NARRATIVE_BASE_URL=https://api.groq.com/openai/v1` + `NARRATIVE_MODEL=llama-3.3-70b-versatile`. |
+| Provider abstraction | `NarrativeLLM` in [`backend/app/narrative/llm.py`](../backend/app/narrative/llm.py) accepts `base_url`. Pointing at any OpenAI-compatible endpoint (Groq, OpenRouter, Cerebras, vLLM/Ollama, OpenAI itself) requires only env-var changes — no code. |
 
-**Cost guardrails:** per-request budget, per-day project budget, alerting via Sentry.
+**Cost guardrails:** per-request `max_tokens` cap, per-day per-instance request budget (`NARRATIVE_DAILY_LIMIT`, default 50). Groq's free tier means out-of-pocket cost stays at $0 for v0.5.0; the in-process budget is conservative defence against runaway loops, not a billing guard.
+
+**Model comparison tool:** [`backend/tools/compare_narratives.py`](../backend/tools/compare_narratives.py) runs ingestion + scoring + both narrative modes against a configurable list of Groq models and dumps the outputs side-by-side. Re-run when picking a new default model.
 
 ---
 

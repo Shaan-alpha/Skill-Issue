@@ -8,7 +8,7 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
-## [0.5.0] — 2026-05-17
+## [0.5.0] — 2026-05-18
 
 ### Added
 - **GitHub OAuth sign-in.** Server-side OAuth flow with `read:user public_repo` scopes. Opaque server-side sessions stored in Postgres; the user's access token is encrypted at rest with AES-GCM.
@@ -19,14 +19,23 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 - **Save & Share controls** on `/u/[username]` for signed-in viewers. Anonymous viewers see no chrome change.
 - **`/health` reports DB status.** Returns `{status, version, db}` so a flapping DB surfaces at the front door instead of cascading.
 - **Site header** with sign-in pill / avatar menu (Base UI `Menu`), suspense-wrapped for clean SSR.
+- **`NARRATIVE_BASE_URL` env var.** `NarrativeLLM` now accepts a custom OpenAI-compatible base URL so the narrative layer can run against Groq, OpenRouter, Cerebras, vLLM/Ollama, or any other OpenAI-compatible provider. Leaving the env var unset preserves the OpenAI default.
+- **Vercel multi-service deployment.** Root `vercel.json` declares both `frontend` and `backend` services via `experimentalServices`. One Vercel project hosts both; the previous two-project layout retires.
+- **`tools/compare_narratives.py`.** One-command local 4-way Groq model comparison (`llama-3.3-70b-versatile`, `openai/gpt-oss-120b`, `meta-llama/llama-4-maverick-17b-128e-instruct`, `moonshotai/kimi-k2-instruct-0905`) — runs ingestion + scoring through every candidate model, prints side-by-side outputs for manual quality judgement. Strips `<think>...</think>` blocks from reasoning models.
 
 ### Changed
+- **Narrative provider switched to Groq + `llama-3.3-70b-versatile`** as the production default. Free tier, OpenAI-compatible, ~95% GPT-4o quality on creative writing, faster inference. OpenAI remains a drop-in alternative — only `NARRATIVE_BASE_URL` (Groq endpoint) and `NARRATIVE_MODEL` (Groq model id) change in env vars.
+- **Sharpened roast & mentor system prompts.** Word target trimmed (roast 120-200, mentor 140-220) so outputs don't ramble; explicit failure-modes lists ("if it could appear on a LinkedIn endorsement, delete it"; banned vocabulary "keep grinding"/"you got this"/"exciting journey"/...); soft profanity allowed in roast for emphasis (`shit`, `crap`, `bullshit`, `hell`, `goddamn`, `holy hell`, `jesus`) with hard limits (no slurs, no -isms, no violent language, never insult the human's intelligence or worth); per-mode temperature (roast 0.95, mentor 0.55); evidence-rich payload now passes the full per-bucket `{points, max_points, evidence[]}` so the model can cite specific signals; tier ladder anchored in both system prompts to prevent invented tier names ("Senior Builder" hallucination); few-shot examples upgraded from ~50-word terse anchors to ~250-word evidence-dense anchors.
 - `NarrativeCard` uses `useSyncExternalStore` against `localStorage` instead of `useEffect` setState — eliminates React 19's `react-hooks/set-state-in-effect` warning and adds free cross-tab sync. (Pre-v0.5.0 audit.)
 - FastAPI route handlers (`/analyze`, `/narrative`) use the modern `Annotated[T, Depends(...)]` pattern. (Pre-v0.5.0 audit.)
 - `react` / `react-dom` bumped `19.2.4` → `19.2.6` (patch). (Pre-v0.5.0 audit.)
 - CORS middleware now allows `POST`, `DELETE`, and credentials so cookies round-trip from the frontend.
 
 ### Fixed
+- **Neon Postgres URL scheme normalization.** Vercel's Neon integration emits `postgresql://...?sslmode=require&channel_binding=require` — SQLAlchemy without an explicit dialect tried to load `psycopg2` (not installed) and the function crashed at module load. `app.db.engine._normalize_async_url` now coerces any of `postgres://`, `postgresql://`, `postgresql+psycopg2://`, or `postgresql+psycopg://` to `postgresql+asyncpg://`, strips libpq-only query params asyncpg doesn't understand (`sslmode`, `channel_binding`, `gssencmode`, `target_session_attrs`, etc.), and opts into TLS via asyncpg's own `ssl=True` connect arg when the original URL signalled it.
+- **OAuth state cookie path.** Previously set to `/auth`, which didn't match the Vercel multi-service callback URL `/_/backend/auth/callback`; the browser dropped the cookie and every callback hit returned `{"error":"invalid_state"}`. Cookie path is now `/` — matches everywhere, kept short-lived (10-min TTL) anyway so the broader scope is fine.
+- **Share URL pointed at backend JSON, not frontend page.** `_public_share_url` derived its base from `OAUTH_REDIRECT_URL`, which on multi-service deploys includes the `/_/backend` service prefix. Switched to the first origin in `CORS_ALLOW_ORIGINS` — the frontend's canonical origin. Share URL is now `https://<host>/share/<slug>` (Next.js page) instead of `https://<host>/_/backend/share/<slug>` (raw JSON).
+- **Save/Share controls rendered disabled** for signed-in viewers because `/u/[username]/page.tsx` looked up the analysis row by URL slug case (e.g. `shaan-alpha`) while the backend stored `target_login` as GitHub's canonical case (`Shaan-alpha`). No match → `analysisId = null` → button disabled. Now passes `report.username` (canonical case from the backend response) into the hint lookup AND compares case-insensitively as defence in depth.
 - Cleared all 16 outstanding backend ruff warnings without regressing tests. (Pre-v0.5.0 audit.)
 
 ### Security
