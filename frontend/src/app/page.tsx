@@ -5,7 +5,7 @@ import { SearchBar } from "@/components/search-bar";
 
 export default function Home() {
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden py-12 px-4 sm:py-16 sm:px-6 md:py-20">
+    <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden py-12 px-4 sm:py-16 sm:px-6 md:py-20">
       {/* Ambient blobs — smaller and lighter on mobile to keep paint cheap */}
       <div className="absolute top-0 -left-4 w-48 h-48 sm:w-72 sm:h-72 bg-accent/20 rounded-full mix-blend-screen blur-[96px] sm:blur-[128px] animate-pulse" />
       <div className="absolute bottom-0 -right-4 w-48 h-48 sm:w-72 sm:h-72 bg-blue-500/10 rounded-full mix-blend-screen blur-[96px] sm:blur-[128px] animate-pulse [animation-delay:700ms]" />
@@ -23,7 +23,7 @@ export default function Home() {
             transition={{ delay: 0.2, duration: 0.5 }}
             className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium uppercase tracking-wider text-muted-foreground"
           >
-            Deterministic engineering reports · v0.4.0
+            Deterministic engineering reports · v0.5.0
           </m.span>
 
           <h1 className="text-4xl sm:text-5xl md:text-7xl font-bold tracking-tight text-gradient leading-tight">
