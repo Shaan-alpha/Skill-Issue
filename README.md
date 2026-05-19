@@ -22,7 +22,7 @@ Engineering insight first. AI flavor second. Scoring is deterministic and explai
 
 ## Status
 
-Pre-alpha. Latest shipped release is **v0.5.0** (Auth + Persistence). Live at https://skill-issue-tau.vercel.app — GitHub OAuth sign-in, Neon Postgres persistence, `/me` history grid, opt-in `/share/[slug]` public links, signed-in ingestion uses each user's own GitHub rate-limit budget. The AI narrative layer (Roast + Mentor) now runs on **Groq** (`llama-3.3-70b-versatile`) by default — free tier, faster inference, OpenAI-compatible. Pre-existing OpenAI users can swap back by clearing `NARRATIVE_BASE_URL`. **v0.6.0 — Recruiter / CTO / Career modes** is the next slice. See [`CHANGELOG.md`](./CHANGELOG.md) for shipped slices, [`PLAN.md`](./PLAN.md) for the full roadmap, and [`docs/PROGRESS_LOG.md`](./docs/PROGRESS_LOG.md) for the most recent session handoff.
+Pre-alpha. Latest shipped release is **v0.5.0** (Auth + Persistence). Live at https://skill-issue-tau.vercel.app — GitHub OAuth sign-in, Neon Postgres persistence, `/me` history grid, opt-in `/share/[slug]` public links, signed-in ingestion uses each user's own GitHub rate-limit budget. The AI narrative layer (Roast + Mentor) runs on **Groq** (`llama-3.3-70b-versatile`) by default — free tier, faster inference, OpenAI-compatible. Pre-existing OpenAI users can swap back by clearing `NARRATIVE_BASE_URL`. **v0.6.0 — GitHub Receipts™ (shareable cards)** is the next slice; Recruiter / CTO / Career narrative modes were dropped 2026-05-19 (parked under "Beyond v1.0"). See [`CHANGELOG.md`](./CHANGELOG.md) for shipped slices, [`PLAN.md`](./PLAN.md) for the full roadmap, and [`docs/PROGRESS_LOG.md`](./docs/PROGRESS_LOG.md) for the most recent session handoff.
 
 ---
 

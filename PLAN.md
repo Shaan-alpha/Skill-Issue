@@ -23,11 +23,10 @@
 | **v0.3.0** | Identity Signals — 7-tier ladder, position bar, badges, tier-gated depth | ✅ shipped |
 | **v0.4.0** | AI narrative layer — Roast Mode + Mentor Mode | ✅ shipped |
 | **v0.5.0** | Auth + persistence — GitHub OAuth + Neon Postgres | ✅ shipped |
-| **v0.6.0** | Remaining modes — Recruiter, CTO, Career | pending |
-| **v0.7.0** | GitHub Receipts™ — shareable OG cards | pending |
-| **v0.8.0** | Caching + performance — Upstash Redis, rate-limit hygiene | pending |
-| **v0.9.0** | Polish + observability — analytics, error tracking, perf budget | pending |
-| **v0.10.0** | Beta hardening — security review, abuse mitigation, load test | pending |
+| **v0.6.0** | GitHub Receipts™ — shareable OG cards (dark canonical) | pending |
+| **v0.7.0** | Caching + performance — Upstash Redis, rate-limit hygiene | pending |
+| **v0.8.0** | Polish + observability — analytics, error tracking, perf budget | pending |
+| **v0.9.0** | Beta hardening — security review, abuse mitigation, load test | pending |
 | **v1.0.0** | Public launch | pending |
 
 ---
@@ -184,41 +183,32 @@
 
 ---
 
-## v0.6.0 — Remaining analysis modes
+## v0.6.0 — GitHub Receipts™
 
-**Goal:** Recruiter, CTO, and Career modes shipped behind the same mode toggle.
+**Goal:** Every analysis produces a single canonical, shareable scorecard image suitable for LinkedIn, X, and OG previews. Roast + Mentor remain the only narrative modes — no Recruiter / CTO / Career (deferred to "Beyond v1.0" ideas).
+
+**Design spec:** [`docs/superpowers/specs/2026-05-19-v0.6.0-receipts-design.md`](./docs/superpowers/specs/2026-05-19-v0.6.0-receipts-design.md).
 
 **Slice scope:**
-- Three new prompt templates with their own regression fixtures
-- Mode-specific score emphasis: Recruiter weights Recruiter Signal + Repo Quality; CTO weights Engineering Maturity + Consistency; Career weights Learning Trajectory + OSS/Collab
-- Per-mode "headline insight" computed deterministically and passed to the LLM as a constraint
+- Next.js `@vercel/og` route at `/u/[username]/og.png` (private analyses → 404 unless owner) and `/share/[slug]/og.png` (public, no auth) generating a 1200×630 PNG via `next/og`'s `ImageResponse` (satori, no headless browser).
+- One canonical dark card variant: avatar + GitHub handle, tier name + sub-rank, large 100-pt total, top 3 badges, brand mark, subtle background. No gradient soup, no neon, no narrative text on the card itself (deterministic content only → render is run-stable).
+- Dedicated preview route `/u/[username]/card` with: card preview at correct aspect ratio, "Copy PNG", "Download PNG", "Copy share URL" actions, and the OG meta tags (Twitter/X `summary_large_image`, OpenGraph) wired so the route itself has rich previews.
+- Inline "Share card" affordance added to `save-share-controls.tsx` on `/u/[username]` (signed-in) and `share-attribution.tsx` on `/share/[slug]` (public) — opens the new `/u/[username]/card` page in-context.
+- OG meta tags injected into `/u/[username]` and `/share/[slug]` page heads so the PNG renders inline when the analysis URL is pasted into X, LinkedIn, Discord, etc.
+
+**Out of scope:** light variant, "full breakdown" variant, multi-platform analytics, headless-browser fallback. All deferred to a future v0.6.x patch if real demand surfaces.
 
 **Exit criteria:**
-- [ ] All five modes (Roast, Mentor, Recruiter, CTO, Career) live and on-voice
-- [ ] Mode-specific emphasis is visible in the rendered narrative
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.6.0`
+- [ ] `GET /u/{username}/og.png` returns a valid PNG in under 800ms p95 on Vercel for a warm analysis.
+- [ ] `GET /share/{slug}/og.png` returns the same card for the shared analysis with no auth.
+- [ ] `/u/{username}/card` renders the preview + 3 actions (Copy PNG, Download PNG, Copy URL) and looks correct at 320 / 375 / 414 / 768 / desktop widths.
+- [ ] Pasting `https://skill-issue-tau.vercel.app/share/<slug>` into X and LinkedIn shows the card inline (real-world preview verified).
+- [ ] Card render is deterministic for a given `scores_hash` — two renders of the same analysis yield byte-identical PNGs (snapshot test).
+- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.6.0`.
 
 ---
 
-## v0.7.0 — GitHub Receipts™
-
-**Goal:** Every analysis produces a shareable scorecard image suitable for LinkedIn, X, and OG previews.
-
-**Slice scope:**
-- Next.js `@vercel/og` route generating a 1200×630 card
-- Variants: dark, light, "minimal score-only," "full breakdown"
-- Twitter/X meta tags, LinkedIn meta tags, Open Graph
-- `/u/[username]/card` route with a one-click copy/download
-- Brand mark + subtle background, never gradient soup
-
-**Exit criteria:**
-- [ ] OG card renders in under 800ms on Vercel
-- [ ] Cards pass real-world preview tests on X and LinkedIn
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.7.0`
-
----
-
-## v0.8.0 — Caching + performance
+## v0.7.0 — Caching + performance
 
 **Goal:** Repeat analyses are free and fast.
 
@@ -231,11 +221,11 @@
 **Exit criteria:**
 - [ ] p95 latency for a cached analysis ≤ 200ms end-to-end
 - [ ] Lighthouse mobile performance ≥ 95 on `/u/[username]`
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.8.0`
+- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.7.0`
 
 ---
 
-## v0.9.0 — Polish + observability
+## v0.8.0 — Polish + observability
 
 **Goal:** The product feels finished. We can see what users do and what breaks.
 
@@ -250,11 +240,11 @@
 **Exit criteria:**
 - [ ] Error budget defined; dashboards live
 - [ ] Axe critical issues = 0
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.9.0`
+- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.8.0`
 
 ---
 
-## v0.10.0 — Beta hardening
+## v0.9.0 — Beta hardening
 
 **Goal:** Public-ready security and abuse posture.
 
@@ -269,7 +259,7 @@
 - [ ] No high or critical issues from `/security-review`
 - [ ] Load test passes target without errors
 - [ ] Legal docs live and linked from footer
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.10.0`
+- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.9.0`
 
 ---
 
@@ -307,6 +297,7 @@ The long-term play: Skill Issue is the *reputation layer for developers*, not a 
 
 ### Other ideas
 
+- **Recruiter / CTO / Career narrative modes** — originally slated for v0.6.0, dropped 2026-05-19. Roast + Mentor cover the comedic and constructive lanes; three more modes added prompt-template surface area without unlocking a distinct user need. Revisit if hiring partners or career-coach feedback explicitly asks for it post-v1.0.
 - **Team Intelligence** — analyze an org's engineering identity
 - **OSS Reputation Score** — public leaderboard for OSS contributors
 - **Career Timeline** — animated history of a developer's growth

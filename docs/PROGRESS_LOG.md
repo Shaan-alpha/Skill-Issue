@@ -19,6 +19,45 @@ Format:
 
 ---
 
+## 2026-05-19 — Claude (Opus 4.7) — post-v0.5.0 cleanup + v0.6.0 scope pivot to Receipts™
+
+**Slice:** post-v0.5.0 housekeeping + v0.6.0 design (Receipts™).
+
+**Done:**
+- **Full project audit.** Confirmed health on `main`: backend ruff clean, frontend lint clean, `npm run build` clean (5 routes), `pytest -q` 142 pass + 44 DB-fixture-only errors (TEST_DATABASE_URL absent locally). All seven shipped tags (v0.0.0 → v0.5.0) present on origin.
+- **`fix(narrative) adeaf82`**: `fallback_narrative()` now takes a `reason: "budget" | "error"` and emits distinct lead-in copy + retry hint per reason. Previously every fallback path (daily-cap exhaustion AND transient upstream errors) emitted `[AI narrator offline — daily cap reached]`, misleading users on 5xx / network blips. New test covers the error path and asserts the failed run does NOT poison the LRU cache. 33 narrative tests pass.
+- **Branch hygiene.** Deleted local `feat/v0.3.0-identity-signals` and `feat/v0.5.0-auth-persistence`. Deleted four origin branches (`feat/v0.1.0-backend-mvp`, `feat/v0.2.0-frontend-shell`, `feat/v0.3.0-identity-signals`, `feat/v0.5.0-auth-persistence`) — all merged. `main` is now the only long-lived branch.
+- **Roadmap pivot to Receipts™.** Brainstormed v0.6.0 with the user. Decided: drop Recruiter / CTO / Career narrative modes entirely (parked under "Beyond v1.0"); promote GitHub Receipts™ from the v0.7.0 slot up to v0.6.0; renumber downstream slices (v0.7.0 Caching, v0.8.0 Polish + Observability, v0.9.0 Beta hardening, v1.0.0 launch).
+- Wrote the v0.6.0 design spec at [`docs/superpowers/specs/2026-05-19-v0.6.0-receipts-design.md`](./superpowers/specs/2026-05-19-v0.6.0-receipts-design.md). Covers locked scope (tier + score + top-3 badges, single dark canonical variant, `@vercel/og` `ImageResponse` render path, both inline button + dedicated `/u/[username]/card` route), surface area (3 new + 4 modified routes/components), card layout sketch, data flow, determinism + caching strategy (Vercel edge cache via `s-maxage=300`), perf budget (≤800ms p95 PNG render), testing strategy, exit criteria mirroring PLAN.md, out-of-scope list, known imprecisions, and cold-agent execution guide.
+- Updated `PLAN.md` (version map + v0.6.0 section + downstream renumbers + new "Beyond v1.0" entry for the dropped modes) and `README.md` (status line).
+
+**Decisions:**
+- **Drop Recruiter / CTO / Career narrative modes.** Roast + Mentor cover the comedic and constructive lanes. Three more modes would have added prompt-template surface area without unlocking a distinct user need. If hiring-partner or career-coach feedback explicitly asks for these post-v1.0, they're documented under "Beyond v1.0".
+- **v0.6.0 = Receipts™.** Shareable cards are the distribution mechanism for the product. Pasting a `/share/<slug>` URL into X, LinkedIn, or Discord must show the card inline — this is what drives organic growth.
+- **One canonical dark card, no variants.** Tight design > broad coverage for a v0.6.0 surface. Light theme deferrable to a v0.6.x patch if real demand surfaces.
+- **`next/og` `ImageResponse` over backend Playwright.** Satori-based, fast on Fluid Compute, no headless-browser dep. Bundle font with the route — ~120KB per route is fine.
+- **Card content stays deterministic (tier + score + top-3 badges).** No narrative snippet on the card. Two renders of the same `scores_hash` produce byte-identical PNGs — snapshot-testable, edge-cacheable, run-stable.
+- **Both inline + dedicated `/u/[username]/card` route for share entry.** Inline = low friction in `save-share-controls.tsx` and `share-attribution.tsx`; dedicated route = preview-before-share + Copy PNG / Download PNG / Copy URL for power users.
+
+**Learned / surprises:**
+- The original v0.6.0 plan (three new narrative modes) had been on the roadmap since v0.0.0 scaffolding. Brainstorming surfaced that it would multiply prompt-engineering work without a clear user-demand signal — the right call was to drop it, not implement it. Worth memo-ing: every slice deserves a brainstorm pass before its TDD plan is written; don't treat the roadmap as immutable.
+
+**Verified at end of session:**
+- `git status` clean; `main` pushed.
+- `uv run pytest tests/narrative -q --deselect <DB-only tests>` 32/32 pass.
+- Backend ruff clean; frontend lint clean.
+- No outstanding loose ends from the audit — the leaked Neon password was rotated by the user before this session began (verified out-of-band).
+
+**Blocked / open:**
+- None. Spec is ready for the TDD plan.
+
+**Next:**
+- Branch `feat/v0.6.0-receipts` off `main`.
+- Invoke `superpowers:writing-plans` against the v0.6.0 spec, save to `docs/superpowers/plans/2026-05-19-v0.6.0-receipts.md`. Expect ~12–16 TDD tasks ordered: `OgCard` + tier-band palette → `og.png` route handlers → `card-actions.tsx` → `/u/[username]/card/page.tsx` → meta-tag wiring → inline "Share card" buttons → snapshot fixtures + visual QA → tag + release.
+- Implementation. Estimated 6–8 hours focused execution. No new MCP/plugin permissions needed.
+
+---
+
 ## 2026-05-18 — Claude (Opus 4.7) — v0.5.0 shipped live (Auth + Persistence + Groq narrator)
 
 **Slice:** v0.5.0 (live at https://skill-issue-tau.vercel.app)

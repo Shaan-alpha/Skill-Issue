@@ -15,6 +15,7 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ### Changed
 - Pruned merged-and-shipped feature branches (`feat/v0.1.0-backend-mvp`, `feat/v0.2.0-frontend-shell`, `feat/v0.3.0-identity-signals`, `feat/v0.5.0-auth-persistence`) from local + origin. `main` is the only long-lived branch going forward; future slices branch off `main` per-version.
+- **Roadmap pivot.** v0.6.0 is now **GitHub Receipts™ (shareable cards)** — promoted from the old v0.7.0 slot. Recruiter / CTO / Career narrative modes are formally dropped from the version-numbered roadmap and parked under "Beyond v1.0" ideas (Roast + Mentor are the canonical two modes). Downstream slices renumber: v0.7.0 Caching, v0.8.0 Polish + Observability, v0.9.0 Beta hardening, v1.0.0 launch. Design spec: [`docs/superpowers/specs/2026-05-19-v0.6.0-receipts-design.md`](./docs/superpowers/specs/2026-05-19-v0.6.0-receipts-design.md).
 
 ---
 
