@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Link2, LogIn, Share2 } from "lucide-react";
+import { Check, Image as ImageIcon, Link2, LogIn, Share2 } from "lucide-react";
 import { useState } from "react";
 
 import { signIn, useSession } from "@/lib/auth";
@@ -11,6 +11,8 @@ interface Props {
   initialShareSlug: string | null;
   /** Server-supplied analysis id for the current target. */
   analysisId: number | null;
+  /** Canonical username for the analysis (drives the Share-card link). */
+  username: string;
 }
 
 function backendUrl(path: string): string {
@@ -18,7 +20,7 @@ function backendUrl(path: string): string {
   return `${base}${path}`;
 }
 
-export function SaveShareControls({ initialShareSlug, analysisId }: Props) {
+export function SaveShareControls({ initialShareSlug, analysisId, username }: Props) {
   const session = useSession();
   const [shareSlug, setShareSlug] = useState<string | null>(initialShareSlug);
   const [busy, setBusy] = useState(false);
@@ -104,6 +106,13 @@ export function SaveShareControls({ initialShareSlug, analysisId }: Props) {
           </>
         )}
       </button>
+      <a
+        href={`/u/${encodeURIComponent(username)}/card`}
+        className="inline-flex items-center gap-2 rounded-full border border-border bg-card/60 px-4 py-1.5 text-xs font-medium hover:bg-card/80 transition-colors"
+      >
+        <ImageIcon className="size-3.5" aria-hidden="true" />
+        Share card
+      </a>
       {toast ? (
         <span className="text-xs text-muted-foreground sm:ml-auto">{toast}</span>
       ) : null}

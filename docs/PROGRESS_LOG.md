@@ -19,6 +19,51 @@ Format:
 
 ---
 
+## 2026-05-19 — Claude (Opus 4.7) — v0.6.0 shipped (GitHub Receipts™)
+
+**Slice:** v0.6.0 — shareable OG cards.
+
+**Done:**
+- All 14 tasks from [`docs/superpowers/plans/2026-05-19-v0.6.0-receipts.md`](./superpowers/plans/2026-05-19-v0.6.0-receipts.md). Inline execution; ~1 hour focused.
+- **First frontend test framework** in the repo: vitest 3 + happy-dom + Testing Library + jest-dom matchers. 20 new unit tests across `og-palette`, `og-card-data`, `og-card`, and `card-actions`.
+- `/u/[username]/opengraph-image.tsx` and `/share/[slug]/opengraph-image.tsx` via Next 16's file convention — auto-wires 10 `<meta property="og:image">` + `<meta name="twitter:image">` tags into the parent page heads (width, height, type, alt) with zero hand-rolled meta wiring.
+- One canonical dark `OgCard` (avatar 96px ring, handle, github.com sub-line, brand mark, tier panel, big score panel tinted by tier-band palette, max-3 badge row). Inter Medium + Bold bundled under `frontend/public/fonts/` (OFL 1.1, attribution README).
+- `/u/[username]/card` preview page with `<CardActions>` (Copy PNG with clipboard.write Blob feature-detect, Download PNG via native `<a download>`, Copy URL via writeText).
+- Inline "Share card" links in `save-share-controls.tsx` (signed-in viewers, alongside Save + Share toggles) and `share-attribution.tsx` (any viewer on /share/[slug]).
+- CHANGELOG `[0.6.0]` section drafted; PLAN.md marks v0.6.0 ✅ shipped; v0.5.0 narrative-fallback fix and branch-pruning are documented as pre-v0.6.0 changes.
+
+**Decisions:**
+- **Next 16 `opengraph-image.tsx` convention over hand-rolled `/og.png` routes.** Auto-wires meta tags, halves the surface area, follows the framework idiom. The plan called for `/og.png` URLs but the convention is strictly better — same PNG, zero meta-tag bookkeeping.
+- **Auth-aware logic on `/u/[username]/og.png` dropped.** `/analyze/{username}` is anonymously computable, so the OG route hits it without cookies. This matches what a social-platform crawler can actually fetch.
+- **Vitest 3 + happy-dom** as the frontend test framework. Picked over node:test for native TS/JSX support and the Testing Library ecosystem; happy-dom over jsdom for speed.
+- **Single accent colour per tier** drives the card palette (tier name text, score number, both panel borders, both panel backgrounds via alpha-suffix hex). Senior → cyan, Principal → indigo, Hobbyist → amber. Seven hues for seven tiers, one deterministic mapping.
+- **Card content is run-stable** (tier + score + top-3 badges, no narrative snippet). Two renders of the same analysis return byte-identical PNGs — verified locally (3 runs × 63171 bytes).
+
+**Learned / surprises:**
+- **Satori is stricter than I assumed.** Every `<div>` with children needs an explicit `display: flex` (or block/contents/none). The error "Expected <div> to have explicit display: flex if it has more than one child node" tripped me on every multi-child wrapper AND on some single-child wrappers that satori counted as multi-child because of how JSX preserves text + expression splits. Fixed by defensively adding `display: "flex"` to every leaf div in `OgCard`. Single-text-child divs render the same with display:flex applied. Worth memo-ing: when authoring JSX consumed by `next/og`, treat `display: "flex"` as a required-not-default-block prop.
+- **happy-dom's `navigator.clipboard` is a getter** — can't be overwritten with `Object.assign`. Tests must use `Object.defineProperty(navigator, "clipboard", { configurable: true, value: ... })`.
+- **`server-only` package throws when imported in vitest** (happy-dom env triggers the client-side guard). Solved with a vitest resolve alias pointing `server-only` at an empty shim file. The real guard still applies in Next's production bundler.
+- **Inter v4.0 release zip layout** has TTFs under `extras/ttf/Inter-Medium.ttf` and `extras/ttf/Inter-Bold.ttf` — not under `Inter Desktop/...` as I'd remembered from older releases.
+
+**Verified locally:**
+- 10/10 meta tags wired on `/u/octocat` (og:image* + twitter:image*).
+- `/u/octocat/opengraph-image` returns HTTP 200, `Cache-Control: public, s-maxage=300, stale-while-revalidate=86400, max-age=0`, valid 1200×630 PNG (63KB).
+- `/share/<unknown-slug>/opengraph-image` returns HTTP 200 with a fallback PNG — no 5xx leak.
+- `/u/octocat/card` page renders with all three actions + back link.
+- `npm run lint` clean, `npm run build` clean, all vitest tests green, backend `pytest -q` 142 pass (44 DB-fixture errors only — TEST_DATABASE_URL absent locally, accepted).
+
+**Blocked / open:**
+- Real-world preview check on X / LinkedIn / Discord deferred to post-deploy. The card URLs need a public origin for the social crawlers to reach.
+- Dev-mode render takes ~6s — slower than the spec's 800ms p95 target. Expected because Turbopack has no compiled output for the route on first hit. Production Fluid Compute + Vercel edge cache will dominate the typical path; will verify on the live deploy.
+
+**Next:**
+- Merge `feat/v0.6.0-receipts` to `main` with a `--no-ff` merge commit.
+- Push `main`, tag `v0.6.0`, push tag — release workflow extracts the `[0.6.0]` CHANGELOG section and publishes the GitHub Release.
+- Real-world preview verification on the live URL once Vercel deploys.
+- v0.7.0 begins: Upstash Redis caching + rate-limit hygiene.
+
+---
+
 ## 2026-05-19 — Claude (Opus 4.7) — post-v0.5.0 cleanup + v0.6.0 scope pivot to Receipts™
 
 **Slice:** post-v0.5.0 housekeeping + v0.6.0 design (Receipts™).

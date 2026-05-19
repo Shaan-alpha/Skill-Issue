@@ -21,7 +21,11 @@ export default async function SharePage({ params }: { params: Promise<{ slug: st
   return (
     <main className="container mx-auto max-w-6xl pt-24 pb-20 px-4 sm:px-6">
       <div className="mb-6">
-        <ShareAttribution login={data.owner.login} avatarUrl={data.owner.avatar_url} />
+        <ShareAttribution
+          login={data.owner.login}
+          avatarUrl={data.owner.avatar_url}
+          cardHref={`/u/${encodeURIComponent(data.report.username)}/card`}
+        />
       </div>
       <ResultsView report={data.report} username={data.report.username} sharedNarrative />
     </main>
