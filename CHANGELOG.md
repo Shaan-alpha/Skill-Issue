@@ -8,6 +8,15 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
+## [Unreleased]
+
+### Planned
+- **v0.7.0 (next):** Backend caching via Upstash Redis. Full Report cache, GitHub API response cache, shared narrative cache, singleflight coalescing. Target: warm `/analyze/{user}` p95 ≤ 200ms. Design spec at [`docs/superpowers/specs/2026-05-19-v0.7.0-caching-design.md`](./docs/superpowers/specs/2026-05-19-v0.7.0-caching-design.md).
+- **v0.7.1:** Frontend perf budget — Lighthouse mobile ≥ 95, TTI / LCP ≤ 2.5s, CLS ≤ 0.1.
+- **v0.8.0:** Sentry + analytics + cron re-ingestion + manual "Force refresh" button (gated on observability landing first).
+
+---
+
 ## [0.6.0] — 2026-05-19
 
 ### Added
