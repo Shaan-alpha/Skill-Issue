@@ -56,7 +56,7 @@ class NarrativeService:
             logger.warning(
                 f"Daily OpenAI budget exhausted. Using fallback narrative for {report.username} ({mode})"
             )
-            yield fallback_narrative(mode, report)
+            yield fallback_narrative(mode, report, reason="budget")
             return
 
         # 3. Stream from LLM
@@ -73,7 +73,7 @@ class NarrativeService:
                 f"LLM streaming failed for {report.username} ({mode}): {e}. Activating fallback narrative.",
                 exc_info=True,
             )
-            yield fallback_narrative(mode, report)
+            yield fallback_narrative(mode, report, reason="error")
             return
 
         # 4. Cache successful result

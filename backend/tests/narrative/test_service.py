@@ -9,6 +9,19 @@ from app.narrative.llm import FakeNarrativeLLM
 from app.narrative.service import NarrativeService
 
 
+class _BoomLLM(FakeNarrativeLLM):
+    """Stub LLM whose stream raises before yielding anything."""
+
+    def __init__(self) -> None:
+        super().__init__(tokens=[])
+        self.calls = 0
+
+    async def stream_chat(self, messages, temperature):  # type: ignore[no-untyped-def, override]
+        self.calls += 1
+        raise RuntimeError("provider 502")
+        yield ""  # pragma: no cover - keeps function a generator
+
+
 def _report(username: str = "octo", total: int = 50) -> Report:
     z = ScoreResult(points=0, max_points=1)
     b = ScoreBreakdown(
@@ -86,3 +99,23 @@ async def test_service_streams_from_llm_and_caches_result() -> None:
 
     key = cache.key(rep.username, cache.scores_hash(rep), "roast")
     assert cache.get(key) == "Live narrative!"
+
+
+@pytest.mark.asyncio
+async def test_service_uses_error_fallback_when_llm_raises() -> None:
+    cache = NarrativeCache()
+    budget = DailyBudget(limit=10)
+    llm = _BoomLLM()
+    svc = NarrativeService(cache=cache, budget=budget, llm=llm)
+
+    rep = _report("octo", 50)
+    out: list[str] = []
+    async for chunk in svc.stream_narrative("roast", rep):
+        out.append(chunk)
+    res = "".join(out)
+    assert "upstream hiccup" in res
+    assert "daily cap reached" not in res
+    assert llm.calls == 1
+    # Failed runs must not poison the cache.
+    key = cache.key(rep.username, cache.scores_hash(rep), "roast")
+    assert cache.get(key) is None

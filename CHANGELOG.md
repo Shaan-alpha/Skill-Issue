@@ -8,6 +8,16 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- Narrative fallback now distinguishes daily-cap exhaustion (`[AI narrator offline — daily cap reached]`) from transient upstream errors (`[AI narrator offline — upstream hiccup]`). Quota-error responses no longer pretend the daily cap was hit.
+
+### Changed
+- Pruned merged-and-shipped feature branches (`feat/v0.1.0-backend-mvp`, `feat/v0.2.0-frontend-shell`, `feat/v0.3.0-identity-signals`, `feat/v0.5.0-auth-persistence`) from local + origin. `main` is the only long-lived branch going forward; future slices branch off `main` per-version.
+
+---
+
 ## [0.5.0] — 2026-05-18
 
 ### Added
