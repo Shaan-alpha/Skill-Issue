@@ -2,16 +2,56 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from typing import Any, Self
+import logging
+from typing import TYPE_CHECKING, Any, Self
 
 import httpx
+
+from app.cache.keys import NAMESPACE_GH, gh_request_key, ttl_for_gh_endpoint
+from app.settings import settings
+
+if TYPE_CHECKING:
+    from app.cache.client import RedisCache
+
+logger = logging.getLogger(__name__)
 
 API_BASE = "https://api.github.com"
 GRAPHQL_URL = "https://api.github.com/graphql"
 
+# Status codes whose response bodies are safe to cache. 5xx and 429 are
+# transient and should always retry against the live API.
+_CACHEABLE_STATUSES = frozenset({200, 404, 422})
+
+
+class _CachedResponse:
+    """Mimics the subset of httpx.Response used downstream of `_request`."""
+
+    def __init__(self, status_code: int, json_body: Any) -> None:
+        self.status_code = status_code
+        self._json = json_body
+        self.text = "" if json_body is None else "[cached]"
+        self.headers: dict[str, str] = {}
+
+    def json(self) -> Any:
+        return self._json
+
+    def raise_for_status(self) -> None:
+        if 400 <= self.status_code < 600:
+            request = httpx.Request("GET", "cached://")
+            response = httpx.Response(self.status_code, request=request)
+            raise httpx.HTTPStatusError(
+                f"Cached {self.status_code}", request=request, response=response
+            )
+
 
 class GitHubClient:
-    def __init__(self, token: str | None = None, *, max_retries: int = 3) -> None:
+    def __init__(
+        self,
+        token: str | None = None,
+        *,
+        max_retries: int = 3,
+        cache: RedisCache | None = None,
+    ) -> None:
         headers: dict[str, str] = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
@@ -21,6 +61,7 @@ class GitHubClient:
             headers["Authorization"] = f"Bearer {token}"
         self._client = httpx.AsyncClient(headers=headers, timeout=20.0, http2=True)
         self._max_retries = max_retries
+        self._cache = cache
 
     async def __aenter__(self) -> Self:
         return self
@@ -28,15 +69,58 @@ class GitHubClient:
     async def __aexit__(self, *_exc: object) -> None:
         await self._client.aclose()
 
-    async def _request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+    async def _request(
+        self, method: str, url: str, **kwargs: Any
+    ) -> httpx.Response | _CachedResponse:
+        params = kwargs.get("params")
+        body = kwargs.get("json")
+        cache_key: str | None = None
+
+        # Try the cache before hitting GitHub.
+        if self._cache is not None:
+            cache_key = gh_request_key(method, url, params, body)
+            try:
+                cached = await self._cache.get_json(NAMESPACE_GH, cache_key)
+            except Exception:
+                cached = None
+                logger.warning("cache get raised in GitHubClient", exc_info=True)
+            if cached is not None:
+                return _CachedResponse(
+                    status_code=cached["status"], json_body=cached["body"]
+                )
+
+        # Live request with existing retry/rate-limit logic.
+        resp: httpx.Response | None = None
         for _attempt in range(self._max_retries):
             resp = await self._client.request(method, url, **kwargs)
             if resp.status_code == 403 and "rate limit" in resp.text.lower():
                 retry_after = float(resp.headers.get("Retry-After", "1"))
                 await asyncio.sleep(retry_after)
                 continue
-            return resp
-        resp.raise_for_status()
+            break
+        assert resp is not None  # max_retries >= 1, so the loop body ran at least once
+
+        # Cache successful + permanently-failed responses; skip transient errors.
+        if (
+            self._cache is not None
+            and cache_key is not None
+            and resp.status_code in _CACHEABLE_STATUSES
+        ):
+            ttl = ttl_for_gh_endpoint(url) or settings.cache_default_ttl_seconds
+            try:
+                try:
+                    body_json: Any = resp.json()
+                except ValueError:
+                    body_json = None
+                await self._cache.set_json(
+                    NAMESPACE_GH,
+                    cache_key,
+                    {"status": resp.status_code, "body": body_json},
+                    ttl_seconds=ttl,
+                )
+            except Exception:
+                logger.warning("cache set raised in GitHubClient", exc_info=True)
+
         return resp
 
     async def get_user(self, username: str) -> dict[str, Any]:
