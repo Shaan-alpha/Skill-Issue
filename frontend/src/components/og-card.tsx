@@ -16,7 +16,8 @@ interface Props {
 /**
  * Pure JSX used by `next/og`'s `ImageResponse`. Tailwind classes are NOT
  * supported by satori — all styling must be inline. Layout uses flexbox
- * because satori's CSS subset implements flex but not grid.
+ * exclusively because satori implements flex but not grid, and is strict:
+ * EVERY div needs explicit `display: flex` (or `block`, `contents`, `none`).
  */
 export function OgCard({ report, avatarUrl }: Props) {
   const accent = tierAccent(report.tier.name);
@@ -35,14 +36,7 @@ export function OgCard({ report, avatarUrl }: Props) {
         fontFamily: "Inter",
       }}
     >
-      {/* Header row */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-        }}
-      >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
           {avatarUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -56,6 +50,7 @@ export function OgCard({ report, avatarUrl }: Props) {
           ) : (
             <div
               style={{
+                display: "flex",
                 width: 96,
                 height: 96,
                 borderRadius: 9999,
@@ -65,29 +60,22 @@ export function OgCard({ report, avatarUrl }: Props) {
             />
           )}
           <div style={{ display: "flex", flexDirection: "column" }}>
-            <div style={{ fontSize: 56, fontWeight: 700, lineHeight: 1.1 }}>
+            <div style={{ display: "flex", fontSize: 56, fontWeight: 700, lineHeight: 1.1 }}>
               {report.username}
             </div>
-            <div style={{ fontSize: 22, color: OG_FG_MUTED, marginTop: 8 }}>
-              github.com/{report.username}
+            <div style={{ display: "flex", fontSize: 22, color: OG_FG_MUTED, marginTop: 8 }}>
+              {`github.com/${report.username}`}
             </div>
           </div>
         </div>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "flex-end",
-          }}
-        >
-          <div style={{ fontSize: 32, fontWeight: 700 }}>Skill Issue</div>
-          <div style={{ fontSize: 16, color: "#666", marginTop: 4 }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+          <div style={{ display: "flex", fontSize: 32, fontWeight: 700 }}>Skill Issue</div>
+          <div style={{ display: "flex", fontSize: 16, color: "#666", marginTop: 4 }}>
             skill-issue-tau.vercel.app
           </div>
         </div>
       </div>
 
-      {/* Tier + score row */}
       <div style={{ display: "flex", gap: 32, marginTop: 56, flex: 1 }}>
         <div
           style={{
@@ -101,15 +89,15 @@ export function OgCard({ report, avatarUrl }: Props) {
             border: `1px solid ${accent}33`,
           }}
         >
-          <div style={{ fontSize: 48, fontWeight: 700, color: accent }}>
+          <div style={{ display: "flex", fontSize: 48, fontWeight: 700, color: accent }}>
             {report.tier.name}
           </div>
-          <div style={{ fontSize: 24, color: OG_FG_MUTED, marginTop: 12 }}>
-            {report.tier.sub_rank}/100 within tier
+          <div style={{ display: "flex", fontSize: 24, color: OG_FG_MUTED, marginTop: 12 }}>
+            {`${report.tier.sub_rank}/100 within tier`}
           </div>
           {report.tier.next_tier && report.tier.pts_to_next != null ? (
-            <div style={{ fontSize: 20, color: "#666", marginTop: 24 }}>
-              next: {report.tier.next_tier} · {report.tier.pts_to_next} pts
+            <div style={{ display: "flex", fontSize: 20, color: "#666", marginTop: 24 }}>
+              {`next: ${report.tier.next_tier} · ${report.tier.pts_to_next} pts`}
             </div>
           ) : null}
         </div>
@@ -128,6 +116,7 @@ export function OgCard({ report, avatarUrl }: Props) {
         >
           <div
             style={{
+              display: "flex",
               fontSize: 144,
               fontWeight: 700,
               color: accent,
@@ -138,6 +127,7 @@ export function OgCard({ report, avatarUrl }: Props) {
           </div>
           <div
             style={{
+              display: "flex",
               fontSize: 24,
               color: accent,
               opacity: 0.7,
@@ -149,7 +139,6 @@ export function OgCard({ report, avatarUrl }: Props) {
         </div>
       </div>
 
-      {/* Badge row */}
       <div
         style={{ display: "flex", gap: 16, marginTop: 32 }}
         data-testid="og-badge-row"
@@ -158,6 +147,7 @@ export function OgCard({ report, avatarUrl }: Props) {
           <div
             key={b.slug}
             style={{
+              display: "flex",
               padding: "10px 20px",
               background: "rgba(255,255,255,0.05)",
               border: "1px solid rgba(255,255,255,0.08)",
