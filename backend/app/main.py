@@ -15,7 +15,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.auth.dependencies import optional_session
 from app.db.engine import engine
 from app.db.session import get_db
-from app.dependencies import get_report_for_user
+from app.dependencies import get_cache, get_report_for_user
 from app.models import Report
 from app.persistence.analyses import record_run, upsert_analysis
 from app.routers import analyses, auth, me, narrative, share
@@ -71,10 +71,21 @@ async def health() -> dict[str, str]:
             await conn.execute(text("SELECT 1"))
     except Exception:
         db_status = "down"
+
+    cache_status: str
+    cache = get_cache()
+    if cache is None:
+        cache_status = "unconfigured"
+    elif await cache.ping():
+        cache_status = "up"
+    else:
+        cache_status = "down"
+
     return {
-        "status": "ok" if db_status == "up" else "degraded",
+        "status": "ok" if db_status == "up" and cache_status != "down" else "degraded",
         "version": VERSION,
         "db": db_status,
+        "cache": cache_status,
     }
 
 

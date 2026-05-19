@@ -25,3 +25,14 @@ async def test_health_reports_db_status() -> None:
     assert body["status"] in ("ok", "degraded")
     assert body["version"]
     assert "db" in body
+
+
+@pytest.mark.asyncio
+async def test_health_reports_cache_field() -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        r = await ac.get("/health")
+    assert r.status_code == 200
+    body = r.json()
+    assert "cache" in body
+    # Tests run without UPSTASH_REDIS_REST_URL → "unconfigured" is expected.
+    assert body["cache"] in ("up", "down", "unconfigured")

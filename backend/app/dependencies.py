@@ -7,6 +7,7 @@ import httpx
 from fastapi import Depends, HTTPException
 
 from app.auth.dependencies import optional_session
+from app.cache.client import RedisCache
 from app.github.client import GitHubClient
 from app.ingestion.profile import ingest_profile
 from app.models import Report
@@ -23,6 +24,24 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _USERNAME_RE = re.compile(r"^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$")
+
+
+@lru_cache
+def get_cache() -> RedisCache | None:
+    """Process-wide singleton wrapping the configured Upstash Redis client.
+
+    Returns None when `UPSTASH_REDIS_REST_URL` is unset — every cache
+    integration then short-circuits to today's behaviour.
+    """
+    url = settings.upstash_redis_rest_url
+    token = settings.upstash_redis_rest_token
+    if not url or not token:
+        return None
+    try:
+        from upstash_redis.asyncio import Redis  # type: ignore[import-not-found]
+    except ImportError:
+        return None
+    return RedisCache(redis=Redis(url=url, token=token))
 
 
 @lru_cache
