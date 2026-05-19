@@ -88,6 +88,7 @@ export function ResultsView({
   analysisId,
   initialShareSlug,
 }: ResultsViewProps) {
+  const canonicalUsername = report.username;
   const { breakdown } = report;
   const items = [
     {
@@ -163,6 +164,7 @@ export function ResultsView({
           <SaveShareControls
             analysisId={analysisId ?? null}
             initialShareSlug={initialShareSlug ?? null}
+            username={canonicalUsername}
           />
         )}
 
