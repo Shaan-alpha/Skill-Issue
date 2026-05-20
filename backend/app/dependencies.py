@@ -49,7 +49,7 @@ def get_cache() -> RedisCache | None:
 
 @lru_cache
 def get_narrative_cache() -> NarrativeCache:
-    return NarrativeCache()
+    return NarrativeCache(redis=get_cache())
 
 
 @lru_cache

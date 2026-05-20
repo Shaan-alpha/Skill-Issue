@@ -42,7 +42,7 @@ class NarrativeService:
         cache_key = self._cache.key(
             report.username, self._cache.scores_hash(report), mode
         )
-        cached = self._cache.get(cache_key)
+        cached = await self._cache.aget(cache_key)
         if cached is not None:
             logger.info(
                 f"Narrative cache hit for {report.username} ({mode}, score={report.total})"
@@ -78,4 +78,4 @@ class NarrativeService:
 
         # 4. Cache successful result
         full_text = "".join(acc)
-        self._cache.put(cache_key, full_text)
+        await self._cache.aput(cache_key, full_text)
