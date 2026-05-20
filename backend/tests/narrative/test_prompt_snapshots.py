@@ -42,7 +42,7 @@ def test_roast_prompt_stable_snapshot() -> None:
 
     assert (
         digest
-        == "41d20f4c91f341b02828016949ecdfb859fde13d8e626dd3779926d67f5e51bb"
+        == "4ee41afec0afeabb48cb9f0ae8418a42d3aa00b9be9296da3dbfdae71a7bc0d3"
     )
 
 

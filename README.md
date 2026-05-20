@@ -58,7 +58,7 @@ Pre-alpha. Latest shipped release is **v0.7.0** (Backend caching). Live at https
 | [`docs/PRODUCT_VISION.md`](./docs/PRODUCT_VISION.md) | Personality, target users, scoring rubric, voice |
 | [`docs/TECH_STACK.md`](./docs/TECH_STACK.md) | Every library, version pin, and why |
 | [`docs/PROGRESS_LOG.md`](./docs/PROGRESS_LOG.md) | Running narrative log — what was done and why |
-| [`docs/DEPLOY.md`](./docs/DEPLOY.md) | How to ship to Vercel (two-project layout) |
+| [`docs/DEPLOY.md`](./docs/DEPLOY.md) | How to ship to Vercel (single multi-service project + Upstash + Neon walkthrough) |
 | [`docs/superpowers/plans/`](./docs/superpowers/plans/) | TDD sub-plans for each version slice |
 
 ---
