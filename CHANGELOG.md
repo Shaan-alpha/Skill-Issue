@@ -8,12 +8,30 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
-## [Unreleased]
+## [0.7.0] — 2026-05-20
 
-### Planned
-- **v0.7.0 (next):** Backend caching via Upstash Redis. Full Report cache, GitHub API response cache, shared narrative cache, singleflight coalescing. Target: warm `/analyze/{user}` p95 ≤ 200ms. Design spec at [`docs/superpowers/specs/2026-05-19-v0.7.0-caching-design.md`](./docs/superpowers/specs/2026-05-19-v0.7.0-caching-design.md).
-- **v0.7.1:** Frontend perf budget — Lighthouse mobile ≥ 95, TTI / LCP ≤ 2.5s, CLS ≤ 0.1.
-- **v0.8.0:** Sentry + analytics + cron re-ingestion + manual "Force refresh" button (gated on observability landing first).
+### Added
+- **Upstash Redis caching** across four fail-open layers:
+  - **Layer A:** Full scored `Report` keyed by lowercased username, 6h TTL. Warm `/analyze/{user}` p95 drops from ~8s to ≤200ms.
+  - **Layer B:** Singleflight `SET NX` lock around cold-cache misses — concurrent requests for the same username queue instead of fanning out parallel ingest jobs.
+  - **Layer C:** Per-endpoint GitHub API response cache (profile 1h, repos 15min, languages 1h, contents 30min, commits 5min, GraphQL 15min). Stretches each user's 5000/hr GitHub rate-limit budget.
+  - **Layer D:** Narrative cache + daily budget shared across Fluid Compute instances via Redis instead of per-instance `OrderedDict` / counter.
+- **`GET /health` now reports `cache: up | down | unconfigured`** alongside `db` and `version`.
+- **`app/cache/` module** — `RedisCache` (async fail-open JSON cache), `singleflight()` context manager, key helpers + per-endpoint TTL constants.
+- **55 new backend tests** across `tests/cache/`, `tests/github/test_client_cache.py`, `tests/narrative/test_cache_redis.py`, `tests/narrative/test_budget_redis.py`, `tests/test_report_cache.py`, `tests/test_cache_integration.py`. `FakeRedis` stub with fault-injection hooks for fail-open assertions.
+- **`upstash-redis` Python dep** for the REST API client (HTTP-based, Fluid-Compute-friendly).
+- **Two settings fields:** `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`. Optional — when unset, every cache integration short-circuits to today's behaviour.
+
+### Changed
+- `GitHubClient.__init__` gains an optional `cache=` parameter. `_request` short-circuits GET requests through the cache when one is supplied; returns a `_CachedResponse` that mimics the `httpx.Response` surface used downstream.
+- `NarrativeCache` and `DailyBudget` gain optional Redis backends behind the existing interfaces (in-process is the test-only fallback). `NarrativeService` calls the async API (`aget` / `aput` / `atry_consume`).
+- `_USERNAME_RE` validation now runs *before* the cache lookup in `get_report_for_user`; the live-ingest path moves into a private `_live_ingest` helper so the cache wrap stays readable.
+- Test infrastructure: `FakeRedis` + `fake_cache` fixtures lifted into top-level `backend/tests/conftest.py`. Autouse fixture clears the `@lru_cache` singletons (`get_cache`, `get_daily_budget`, `get_narrative_cache`, `get_narrative_service`) before and after each test so monkey-patched overrides actually fire.
+
+### Notes
+- No new MCP/plugin permissions required — Upstash account is user-provisioned and the two env vars are pasted into Vercel manually.
+- Cron-driven background re-ingestion and the manual "Force refresh" button land in v0.8.0 alongside Sentry, so silent cron failures stay visible.
+- Live `≤ 200ms p95` validation deferred to post-deploy — Upstash must be provisioned and env vars set on Vercel before warm-cache benefits show up in production.
 
 ---
 

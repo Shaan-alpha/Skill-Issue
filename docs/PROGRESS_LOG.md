@@ -19,6 +19,53 @@ Format:
 
 ---
 
+## 2026-05-20 — Claude (Opus 4.7) — v0.7.0 shipped (backend caching)
+
+**Slice:** v0.7.0 — Upstash Redis caching across four fail-open layers.
+
+**Done:**
+- All 12 tasks from [`docs/superpowers/plans/2026-05-19-v0.7.0-caching.md`](./superpowers/plans/2026-05-19-v0.7.0-caching.md). Inline execution; ~2h focused with two user-review pauses (after T6, after T11).
+- New `app/cache/` module: `RedisCache` (fail-open JSON cache over `upstash_redis.asyncio.Redis`), `singleflight()` SET-NX lock context manager with poll-wait + three failure modes covered, key helpers + per-endpoint TTL constants.
+- Three call-site integrations:
+  - `GitHubClient._request` short-circuits GET (and the GraphQL POST) through the cache; returns a `_CachedResponse` mimicking the `httpx.Response` surface used downstream. Only 200/404/422 cached; 429/5xx fall through so transient GitHub failures don't poison entries.
+  - `get_report_for_user` wraps the full ingest+score path with Layer A (Report cache, 6h TTL, lowercased username key) + Layer B (singleflight lock, 30s TTL, 25s poll wait). Live ingest extracted into a private `_live_ingest` helper.
+  - `NarrativeCache` and `DailyBudget` gained async APIs (`aget`/`aput`, `atry_consume`) with optional Redis backends behind the existing interfaces — in-process is the test-only fallback. `NarrativeService` calls the async API.
+- 55 new backend tests across `tests/cache/` (test_client 13, test_keys 15, test_locks 6), `tests/github/test_client_cache.py` (6), `tests/narrative/test_cache_redis.py` (4), `tests/narrative/test_budget_redis.py` (4), `tests/test_report_cache.py` (5), `tests/test_cache_integration.py` (2). Full suite: **186 passed**, 3 deselected (DB-fixture tests). Backend ruff clean.
+- `GET /health` reports `cache: up | down | unconfigured`.
+- `FakeRedis` test stub with `fail_next` fault-injection hook lifted into top-level `tests/conftest.py` so every directory can use it. Autouse fixture clears the four `@lru_cache` singletons (`get_cache`, `get_narrative_cache`, `get_daily_budget`, `get_narrative_service`) before + after each test so monkey-patched overrides actually fire.
+- README badges added (release version, license, live URL, status pill + 7-icon stack row: Next.js, React, Tailwind, FastAPI, Python, Neon, Upstash, Groq). Status line updated to v0.7.0; v0.7.1 (frontend perf) marked as the next slice. All other markdowns synced for the new caching layer.
+
+**Decisions:**
+- **REST API over Redis protocol.** Fluid-Compute-friendly (no TCP keepalive concerns), ~5ms RTT well under the perf budget. Single direct dep (`upstash-redis>=1.2`).
+- **Fail-open on every cache layer.** Cache failures log and fall through to the live path; no 5xx ever caused by Redis trouble. Verified end-to-end in `test_cache_integration.py::test_analyze_succeeds_when_every_redis_call_fails` with `fake_redis.fail_next = 10_000` (every call raises).
+- **Lowercased username for the Report cache key.** GitHub logins are case-insensitive in URLs but case-preserved in the API. `Shaan-alpha` and `shaan-alpha` resolve to the same entry — confirmed by test_report_cache.py::test_case_insensitive_username_cache_lookup.
+- **Only 200/404/422 GH responses cached.** 429/5xx fall through so a transient GitHub blip can't poison the cache. Cacheable-status frozenset lives in `app/github/client.py`.
+- **`upstash-redis` library over DIY httpx.** Handles auth headers, retries, error mapping. One extra dep (~80KB). Swap cost is low if it grows tiresome — call sites only consume `RedisCache`, not the raw client.
+- **Singleflight `got=False` is triple-meaning** (another holder ran, we timed out, Redis unreachable). Caller treats all three the same: try the cache once more, fall through to live work otherwise.
+
+**Learned / surprises:**
+- **Edit-tool footgun.** First Edit on `app/github/client.py` truncated through `_request`'s closing line, and because my `old_string` ran to the end of `_request` without a blank-line gap, all the public methods after it got carried into the next edit. Tests caught it immediately (`AttributeError: 'GitHubClient' object has no attribute 'get_user'`). Cleaner to use Write for any restructure that touches more than one block. Memo: when Edit replaces a function and the next block isn't separated by a clear marker, use Write or split into two Edits.
+- **Singleflight test timing inversion.** My initial `test_second_caller_sees_lock_taken` had holder=30ms, waiter max_wait=50ms — the waiter outlived the holder and acquired the released lock (=True), invalidating my `[True, False]` assertion. Fixed by splitting into two tests: holder>waiter for the timeout path, holder<waiter for the patient-acquire path.
+- **happy-dom's `navigator.clipboard` is a getter** — was a v0.6.0 footgun. Different surface from `@lru_cache` here, but the broader lesson holds: assume test-double surfaces are read-only until proven otherwise.
+- **`@lru_cache` singletons silently survive across tests** in pytest because the module isn't reloaded. The autouse fixture in `tests/conftest.py` clears them before AND after each test — clearing only after wasn't enough because a singleton built in test A would still be in scope when test B's monkey-patch fired.
+
+**Verified locally:**
+- `uv run ruff check .` clean.
+- 186/186 backend tests pass (DB-fixture tests deselected — they need `TEST_DATABASE_URL`).
+- Headline assertion: second call to `get_report_for_user("octocat")` skips `_live_ingest` entirely (`test_report_cache.py::test_second_call_hits_cache_not_live_ingest`).
+- Fault-injection: `FakeRedis.fail_next = 10_000` and `/analyze/testuser` still returns 200 with valid Report (`test_cache_integration.py`).
+
+**Blocked / open:**
+- User must provision an Upstash Redis account at https://console.upstash.com, paste `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` into Vercel Preview + Production as Sensitive env vars. Until then, the cache fields all read `unconfigured` and the in-process fallbacks cover narrative + budget; analyze runs cold every time.
+- Live ≤200ms p95 verification deferred to post-deploy.
+
+**Next:**
+- Merge `feat/v0.7.0-caching` to `main` with `--no-ff`; tag `v0.7.0`; push tag; GitHub Release workflow extracts the `[0.7.0]` CHANGELOG section.
+- User provisions Upstash; pastes credentials into Vercel; verifies `GET /health` reports `cache: "up"` and a warm `/analyze` is ≤200ms.
+- v0.7.1 begins: frontend perf budget (Lighthouse mobile ≥ 95, TTI/LCP ≤ 2.5s, CLS ≤ 0.1).
+
+---
+
 ## 2026-05-19 — Claude (Opus 4.7) — v0.6.0 shipped (GitHub Receipts™)
 
 **Slice:** v0.6.0 — shareable OG cards.

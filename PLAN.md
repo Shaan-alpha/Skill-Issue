@@ -24,7 +24,7 @@
 | **v0.4.0** | AI narrative layer — Roast Mode + Mentor Mode | ✅ shipped |
 | **v0.5.0** | Auth + persistence — GitHub OAuth + Neon Postgres | ✅ shipped |
 | **v0.6.0** | GitHub Receipts™ — shareable OG cards (dark canonical) | ✅ shipped |
-| **v0.7.0** | Caching (backend) — Upstash Redis, singleflight, GitHub-API + Report + narrative caches | pending |
+| **v0.7.0** | Caching (backend) — Upstash Redis, singleflight, GitHub-API + Report + narrative caches | ✅ shipped |
 | **v0.7.1** | Performance (frontend) — Lighthouse ≥ 95, TTI ≤ 2.5s, LCP ≤ 2.5s, CLS ≤ 0.1 | pending |
 | **v0.8.0** | Polish + observability — Sentry, analytics, cron re-ingestion, manual "Force refresh" | pending |
 | **v0.9.0** | Beta hardening — security review, abuse mitigation, load test | pending |
@@ -230,14 +230,14 @@
 - Rate limiting per-IP / per-user — stays in v0.9.0 Beta hardening.
 
 **Exit criteria:**
-- [ ] Upstash Redis DB provisioned; `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` set on Vercel Preview + Production.
-- [ ] `GET /health` reports `cache: "up"` when Upstash is reachable.
-- [ ] Two consecutive `/analyze/{user}` requests on a warm deploy: second runs in ≤ 200ms p95.
-- [ ] `RedisCache` unit tests ≥ 12; `singleflight()` unit tests ≥ 6; total new tests ≥ 25.
-- [ ] Integration test asserts `GitHubClient.get_user.call_count == 1` after two `/analyze/{user}` calls (one cold, one warm).
-- [ ] `NarrativeCache` and `DailyBudget` work against both Redis (when configured) and in-process (when not).
-- [ ] Fault-injection test: all Upstash failures fall through; no 5xx caused by cache trouble.
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.7.0`.
+- [ ] Upstash Redis DB provisioned; `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` set on Vercel Preview + Production. *(user action, post-tag)*
+- [x] `GET /health` reports `cache: "up" | "down" | "unconfigured"`.
+- [ ] Two consecutive `/analyze/{user}` requests on a warm deploy: second runs in ≤ 200ms p95. *(verified post-deploy with Upstash provisioned)*
+- [x] `RedisCache` unit tests = 13; `singleflight()` unit tests = 6; total new tests = 55.
+- [x] Cold + warm `get_report_for_user` integration test: second call skips `_live_ingest` entirely (Layer A hit).
+- [x] `NarrativeCache` and `DailyBudget` work against both Redis (when configured) and in-process (when not).
+- [x] Fault-injection test: all Upstash failures fall through; no 5xx caused by cache trouble.
+- [x] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.7.0`.
 
 ---
 

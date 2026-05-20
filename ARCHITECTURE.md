@@ -54,9 +54,17 @@
               │  │   signal-driven badges                   │  │
               │  └──────────────────────────────────────────┘  │
               │  ┌──────────────────────────────────────────┐  │
-              │  │ Narrative formatter (OpenAI, mode-aware) │  │
+              │  │ Narrative formatter (Groq, mode-aware)   │  │
               │  │   - receives score JSON, never raw data  │  │
               │  │   - streams SSE back to frontend         │  │
+              │  └──────────────────────────────────────────┘  │
+              │  ┌──────────────────────────────────────────┐  │
+              │  │ app/cache/ — Upstash Redis layer (v0.7.0)│  │
+              │  │   Layer A: Report cache (6h TTL)         │  │
+              │  │   Layer B: singleflight SET-NX lock      │  │
+              │  │   Layer C: GH API cache (per-endpoint)   │  │
+              │  │   Layer D: narrative + daily budget      │  │
+              │  │   Every layer is fail-open.              │  │
               │  └──────────────────────────────────────────┘  │
               └────────────────────────────────────────────────┘
                                 │              │
@@ -64,10 +72,11 @@
                   ▼                                          ▼
         ┌──────────────────┐                   ┌─────────────────────┐
         │ Upstash Redis    │                   │ Neon Postgres        │
-        │ - GH API cache   │                   │ - users               │
-        │ - score cache    │                   │ - analyses + runs    │
-        │ - narrative cache│                   │ - narratives          │
-        │ - rate limits    │                   │ - share tokens        │
+        │ - Report cache   │                   │ - users               │
+        │ - GH API cache   │                   │ - sessions            │
+        │ - narrative cache│                   │ - analyses + runs    │
+        │ - daily budget   │                   │ - narratives          │
+        │ - singleflight   │                   │                       │
         └──────────────────┘                   └─────────────────────┘
                                 │
                                 ▼
@@ -90,14 +99,16 @@
 - **Routes:**
   - `/` — landing
   - `/u/[username]` — results (tier ladder, position bar, badges, score matrix)
-  - `/u/[username]/card` — shareable OG card render (v0.7.0)
+  - `/u/[username]/card` — shareable OG card preview page with Copy/Download/Copy-URL actions (v0.6.0)
+  - `/u/[username]/opengraph-image` + `/u/[username]/twitter-image` — auto-wired 1200×630 PNGs via Next 16 file conventions (v0.6.0)
+  - `/share/[slug]` — public read-only view + matching OG/Twitter image routes
   - `/me` — authenticated history (v0.5.0+)
-  - `/api/*` — proxies and OG image generation only; analysis itself lives on FastAPI
-- **State:** server-driven by default; React Query / SWR only where client polling/streaming demands it.
+- **State:** server-driven by default; `useSyncExternalStore` for the localStorage-backed `useSession()` and mode-preference hooks (avoids React 19's `react-hooks/set-state-in-effect` rule).
+- **Tests:** Vitest 3 + happy-dom + Testing Library (added in v0.6.0). 22 frontend tests cover the OG palette, data fetchers, OgCard component, and CardActions interactions.
 
 ### Backend — `backend/` (FastAPI)
 
-- **Layers:** `app/ingestion/`, `app/scoring/` (which contains `tiers.py`, `badges.py`, `depth.py`, `engine.py` + per-bucket scorers), `app/github/`, `app/narrative/` (v0.4.0), `app/db/` (v0.5.0), `app/cache/` (v0.8.0).
+- **Layers:** `app/ingestion/`, `app/scoring/` (which contains `tiers.py`, `badges.py`, `depth.py`, `engine.py` + per-bucket scorers), `app/github/`, `app/narrative/` (v0.4.0), `app/db/` + `app/auth/` + `app/persistence/` (v0.5.0), `app/cache/` (v0.7.0).
 - **Concurrency:** `asyncio` end to end; `httpx.AsyncClient` for outbound; no blocking I/O in the request path.
 - **GitHub access:** REST + GraphQL via a single typed client that handles rate-limit headers, retries with jitter, and conditional requests (`If-None-Match`).
 - **Scoring contract:** every scorer is `def score(profile: Profile) -> ScoreResult` where `ScoreResult` carries `points: int`, `max_points: int`, and `evidence: list[Evidence]`. Evidence is what the UI displays under "Why this score" — never hand-waved.
@@ -116,26 +127,32 @@ Schema sketch (finalized in v0.5.0):
 - `narratives(id, run_id, mode, text, model, cost_cents)`
 - `share_tokens(id, analysis_id, token, expires_at)`
 
-### Cache — Upstash Redis
+### Cache — Upstash Redis (v0.7.0)
 
-- `gh:rest:{etag}` → response body (conditional revalidation)
-- `gh:gql:{hash}` → response body (TTL 10m)
-- `score:{username}:{etag-bundle}` → ScoreReport
-- `narr:{username}:{mode}:{score-hash}` → narrative text
-- `ratelimit:ip:{ip}` and `ratelimit:user:{id}` → token buckets
+Four fail-open layers; every operation swallows Redis exceptions and falls through to the live path. The cache is never a correctness boundary.
 
-### Auth — GitHub OAuth
+| Layer | Key | TTL | Purpose |
+| --- | --- | --- | --- |
+| **A. Report** | `si:v1:report:<lowercased-username>` | 6h | Full scored `Report` JSON. Warm `/analyze/{user}` p95 ≤ 200ms. |
+| **B. Singleflight lock** | `si:v1:lock:report:<lowercased-username>` | 30s | `SET NX` lock around cold-cache ingest; waiters poll every 200ms for up to 25s. |
+| **C. GitHub API responses** | `si:v1:gh:<METHOD>:<sha256(url+params+body)>` | per-endpoint (commits 5m, repos 15m, profile/languages 1h, contents 30m, GraphQL 15m) | Per-request caching to stretch the 5000/hr GH rate-limit budget. Only 200/404/422 cached; 429/5xx fall through. |
+| **D. Narrative + daily budget** | `si:v1:narrative:<username>:<scores_hash>:<mode>` (24h) + `si:v1:budget:narrative:<UTC-day>` (25h) | varies | Shared narrative cache and shared `INCR`-based daily counter — works correctly across Fluid Compute instances. |
 
-- Server-side OAuth code flow (no PKCE-only). State in httpOnly signed cookies.
+Bumping `KEY_PREFIX` in `app/cache/client.py` invalidates every namespace at once.
+
+### Auth — GitHub OAuth (v0.5.0)
+
+- Server-side OAuth code flow (no PKCE — GitHub OAuth Apps don't support it). State in a short-lived httpOnly cookie.
 - We request `read:user` and `public_repo` only. Never `repo` (we do not need private data) and never `admin:*`.
-- Token storage: short-lived session JWT containing user id; the actual GitHub token is encrypted at rest and used only server-side.
+- Token storage: **server-side opaque session** cookie (`secrets.token_urlsafe(32)`); the GitHub access token is **AES-GCM encrypted at rest** in the `sessions` row with a per-environment `SESSION_TOKEN_ENC_KEY`.
+- Signed-in `/analyze` uses the user's GitHub token for ingestion, giving each user a dedicated 5000/hr rate-limit budget.
 
-### AI — OpenAI
+### AI — Groq (OpenAI-compatible)
 
-- Client wrapped behind `narrative/llm.py` so swapping providers (Anthropic, local) is a single-file change.
-- Default model: latest GPT class for narrative; cheap small model for short summaries.
-- Strict prompt templates per mode; all prompts version-controlled and regression-tested.
-- Cost guardrails: per-request budget, per-day project budget, alerting via Sentry.
+- Client wrapped behind `narrative/llm.py` so swapping providers is a single-file change. Accepts `base_url` for any OpenAI-compatible endpoint.
+- Default model: **Groq `llama-3.3-70b-versatile`** (free tier, 30 RPM, 14,400 RPD, ~95% GPT-4o quality on creative writing). Configured via `NARRATIVE_BASE_URL=https://api.groq.com/openai/v1` + `NARRATIVE_MODEL=llama-3.3-70b-versatile`.
+- Strict prompt templates per mode; all prompts version-controlled, regression-tested via committed snapshots in `tests/narrative/test_prompt_snapshots.py`.
+- Cost guardrails: per-request `max_tokens` cap, daily request budget (`NARRATIVE_DAILY_LIMIT`, default 50, **shared across instances via Upstash since v0.7.0**), deterministic on-voice fallback narrative when the budget is exhausted (`[AI narrator offline — daily cap reached]`) or upstream errors (`[AI narrator offline — upstream hiccup]`).
 
 ---
 
@@ -159,16 +176,13 @@ These are **development-time accelerators**, not runtime dependencies. None of t
 
 ---
 
-## Deployment topology (target)
+## Deployment topology (current)
 
-- **Frontend:** Vercel (Next.js 16 native).
-- **Backend:** **Vercel Functions (Fluid Compute)** — locked 2026-05-15. Same dashboard as the frontend, OIDC env handoff, native marketplace integration with Neon + Upstash. Implications we will design around:
-  - Function duration caps → ingestion must stream progress and avoid cold-path > 5min work; long re-ingestion runs in v0.8.0 use Vercel Cron + chunked work, not a single long invocation.
-  - Cold starts → keep imports lean in the request path; warm critical routes with cron pings if needed.
-  - Python on Vercel is fully supported but second-class vs. Node — pin runtime versions explicitly in `vercel.json`.
-- **DB:** Neon Postgres (branch-per-PR for migrations).
-- **Cache:** Upstash Redis (region-paired with backend).
-- **Secrets:** Vercel env + 1Password references. Never committed.
+- **Single Vercel project** hosts both frontend and backend via `experimentalServices` in the root `vercel.json` (locked 2026-05-18). Frontend serves at `/`; backend mounted at `/_/backend/*`.
+- **Compute:** Vercel Functions (Fluid Compute) — function instances reused across concurrent requests, ~300s default timeout, OIDC env handoff.
+- **DB:** Neon Postgres via the Vercel Marketplace integration (auto-injects `DATABASE_URL` + variants). URL normaliser in `app/db/engine.py` strips libpq-only query params (`sslmode`, `channel_binding`, etc.) asyncpg doesn't accept.
+- **Cache:** Upstash Redis (user-provisioned, **not** Marketplace). Two Sensitive env vars pasted into Vercel manually: `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`.
+- **Secrets:** Vercel env (marked Sensitive). Never committed.
 
 ---
 
@@ -176,7 +190,9 @@ These are **development-time accelerators**, not runtime dependencies. None of t
 
 These are explicitly unresolved. Decisions get logged in [`docs/PROGRESS_LOG.md`](./docs/PROGRESS_LOG.md) when made.
 
-1. **ORM** — SQLModel vs. SQLAlchemy + Alembic vs. Drizzle (if Node-side). Decision in v0.5.0.
-2. **Streaming framework** — SSE vs. WebSocket vs. Vercel AI SDK helpers. Decision in v0.4.0.
-3. **Background ingestion** — cron on Vercel vs. Inngest vs. self-hosted. Decision in v0.8.0.
-4. **OG image runtime** — `@vercel/og` (edge) vs. Satori-on-Node. Decision in v0.7.0.
+1. ~~**ORM**~~ — Resolved in v0.5.0: **SQLAlchemy 2.0 async + asyncpg + Alembic.**
+2. ~~**Streaming framework**~~ — Resolved in v0.4.0: **SSE.**
+3. ~~**OG image runtime**~~ — Resolved in v0.6.0: **`next/og` `ImageResponse` (satori-based).**
+4. ~~**Cache provider**~~ — Resolved in v0.7.0: **Upstash Redis via the REST API.**
+5. **Background ingestion** — cron on Vercel vs. Inngest vs. Vercel Queues. Decision in v0.8.0 alongside Sentry.
+6. **Production domain** — pre-v1.0.
