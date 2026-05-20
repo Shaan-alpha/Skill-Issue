@@ -42,7 +42,7 @@ class NarrativeService:
         cache_key = self._cache.key(
             report.username, self._cache.scores_hash(report), mode
         )
-        cached = self._cache.get(cache_key)
+        cached = await self._cache.aget(cache_key)
         if cached is not None:
             logger.info(
                 f"Narrative cache hit for {report.username} ({mode}, score={report.total})"
@@ -51,7 +51,7 @@ class NarrativeService:
             return
 
         # 2. Check budget
-        allowed, _remaining, _resets_at = self._budget.try_consume()
+        allowed, _remaining, _resets_at = await self._budget.atry_consume()
         if not allowed:
             logger.warning(
                 f"Daily OpenAI budget exhausted. Using fallback narrative for {report.username} ({mode})"
@@ -78,4 +78,4 @@ class NarrativeService:
 
         # 4. Cache successful result
         full_text = "".join(acc)
-        self._cache.put(cache_key, full_text)
+        await self._cache.aput(cache_key, full_text)

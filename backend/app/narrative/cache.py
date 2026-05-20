@@ -1,20 +1,36 @@
 import hashlib
 import json
 from collections import OrderedDict
+from typing import TYPE_CHECKING
 
+from app.cache.keys import NAMESPACE_NARRATIVE, TTL_NARRATIVE_SECONDS
 from app.models import Report
+
+if TYPE_CHECKING:
+    from app.cache.client import RedisCache
 
 
 class NarrativeCache:
-    """In-process LRU mapping (username, scores_hash, mode) -> narrative text.
+    """LRU mapping (username, scores_hash, mode) -> narrative text.
 
-    Keys are the *complete* narrative the LLM produced. Re-streams synthesise
-    SSE events from the cached string in `service.py`.
+    With `redis=None`, the cache is an in-process OrderedDict (256 entries).
+    With a `RedisCache`, lookups go to Upstash with a 24h TTL — entries are
+    shared across Fluid Compute instances.
+
+    The synchronous get/put API is preserved for backwards compatibility with
+    the existing NarrativeService tests; the async aget/aput methods are
+    preferred for new call sites because they can hit Redis.
     """
 
-    def __init__(self, max_entries: int = 256) -> None:
+    def __init__(
+        self,
+        max_entries: int = 256,
+        *,
+        redis: "RedisCache | None" = None,
+    ) -> None:
         self._store: OrderedDict[str, str] = OrderedDict()
         self._max = max_entries
+        self._redis = redis
 
     @staticmethod
     def key(username: str, scores_hash: str, mode: str) -> str:
@@ -44,6 +60,29 @@ class NarrativeCache:
             sort_keys=True,
         )
         return hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+    # --- Async API (preferred — hits Redis when configured) ---
+
+    async def aget(self, key: str) -> str | None:
+        if self._redis is not None:
+            value = await self._redis.get_json(NAMESPACE_NARRATIVE, key)
+            if isinstance(value, str):
+                return value
+            return None
+        return self.get(key)
+
+    async def aput(self, key: str, value: str) -> None:
+        if self._redis is not None:
+            await self._redis.set_json(
+                NAMESPACE_NARRATIVE,
+                key,
+                value,
+                ttl_seconds=TTL_NARRATIVE_SECONDS,
+            )
+            return
+        self.put(key, value)
+
+    # --- Sync API (in-process fallback only) ---
 
     def get(self, key: str) -> str | None:
         if key not in self._store:

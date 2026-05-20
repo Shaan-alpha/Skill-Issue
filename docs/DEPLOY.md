@@ -1,104 +1,139 @@
 # Deploy
 
-> How to ship **Skill Issue** to Vercel. Required reading for the v0.2.0 preview URL exit criterion (and for every later slice that touches deploy).
+> How to ship **Skill Issue** to Vercel. Updated for the v0.5.0 single-Vercel-project layout + v0.7.0 Upstash caching.
 
-## Layout
+## Current layout
 
-Two separate Vercel projects, both pointing at this monorepo with different **Root Directory** settings:
+**One Vercel project** hosts both services via `experimentalServices` in the root `vercel.json`. Locked 2026-05-18.
 
-| Vercel project | Root | What ships | Framework |
-| --- | --- | --- | --- |
-| `skill-issue-frontend` | `frontend/` | Next.js 16 app | Next.js (auto-detected) |
-| `skill-issue-backend` | `backend/` | FastAPI on Vercel Functions (Python) | Other (uses `backend/vercel.json`) |
+| URL prefix | Service | What it is |
+| --- | --- | --- |
+| `/` | `frontend` | Next.js 16 App Router |
+| `/_/backend/*` | `backend` | FastAPI on Vercel Functions (Python 3.12) |
 
-Two projects keeps deploys independent, simplifies framework detection, and matches the version slices in [`PLAN.md`](../PLAN.md). A monorepo single-project move is on the table when v0.5.0 brings shared auth, but premature for v0.3.0.
+The previous two-project setup (`skill-issue-frontend` + `skill-issue-backend`) was retired in v0.5.0 — one project, one dashboard, one log stream.
 
-## One-time setup (~10 min)
+## One-time setup
 
-You only do this once per project. After this, every git push deploys a preview automatically.
+You only do this once. After it, every git push deploys a preview automatically; every push to `main` ships production.
 
-### Backend project
+### 1. Create the Vercel project
 
 1. <https://vercel.com/new> → **Import Git Repository** → pick `Shaan-alpha/Skill-Issue`.
-2. Configure:
-   - **Project name:** `skill-issue-backend`
-   - **Root Directory:** `backend`
-   - **Framework Preset:** Other
-   - **Build Command:** leave blank (Vercel reads `backend/vercel.json`)
-3. **Environment Variables** (Production, Preview, *and* Development):
-   - `GITHUB_TOKEN` — your GitHub PAT (the value currently in `backend/.env`).
-   - `OPENAI_API_KEY` — your OpenAI API key for streaming Roast/Mentor modes.
-   - `CORS_ALLOW_ORIGINS` — `http://localhost:3000,https://skill-issue-frontend.vercel.app`
-   - `CORS_ALLOW_ORIGIN_REGEX` — `https://skill-issue-frontend(-[a-z0-9-]+)?\.vercel\.app` (allows every preview URL of the frontend project, nothing else on `vercel.app`).
-4. **Deploy.** First deploy installs `backend/requirements.txt` and exposes `backend/api/index.py` (which re-exports the FastAPI app).
-5. Copy the production URL — likely `https://skill-issue-backend.vercel.app`.
+2. **Root Directory:** repo root (the `vercel.json` at the root declares both services).
+3. **Framework Preset:** Other (services declared in `vercel.json`).
+4. **Deploy.** Vercel reads `vercel.json` → builds `frontend/` as Next.js, builds `backend/` as a Python function.
 
-### Frontend project
+### 2. Provision the integrations
 
-1. <https://vercel.com/new> → **Import Git Repository** → same repo.
-2. Configure:
-   - **Project name:** `skill-issue-frontend`
-   - **Root Directory:** `frontend`
-   - **Framework Preset:** Next.js (auto-detected)
-3. **Environment Variables** (Production + Preview):
-   - `NEXT_PUBLIC_BACKEND_URL` — the backend production URL from the previous step.
-4. **Deploy.**
+#### Neon Postgres (Marketplace integration — recommended)
 
-## Ongoing flow
+1. Vercel dashboard → **Storage** → **Create** → **Neon**.
+2. Connect to this project. Vercel auto-injects: `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `POSTGRES_URL`, `PGHOST`, `NEON_PROJECT_ID`.
+3. Manually add `DATABASE_DIRECT_URL` as a copy of `DATABASE_URL_UNPOOLED` (the backend's `Settings.database_direct_url` reads it under that name).
 
-- Every push to `main` ships **production** on both projects.
-- Every push to any other branch ships a **preview** on both projects.
-- Backend preview URLs hit the frontend preview URLs through the `CORS_ALLOW_ORIGIN_REGEX` pattern — no per-deploy env-var dance needed.
+#### Upstash Redis (manual — **not** Marketplace as of v0.7.0)
 
-## Updating `requirements.txt`
+1. Create an account at https://console.upstash.com (free tier covers our load: 10k commands/day, 256MB).
+2. Create a Redis database. Pick the region closest to your Vercel region (Washington, D.C. for `iad1`).
+3. Open the database → **REST API** panel → copy `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`.
+4. Vercel dashboard → **Settings** → **Environment Variables**. Add both to **Production** and **Preview**, marked **Sensitive**.
 
-`backend/requirements.txt` is a derived artifact, regenerated from `pyproject.toml`:
+When the cache env vars are unset, the backend short-circuits every cache integration — the app still works, just without warm-cache benefits.
 
-```bash
+### 3. Register the GitHub OAuth App
+
+1. https://github.com/settings/applications/new
+2. Homepage URL: `https://<your-vercel-host>`
+3. Authorization callback URL: `https://<your-vercel-host>/_/backend/auth/callback` (note the `/_/backend/` prefix — the multi-service deploy mounts the backend there).
+4. Copy the Client ID and Client Secret.
+
+### 4. Set the remaining env vars
+
+In Vercel → **Settings** → **Environment Variables**, add (Production + Preview, marked Sensitive where applicable):
+
+| Variable | Value | Sensitive? |
+| --- | --- | --- |
+| `GITHUB_TOKEN` | A GitHub PAT for anonymous-ingest fallback | ✅ |
+| `GITHUB_OAUTH_CLIENT_ID` | from step 3 | ✅ |
+| `GITHUB_OAUTH_CLIENT_SECRET` | from step 3 | ✅ |
+| `OAUTH_REDIRECT_URL` | `https://<your-vercel-host>/_/backend/auth/callback` | ✅ |
+| `SESSION_TOKEN_ENC_KEY` | 32 random bytes, base64. Generate: `python -c "import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())"` | ✅ |
+| `COOKIE_SECURE` | `true` (HTTPS-only cookies in production) | — |
+| `CORS_ALLOW_ORIGINS` | `https://<your-vercel-host>` | — |
+| `NEXT_PUBLIC_BACKEND_URL` | `https://<your-vercel-host>/_/backend` | — |
+| `NARRATIVE_MODEL` | `llama-3.3-70b-versatile` (Groq default) | — |
+| `NARRATIVE_BASE_URL` | `https://api.groq.com/openai/v1` (or empty for OpenAI) | — |
+| `OPENAI_API_KEY` | Your Groq API key (it's an OpenAI-compatible endpoint) | ✅ |
+| `UPSTASH_REDIS_REST_URL` | from step 2 (Upstash) | ✅ |
+| `UPSTASH_REDIS_REST_TOKEN` | from step 2 (Upstash) | ✅ |
+
+### 5. Run the initial Alembic migration
+
+The DB schema lives in `backend/migrations/`. Pulling the prod `DATABASE_DIRECT_URL` locally (or pasting it once into a shell session — don't persist it) is the safe way to run migrations:
+
+```powershell
+# PowerShell — one-shot, the env var dies with the shell:
+$env:DATABASE_DIRECT_URL = "<paste DATABASE_URL_UNPOOLED from Vercel>"
 cd backend
-uv export --no-hashes --no-emit-project --no-dev --format requirements-txt > requirements.txt
+uv run alembic upgrade head
 ```
 
-Regenerate it whenever you add or remove a runtime dependency. Until v0.9.0 introduces CI to enforce this, the developer who bumps a dep is responsible for committing both files.
+Or via `vercel env pull` if you don't have Sensitive vars locked down (they return empty strings by default for security).
+
+After the first migration: every subsequent push that includes a new migration runs it automatically against Vercel's connected Neon branch — **wait, no.** We don't auto-run migrations. The agent or user runs `alembic upgrade head` manually as the immediately-next action after deploying schema-changing commits.
 
 ## Verifying a deploy
 
-After both projects are deployed:
-
 ```bash
-# Health check
-curl https://skill-issue-backend.vercel.app/health
-# -> {"status":"ok","version":"0.4.0"}
+# Health — should report db=up and cache=up after Upstash is provisioned
+curl https://<your-vercel-host>/_/backend/health
+# -> {"status":"ok","version":"0.7.0","db":"up","cache":"up"}
 
-# Real analyze (warm; cold may take longer due to Python cold start)
-curl https://skill-issue-backend.vercel.app/analyze/octocat
+# Anonymous analyze
+curl https://<your-vercel-host>/_/backend/analyze/octocat
 
-# Real narrative stream (SSE)
-curl -N "https://skill-issue-backend.vercel.app/narrative/octocat?mode=roast"
+# OG image (auto-wired by Next 16 file convention)
+curl -o /tmp/og.png https://<your-vercel-host>/u/octocat/opengraph-image
+file /tmp/og.png  # PNG image data, 1200 x 630
 
-# Frontend
-open https://skill-issue-frontend.vercel.app
+# Narrative stream (SSE)
+curl -N "https://<your-vercel-host>/_/backend/narrative/octocat?mode=roast"
 ```
+
+If the analyze route 500s, hit `Vercel dashboard → Runtime Logs` for the backend service — the FastAPI traceback shows up there.
 
 If the frontend results page shows the **Analysis failed** boundary:
 
-1. Open the frontend deployment in the Vercel dashboard → **Runtime Logs**. The page throw should show the actual HTTP status from the backend.
-2. Confirm `NEXT_PUBLIC_BACKEND_URL` is set on the frontend project and matches the backend URL.
-3. Confirm the backend has `GITHUB_TOKEN` and `OPENAI_API_KEY` and isn't returning 500.
+1. Confirm `NEXT_PUBLIC_BACKEND_URL` is set correctly.
+2. Confirm `GITHUB_TOKEN` is set on the backend.
+3. Check `/health` reports `db=up` and `cache=up` (or `unconfigured` for cache — that's fine).
 
-If the browser console shows a CORS error:
+If a CORS error appears in the browser console:
 
-1. Check the backend's deployed `CORS_ALLOW_ORIGINS` and `CORS_ALLOW_ORIGIN_REGEX`.
-2. Open the response in DevTools → Network → look at the `Access-Control-Allow-Origin` header.
+1. Check `CORS_ALLOW_ORIGINS` matches the frontend origin exactly.
+2. Vercel sometimes assigns preview deploys to subdomains; `CORS_ALLOW_ORIGIN_REGEX` covers that pattern.
 
-## Known limits as of v0.4.0
+## Cache verification (v0.7.0)
 
-- **First-paint LCP is bottlenecked by the GitHub ingestion** (~5–10s warm, longer on Vercel cold start; Senior+ profiles add another ~20–40 HTTP calls for tier-gated depth enrichment). This is fundamental until v0.8.0 adds Upstash Redis caching of `/analyze` responses. Lighthouse Performance will reflect this — that's why the explicit Lighthouse exit criterion now lives in v0.9.0 (Polish + observability).
-- **No rate limiting.** Anyone can hit `/analyze` and burn through your GitHub token budget. v0.10.0 territory.
-- **No auth.** Public read-only API. Add `read:user` GitHub OAuth in v0.5.0.
+After Upstash is provisioned:
 
-## What's intentionally not here yet
+```bash
+# Two consecutive analyze calls — second should be substantially faster
+time curl -s -o /dev/null https://<your-vercel-host>/_/backend/analyze/octocat
+time curl -s -o /dev/null https://<your-vercel-host>/_/backend/analyze/octocat
+```
 
-- **Neon Postgres + Upstash Redis** integration via the Vercel Marketplace — v0.5.0 (Postgres) and v0.8.0 (Redis).
-- **Cron jobs** for background re-ingestion — v0.8.0.
-- **Custom domain** — v1.0.0.
+Cold call: ~5-8s. Warm call (cached): ≤200ms p95 target. If the warm call isn't fast, check `/health` for `cache: "up"` and verify the env vars survived the deploy.
+
+## Known limits as of v0.7.0
+
+- **No rate limiting.** Anyone can hit `/analyze` and burn through the ingestion budget. v0.9.0 territory (Beta hardening).
+- **No Sentry / structured logging.** Errors are visible in Vercel Runtime Logs only. v0.8.0 adds Sentry + analytics.
+- **No background re-ingestion.** Saved analyses don't auto-refresh — users see the cached Report until its 6h TTL expires. v0.8.0 adds a cron + manual "Force refresh" button (paired with Sentry so silent failures are visible).
+- **Custom domain** — pre-v1.0.
+
+## What's intentionally not here
+
+- A `requirements.txt` step — Vercel reads `backend/pyproject.toml` directly via `uv` since v0.5.0.
+- The retired two-project layout — see git history for `feat/v0.5.0-auth-persistence` if you need to reconstruct it.

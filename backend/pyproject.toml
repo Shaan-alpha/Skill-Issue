@@ -19,6 +19,7 @@ dependencies = [
     "pydantic>=2",
     "pydantic-settings>=2.14.1",
     "sqlalchemy[asyncio]>=2.0,<2.1",
+    "upstash-redis>=1.2",
     "uvicorn[standard]>=0.47.0",
 ]
 

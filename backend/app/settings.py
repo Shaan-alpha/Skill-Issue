@@ -1,6 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-VERSION = "0.6.0"
+VERSION = "0.7.0"
 
 
 class Settings(BaseSettings):
@@ -33,6 +33,14 @@ class Settings(BaseSettings):
     session_ttl_days: int = 30
     cookie_domain: str | None = None
     cookie_secure: bool = False
+
+    # v0.7.0 — caching
+    upstash_redis_rest_url: str | None = None
+    upstash_redis_rest_token: str | None = None
+    # 6 hours — Report cache.
+    cache_report_ttl_seconds: int = 21_600
+    # 15 minutes — fallback TTL for layers that don't pick a specific one.
+    cache_default_ttl_seconds: int = 900
 
 
 settings = Settings()

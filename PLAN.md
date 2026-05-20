@@ -24,8 +24,9 @@
 | **v0.4.0** | AI narrative layer — Roast Mode + Mentor Mode | ✅ shipped |
 | **v0.5.0** | Auth + persistence — GitHub OAuth + Neon Postgres | ✅ shipped |
 | **v0.6.0** | GitHub Receipts™ — shareable OG cards (dark canonical) | ✅ shipped |
-| **v0.7.0** | Caching + performance — Upstash Redis, rate-limit hygiene | pending |
-| **v0.8.0** | Polish + observability — analytics, error tracking, perf budget | pending |
+| **v0.7.0** | Caching (backend) — Upstash Redis, singleflight, GitHub-API + Report + narrative caches | ✅ shipped |
+| **v0.7.1** | Performance (frontend) — Lighthouse ≥ 95, TTI ≤ 2.5s, LCP ≤ 2.5s, CLS ≤ 0.1 | pending |
+| **v0.8.0** | Polish + observability — Sentry, analytics, cron re-ingestion, manual "Force refresh" | pending |
 | **v0.9.0** | Beta hardening — security review, abuse mitigation, load test | pending |
 | **v1.0.0** | Public launch | pending |
 
@@ -208,20 +209,54 @@
 
 ---
 
-## v0.7.0 — Caching + performance
+## v0.7.0 — Caching + performance (backend)
 
-**Goal:** Repeat analyses are free and fast.
+**Goal:** Repeat analyses are free and fast. A warm `/analyze/{user}` drops from ~8s to ≤200ms p95.
+
+**Design spec:** [`docs/superpowers/specs/2026-05-19-v0.7.0-caching-design.md`](./docs/superpowers/specs/2026-05-19-v0.7.0-caching-design.md).
 
 **Slice scope:**
-- Upstash Redis cache for: GitHub API responses (TTL per endpoint), score reports, LLM narratives
-- Background re-ingestion for users with saved analyses (cron)
-- Coalescing of concurrent requests for the same username
-- Frontend perf budget: TTI ≤ 2.5s on 3G, CLS ≤ 0.1, LCP ≤ 2.5s
+- **Upstash Redis** (user-provisioned account, env vars pasted into Vercel manually — no Marketplace integration). REST API via the `upstash-redis` Python package.
+- **Layer A — Full Report cache** keyed by lowercased username, TTL 6h. The biggest user-facing latency win.
+- **Layer B — Singleflight lock** keyed by `lock:report:<user>` (TTL 30s, poll wait 25s) so concurrent cold-cache requests for the same username don't fan out into duplicate ingest jobs.
+- **Layer C — GitHub API response cache** keyed by URL+params hash, per-endpoint TTLs (`/users/{u}` 1h, repos 15min, languages 1h, contents 30min, commits 5min, GraphQL 15min). Stretches the 5000/hr per-user GH rate-limit budget.
+- **Layer D — Narrative cache + daily budget shared via Upstash** so cache hits work across Fluid Compute instances and the daily quota is enforced globally rather than per-instance.
+- **Fail-open** on every cache layer — any Upstash error logs and falls through to the live path. The cache is a perf optimisation, never a correctness boundary.
+- `GET /health` reports `cache: "up" | "down"` so a flapping Redis surfaces at the front door.
+
+**Out of scope (deferred):**
+- Frontend perf budget (TTI / LCP / CLS) — moved to **v0.7.1** as a focused frontend slice.
+- Cron-driven background re-ingestion + manual "Force refresh" button — moved to **v0.8.0** where Sentry lands; silent cron failures need observability first.
+- Rate limiting per-IP / per-user — stays in v0.9.0 Beta hardening.
 
 **Exit criteria:**
-- [ ] p95 latency for a cached analysis ≤ 200ms end-to-end
-- [ ] Lighthouse mobile performance ≥ 95 on `/u/[username]`
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.7.0`
+- [ ] Upstash Redis DB provisioned; `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` set on Vercel Preview + Production. *(user action, post-tag)*
+- [x] `GET /health` reports `cache: "up" | "down" | "unconfigured"`.
+- [ ] Two consecutive `/analyze/{user}` requests on a warm deploy: second runs in ≤ 200ms p95. *(verified post-deploy with Upstash provisioned)*
+- [x] `RedisCache` unit tests = 13; `singleflight()` unit tests = 6; total new tests = 55.
+- [x] Cold + warm `get_report_for_user` integration test: second call skips `_live_ingest` entirely (Layer A hit).
+- [x] `NarrativeCache` and `DailyBudget` work against both Redis (when configured) and in-process (when not).
+- [x] Fault-injection test: all Upstash failures fall through; no 5xx caused by cache trouble.
+- [x] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.7.0`.
+
+---
+
+## v0.7.1 — Performance (frontend)
+
+**Goal:** The `/u/[username]` page hits Lighthouse mobile ≥ 95 and meets a Core Web Vitals budget on 4G.
+
+**Slice scope:**
+- Lighthouse mobile audit on `/u/[username]` (signed-out + signed-in) and `/share/[slug]`.
+- Frontend perf wins: image sizing on avatars, font-display strategy, lazy `framer-motion` LazyMotion already in place — audit + tune, don't rewrite.
+- Bundle-size pass: check what's in the initial JS for `/u/[username]` and trim if a route is pulling unneeded vendor code.
+- `cache: "force-cache"` and Next 16 `unstable_cache` (or the new cache-components API) where appropriate for static data.
+- TTI / LCP / CLS measurement automated via Lighthouse CI on Vercel preview deploys (optional — fine to manual-measure if CI integration is heavy).
+
+**Exit criteria:**
+- [ ] Lighthouse mobile performance ≥ 95 on `/u/{user}` and `/share/{slug}`.
+- [ ] TTI ≤ 2.5s on 4G (Vercel Speed Insights or PageSpeed Insights run).
+- [ ] LCP ≤ 2.5s and CLS ≤ 0.1.
+- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.7.1`.
 
 ---
 
@@ -236,6 +271,8 @@
 - 404 / 500 / rate-limit pages with on-voice copy
 - Accessibility audit (axe): zero criticals
 - Empty states and skeleton loaders everywhere
+- **Cron re-ingestion** for saved analyses (daily refresh) — paired with Sentry so cron failures aren't silent
+- **Manual "Force refresh"** button on `/me` and `DELETE /me/cache/{username}` backend route — invalidates the Layer A Report cache from v0.7.0
 
 **Exit criteria:**
 - [ ] Error budget defined; dashboards live

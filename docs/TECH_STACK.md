@@ -6,10 +6,10 @@
 
 ## Frontend — `frontend/`
 
-| Tool | Pinned (as of 2026-05-15) | Why |
+| Tool | Pinned (as of 2026-05-20) | Why |
 | --- | --- | --- |
 | **Next.js** | `16.2.6` | App Router, partial prerendering, streaming, Vercel-native. v16 dropped some conventions; check `frontend/AGENTS.md` before assuming v13/v14 patterns. |
-| **React** | `19.2.4` | Server Components, Actions, the modern data flow |
+| **React** | `19.2.6` | Server Components, Actions, the modern data flow |
 | **TypeScript** | `^5` | Sane component contracts |
 | **TailwindCSS** | `^4` | Utility-first; `@tailwindcss/postcss` is the v4 pipeline. No tailwind.config — config lives in `globals.css` via `@theme`. |
 | **tw-animate-css** | `^1.4` | v4-compatible replacement for `tailwindcss-animate` |
@@ -17,10 +17,9 @@
 | **Framer Motion** | `^12.38` | Animation; prefer spring physics over linear easings. Use `LazyMotion` + `m.*` namespace, not `motion.*`, to keep the initial bundle lean. |
 | **@base-ui/react** | `^1.4` | Headless primitives (Progress, Tooltip) — accessible and unstyled; we own the visual layer. Used for the v0.3.0 position-bar Progress and badge-row Tooltip. |
 | **lucide-react** | `^1.16` | Icon set. **Branded icons (`Github`, `Twitter`, etc.) were removed in 1.x** — substitute generic equivalents (`ExternalLink`) or inline an SVG. |
-| **Magic UI / Aceternity** | latest, on-demand | Motion accents — used sparingly |
-| **@vercel/og** | latest | OG card generation (v0.7.0) |
-| **next-themes** | latest | Dark-mode default with light variant |
-| **zod** | latest | Runtime schema validation at API boundaries |
+| **`next/og` (`ImageResponse`)** | bundled with Next 16 | OG card generation (v0.6.0). File-convention routes `opengraph-image.tsx` + `twitter-image.tsx` at the route segment auto-wire meta tags. Satori-based — strict about explicit `display: flex` on every multi-child div. |
+| **Inter font** | OFL 1.1, bundled under `public/fonts/` | Medium + Bold TTF bundled because satori reads font bytes per request — fetching remotely would add cold-start latency. |
+| **Vitest** | `^3.2` + `happy-dom@^15` + `@testing-library/react@^16` + `@testing-library/jest-dom@^6` | First frontend test framework, added in v0.6.0. Picked over node:test for native TS/JSX, picked happy-dom over jsdom for speed. |
 
 **Bundler:** Turbopack (Next.js default in 16+).
 
@@ -30,20 +29,24 @@
 
 ## Backend — `backend/`
 
-| Tool | Pinned (as of 2026-05-15) | Why |
+| Tool | Pinned (as of 2026-05-20) | Why |
 | --- | --- | --- |
 | **Python** | `3.12+` | Modern type system, performance, structural pattern matching |
 | **FastAPI** | `0.136` | Async-native, Pydantic-integrated, OpenAPI for free |
 | **Pydantic** | `2.13` | Models for every API boundary and every scorer output |
 | **pydantic-settings** | `2.14` | `.env` + env-var loading for `Settings` |
 | **httpx** | `0.28` (with `h2`) | Async HTTP client with HTTP/2 multiplexing |
-| **uvicorn[standard]** | `0.47` | ASGI server in dev; production server decided in v0.5.0 |
+| **SQLAlchemy** | `2.0.x` (async) + `asyncpg>=0.31` | Async ORM + Postgres driver for Neon. Statement cache disabled for pgBouncer transaction-mode pooling. |
+| **Alembic** | `1.18+` | Hand-authored migrations; reversibility tested in pytest. |
+| **upstash-redis** | `>=1.2` | Async REST-API client for Upstash. HTTP-based, Fluid-Compute-friendly. Added in v0.7.0. |
+| **cryptography** | `48+` | AES-GCM for at-rest GitHub-token encryption (v0.5.0). |
+| **uvicorn[standard]** | `0.47` | ASGI server in dev; Vercel Functions for production |
 | **uv** | `0.11.12+` | Package + venv management — significantly faster than pip |
 | **pytest** | `9.x` | Test runner with async support |
 | **pytest-asyncio** | `1.3` | `asyncio_mode = "auto"` so async tests don't need decorators |
 | **respx** | `0.23` | httpx mocking for GitHub client + e2e tests |
 | **ruff** | `0.15.13` | Linter + formatter — one tool for both. Configured in `backend/ruff.toml` (py312, line 100, E/F/I/UP/B/SIM/TCH/RUF). |
-| Static typing | deferred — ruff covers the lint surface | The mypy/pyright pick was punted past v0.1.0; revisit at v0.5.0 when ORM types land |
+| Static typing | deferred — ruff covers the lint surface | The mypy/pyright pick was punted past v0.1.0; revisit when payoff justifies the maintenance |
 
 **Package manager:** `uv` (not pip, not poetry). Faster, simpler, lockfile-first.
 
@@ -53,9 +56,9 @@
 
 | Tool | Role |
 | --- | --- |
-| **Neon Postgres** | Primary store (users, analyses, narratives, share tokens). Branch-per-PR for migrations. |
-| **Upstash Redis** | Edge-friendly cache and rate-limit token buckets |
-| **Alembic** _or_ **Drizzle** | Migrations — decide in v0.5.0 based on backend host |
+| **Neon Postgres** | Primary store (users, analyses, narratives, share tokens). Branch-per-PR for migrations. Pooled host (port 6543, `statement_cache_size=0`) at runtime; direct host (5432) for Alembic. |
+| **Upstash Redis** | Backend cache across four fail-open layers (full Report, GitHub API responses, narrative + daily budget, singleflight locks). REST API via `upstash-redis`. User-provisioned account, env vars pasted into Vercel manually. |
+| **Alembic** | Migrations — chosen v0.5.0. Hand-authored, reversibility tested. |
 
 ---
 
@@ -63,8 +66,9 @@
 
 | Tool | Role |
 | --- | --- |
-| **GitHub OAuth** | Sign-in + higher API rate limits. Scopes: `read:user`, `public_repo`. Never `repo` or `admin:*`. |
-| **JOSE / authlib** | JWT signing for short-lived session cookies |
+| **GitHub OAuth (App)** | Sign-in + higher API rate limits. Scopes: `read:user`, `public_repo`. Never `repo` or `admin:*`. |
+| **Server-side opaque sessions** | Cookie value is `secrets.token_urlsafe(32)`; server looks the row up directly. Chosen over JWT in v0.5.0 to keep revocation cheap and access tokens server-side. |
+| **AES-GCM at rest** | GitHub access tokens encrypted in the `sessions` table with `SESSION_TOKEN_ENC_KEY`. Fresh 12-byte nonce per row; key rotation invalidates every session by design. |
 
 ---
 
@@ -86,10 +90,10 @@
 
 | Surface | Host | Notes |
 | --- | --- | --- |
-| Frontend | **Vercel** | Native Next.js 16 support, edge OG, runtime cache |
-| Backend | **Vercel Functions (Fluid Compute)** | Locked 2026-05-15. Same dashboard as frontend, OIDC env handoff, native marketplace integration with Neon + Upstash. Long re-ingestion runs split via Vercel Cron in v0.8.0 to stay within function duration caps. |
-| DB | **Neon** | Vercel Marketplace install when ready |
-| Cache | **Upstash Redis** | Vercel Marketplace install when ready |
+| Frontend + Backend | **Vercel multi-service project** | One Vercel project hosts both via `experimentalServices` in the root `vercel.json` (frontend at `/`, backend mounted at `/_/backend/*`). Locked 2026-05-15. |
+| Compute | **Vercel Functions (Fluid Compute)** | Function instances reused across concurrent requests, ~300s default timeout. Native marketplace integration with Neon. |
+| DB | **Neon** | Vercel Marketplace integration. Auto-injects `DATABASE_URL` + variants. |
+| Cache | **Upstash Redis** | User-provisioned account (not Marketplace). `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` pasted into Vercel env manually. |
 | DNS / domain | Vercel-managed | Custom domain decided pre-v1.0 |
 
 ---
@@ -98,10 +102,10 @@
 
 | Tool | Role | Slice |
 | --- | --- | --- |
-| **Sentry** | Error tracking (frontend + backend) | v0.9.0 |
-| **PostHog** or **Plausible** | Product analytics — preference: privacy-first, no third-party cookies | v0.9.0 |
-| Structured logs | Backend routes emit JSON logs to host's log pipe | v0.9.0 |
-| Sentry budget alerts | Cost ceiling on OpenAI | v0.4.0 onward |
+| **Sentry** | Error tracking (frontend + backend) | v0.8.0 |
+| **PostHog** or **Plausible** | Product analytics — preference: privacy-first, no third-party cookies | v0.8.0 |
+| Structured logs | Backend routes emit JSON logs to host's log pipe | v0.8.0 |
+| Sentry budget alerts | Cost ceiling on the narrative provider | v0.8.0 onward |
 
 ---
 

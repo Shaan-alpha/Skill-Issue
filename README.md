@@ -1,6 +1,26 @@
+<div align="center">
+
 # Skill Issue
 
-> Your GitHub profile is your real resume. Skill Issue reads it honestly.
+**Your GitHub profile is your real resume. Skill Issue reads it honestly.**
+
+[![Version](https://img.shields.io/github/v/release/Shaan-alpha/Skill-Issue?style=for-the-badge&label=release&color=10b981)](https://github.com/Shaan-alpha/Skill-Issue/releases)
+[![License](https://img.shields.io/github/license/Shaan-alpha/Skill-Issue?style=for-the-badge&color=475569)](./LICENSE)
+[![Live preview](https://img.shields.io/badge/live-skill--issue--tau.vercel.app-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://skill-issue-tau.vercel.app)
+[![Status](https://img.shields.io/badge/status-pre--alpha-eab308?style=for-the-badge)](./PLAN.md)
+
+[![Next.js](https://img.shields.io/badge/Next.js%2016-000000?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
+[![React](https://img.shields.io/badge/React%2019-149eca?style=for-the-badge&logo=react&logoColor=white)](https://react.dev/)
+[![Tailwind](https://img.shields.io/badge/Tailwind%204-0ea5e9?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Python](https://img.shields.io/badge/Python%203.12-3776ab?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![Neon](https://img.shields.io/badge/Neon%20Postgres-00e699?style=for-the-badge&logo=postgresql&logoColor=000000)](https://neon.tech/)
+[![Upstash](https://img.shields.io/badge/Upstash%20Redis-00e9a3?style=for-the-badge&logo=redis&logoColor=000000)](https://upstash.com/)
+[![Groq](https://img.shields.io/badge/Groq%20LLM-f55036?style=for-the-badge&logo=groq&logoColor=white)](https://groq.com/)
+
+</div>
+
+---
 
 **Skill Issue** is an AI-powered GitHub intelligence platform. Drop in a username and it analyzes repositories, engineering maturity, OSS contributions, coding discipline, and growth trajectory — then turns it into actionable feedback, a 100-point engineering score, and shareable "GitHub Receipts."
 
@@ -15,14 +35,15 @@ Engineering insight first. AI flavor second. Scoring is deterministic and explai
 - **7-tier identity ladder** — Hobbyist · Student Builder · Entry-Level · Professional · Senior · Staff · Principal Engineer, with intra-tier sub-rank
 - **Stackable badges** — OSS Contributor, PR Master, Maintainer, Star Magnet, Polyglot, Long-haul, Indie Hacker, Toolmaker (signal-driven, deterministic, multi-earnable)
 - **Tier-gated depth** — higher tiers unlock richer signals (licence SPDX, CI workflows, README quality, PR review depth, commit-message quality, cross-repo refactor)
-- **Analysis modes (v0.4.0+)** — Roast, Mentor, Recruiter, CTO, Career
-- **GitHub Receipts™ (v0.7.0+)** — shareable scorecards for LinkedIn, X, portfolios
+- **Analysis modes** — Roast + Mentor (canonical two; Recruiter / CTO / Career were dropped 2026-05-19)
+- **GitHub Receipts™** — shareable 1200×630 OG scorecards for LinkedIn, X, Discord, portfolios
+- **Warm-cache latency** — repeat `/analyze/{user}` p95 ≤ 200ms backed by Upstash Redis (v0.7.0+)
 
 ---
 
 ## Status
 
-Pre-alpha. Latest shipped release is **v0.5.0** (Auth + Persistence). Live at https://skill-issue-tau.vercel.app — GitHub OAuth sign-in, Neon Postgres persistence, `/me` history grid, opt-in `/share/[slug]` public links, signed-in ingestion uses each user's own GitHub rate-limit budget. The AI narrative layer (Roast + Mentor) runs on **Groq** (`llama-3.3-70b-versatile`) by default — free tier, faster inference, OpenAI-compatible. Pre-existing OpenAI users can swap back by clearing `NARRATIVE_BASE_URL`. **v0.6.0 — GitHub Receipts™ (shareable cards)** is the next slice; Recruiter / CTO / Career narrative modes were dropped 2026-05-19 (parked under "Beyond v1.0"). See [`CHANGELOG.md`](./CHANGELOG.md) for shipped slices, [`PLAN.md`](./PLAN.md) for the full roadmap, and [`docs/PROGRESS_LOG.md`](./docs/PROGRESS_LOG.md) for the most recent session handoff.
+Pre-alpha. Latest shipped release is **v0.7.0** (Backend caching). Live at https://skill-issue-tau.vercel.app — GitHub OAuth sign-in, Neon Postgres persistence, `/me` history, opt-in `/share/[slug]` public links, signed-in ingestion uses each user's own GitHub rate-limit budget. The AI narrative layer (Roast + Mentor) runs on **Groq** (`llama-3.3-70b-versatile`) by default — free tier, faster inference, OpenAI-compatible. v0.6.0 added GitHub Receipts™ (shareable OG cards) auto-wired into both `/u/[username]` and `/share/[slug]`; v0.7.0 added Upstash Redis caching across four layers (full Report 6h, GitHub API responses per-endpoint TTLs, narrative cache + daily budget shared across instances, singleflight coalescing on cold misses). Every cache layer is fail-open — Redis trouble never returns a 5xx. **v0.7.1 — Frontend perf budget (Lighthouse mobile ≥ 95, TTI/LCP ≤ 2.5s, CLS ≤ 0.1)** is the next slice. See [`CHANGELOG.md`](./CHANGELOG.md) for shipped slices, [`PLAN.md`](./PLAN.md) for the full roadmap, and [`docs/PROGRESS_LOG.md`](./docs/PROGRESS_LOG.md) for the most recent session handoff.
 
 ---
 
@@ -55,7 +76,7 @@ cp .env.example .env        # then edit .env and add your GITHUB_TOKEN and OPENA
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
-Verify: `curl http://localhost:8000/health` → `{"status":"ok","version":"0.5.0","db":"up"|"down"}`. (The `db` field reports DB reachability when `DATABASE_URL` is configured.)
+Verify: `curl http://localhost:8000/health` → `{"status":"ok","version":"0.7.0","db":"up"|"down","cache":"up"|"down"|"unconfigured"}`. The `db` field reports DB reachability when `DATABASE_URL` is configured; the `cache` field reports Upstash reachability (`unconfigured` when `UPSTASH_REDIS_REST_URL` isn't set — perfectly fine for local dev, the in-process fallback covers it).
 Hit the analyzer: `curl http://localhost:8000/analyze/octocat`.
 
 ### Frontend (`:3000`)
@@ -73,8 +94,10 @@ Open <http://localhost:3000> and analyze a username.
 
 ```bash
 cd backend && uv run pytest -v && uv run ruff check .
-cd frontend && npm run lint && npm run build
+cd frontend && npm run lint && npm run test:run && npm run build
 ```
+
+The frontend `test:run` invokes Vitest (added in v0.6.0). Backend tests use pytest + respx; DB-dependent tests need `TEST_DATABASE_URL` (local Postgres or a Neon dev branch).
 
 ---
 
