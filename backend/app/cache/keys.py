@@ -10,8 +10,10 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from datetime import datetime
 
 # --- Namespaces (the first segment after the version prefix) ---
 

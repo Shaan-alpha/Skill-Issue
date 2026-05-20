@@ -25,11 +25,15 @@ from __future__ import annotations
 import asyncio
 import logging
 import secrets
-from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING
 
-from app.cache.client import RedisCache
 from app.cache.keys import NAMESPACE_LOCK, TTL_LOCK_SECONDS
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
+    from app.cache.client import RedisCache
 
 logger = logging.getLogger(__name__)
 
