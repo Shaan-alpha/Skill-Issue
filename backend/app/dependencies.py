@@ -54,7 +54,7 @@ def get_narrative_cache() -> NarrativeCache:
 
 @lru_cache
 def get_daily_budget() -> DailyBudget:
-    return DailyBudget(limit=settings.narrative_daily_limit)
+    return DailyBudget(limit=settings.narrative_daily_limit, redis=get_cache())
 
 
 @lru_cache

@@ -51,7 +51,7 @@ class NarrativeService:
             return
 
         # 2. Check budget
-        allowed, _remaining, _resets_at = self._budget.try_consume()
+        allowed, _remaining, _resets_at = await self._budget.atry_consume()
         if not allowed:
             logger.warning(
                 f"Daily OpenAI budget exhausted. Using fallback narrative for {report.username} ({mode})"
