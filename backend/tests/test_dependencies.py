@@ -12,7 +12,8 @@ async def test_uses_session_token_when_session_present(monkeypatch):
     captured: dict[str, str] = {}
 
     class FakeClient:
-        def __init__(self, token: str): captured["token"] = token
+        def __init__(self, token: str, *, cache=None, max_retries: int = 3):
+            captured["token"] = token
         async def __aenter__(self): return self
         async def __aexit__(self, *_): return None
 
@@ -39,7 +40,8 @@ async def test_falls_back_to_project_token_when_no_session(monkeypatch):
     captured: dict[str, str] = {}
 
     class FakeClient:
-        def __init__(self, token: str): captured["token"] = token
+        def __init__(self, token: str, *, cache=None, max_retries: int = 3):
+            captured["token"] = token
         async def __aenter__(self): return self
         async def __aexit__(self, *_): return None
 

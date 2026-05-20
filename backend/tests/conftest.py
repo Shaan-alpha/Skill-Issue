@@ -108,6 +108,26 @@ def fake_cache(fake_redis: FakeRedis):
     return RedisCache(redis=fake_redis)
 
 
+@pytest.fixture(autouse=True)
+def _clear_cache_lru_between_tests():
+    """The get_cache() / get_narrative_cache() / get_daily_budget() singletons
+    are @lru_cache-cached. Tests that monkey-patch get_cache need the cache
+    cleared so the override actually fires. Cleared before AND after each
+    test so a singleton built in test A doesn't leak into test B."""
+    from app.dependencies import (
+        get_cache,
+        get_daily_budget,
+        get_narrative_cache,
+        get_narrative_service,
+    )
+
+    for fn in (get_cache, get_daily_budget, get_narrative_cache, get_narrative_service):
+        fn.cache_clear()
+    yield
+    for fn in (get_cache, get_daily_budget, get_narrative_cache, get_narrative_service):
+        fn.cache_clear()
+
+
 @pytest_asyncio.fixture(scope="session")
 def test_database_url() -> str:
     url = os.environ.get("TEST_DATABASE_URL")
