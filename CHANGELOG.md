@@ -10,8 +10,20 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ## [0.7.1] — 2026-05-21
 
-### Performance
-- **Mobile Lighthouse `/u/octocat` (warm backend) median across 3 runs:** Performance 77 → **94** (one run hit 95), LCP **3,971 → 1,985 ms** (−50%, 515 ms under the 2,500 ms budget), TTI **3,980 → 1,985 ms** (−50%), CLS **0.080 → 0** (perfect), TBT **259 → 0 ms**. Full numbers in [`docs/superpowers/measurements/2026-05-21-v0.7.1-final.md`](./docs/superpowers/measurements/2026-05-21-v0.7.1-final.md).
+### Performance — prod-certified, partial budget pass
+
+Re-measured against the live deploy after v0.7.1 went out. Localhost numbers (committed initially as "94/100 median") were measurement artifact — zero-network-latency localhost + simulated 4G doesn't model real WAN. Honest prod-certified numbers below; full breakdown in [final measurement report § "CORRECTION"](./docs/superpowers/measurements/2026-05-21-v0.7.1-final.md#correction-prod-certified-measurements-2026-05-21-post-deploy).
+
+| Metric | Prod median (3 runs) | Budget | Pass? |
+| --- | --- | --- | --- |
+| Performance | **90** / 100 | ≥ 95 | ❌ −5 |
+| LCP | **2,804 ms** | ≤ 2,500 | ❌ +304 |
+| TTI | **2,866 ms** | ≤ 2,500 | ❌ +366 |
+| CLS | **0.080** | ≤ 0.1 | ✅ |
+| TBT | 228 ms | — | — |
+
+v0.7.1's wins are real (the bundle changes are objectively in the build) but the budget was not fully hit. CLS passes; perf score / LCP / TTI fall ~5-15% short. Scheduled [v0.7.2](./PLAN.md) as a measurement-driven gap-closer (identify prod LCP element + the deterministic 0.080 anonymous CLS source).
+
 - **First-load JS on `/u/[username]`:** 908 KB → **874 KB** uncompressed (−34 KB / ~10 KB gzipped). Wins split between the framer-motion `domAnimation` shrink and the @base-ui/react `optimizePackageImports` transform (150 KB chunk → 103 KB).
 
 ### Added
@@ -24,7 +36,7 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ### Changed
 - **LazyMotion features**: `domMax` → `domAnimation`. We use `m.div`/`m.circle`/`m.span` with `initial`/`animate`/`transition` only — no drag, no `AnimatePresence` shared layout, no `whileTap` springs. `domAnimation` covers the entire surface.
-- **GitHub avatars** in `site-header.tsx` and `share-attribution.tsx` switched from plain `<img>` (eslint-disabled) to `next/image` with explicit width/height. Reserves layout boxes before the bytes arrive — that's the CLS 0.080 → 0 drop. Vercel image pipeline serves WebP/AVIF as a bonus.
+- **GitHub avatars** in `site-header.tsx` and `share-attribution.tsx` switched from plain `<img>` (eslint-disabled) to `next/image` with explicit width/height. Reserves layout boxes before the bytes arrive. (Note: the prod CLS=0.080 measured anonymously isn't from these avatars — anonymous viewers don't render them. The remaining shift source is open and tracked in v0.7.2.) Vercel image pipeline serves WebP/AVIF as a bonus.
 - **Roast prompt rewritten for harder direct-address comedy** ([`d2a6812`](https://github.com/Shaan-alpha/Skill-Issue/commit/d2a6812)). Voice flipped from wry-observational ("the profile shows...") to second-person late-night-monologue ("you shipped X / your bio reads like Y"). Soft-profanity budget raised from 1 to 2–3 per response when they land a punchline. New "EVERYTHING ELSE IS GREEN" permission block tells the model to be confident-and-unfair on purpose. Few-shot anchors rewritten — Student (26/100) leads with the score itself and a rule-of-three on zeros; Senior (78/100, low recruiter signal) directly mocks the Dockerfile-tier bio. (Originally landed pre-v0.7.1; rolled into this release.)
 - **Stale frontend version strings** updated from `v0.5.0` / `v0.4.0` to `v0.7.0`/`v0.7.1` ([`page.tsx`](frontend/src/app/page.tsx), [`results-view.tsx`](frontend/src/components/results-view.tsx)). (Pre-v0.7.1 housekeeping.)
 - **Backend `pyproject.toml` version** caught up from a stale `0.4.0` to `0.7.1` — now tracks the runtime `VERSION` constant.
@@ -34,10 +46,10 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ### Deferred
 - **ISR on `/share/[slug]`** dropped from this slice. `export const revalidate = N` caches the rendered HTML, so a revoked slug would stay viewable for up to N seconds — the perf win isn't worth the revocation-correctness gap. The right answer is on-demand revalidation via `revalidateTag` from the backend's share-toggle endpoint; that lands in v0.8.0 alongside the cron + observability work that already needs a backend↔frontend invalidation channel.
-- **Final perf-score certification** deferred to PageSpeed Insights against the live Vercel deploy. Local Lighthouse measurement isn't representative — backend's `cache: unconfigured` state locally means every request fans out to live GitHub API (~6 s), drowning out the front-end signal. Prod has Upstash configured (`cache: up` verified live), so warm-cache is the default state real users see.
 
 ### Notes
-- One iteration attempted to close the 1-pt gap (perf median 94 vs target 95) by stripping the `m.div` opacity-fade entry animations on the aggregate-score and engineering-report panels. Reverted: post-revert measurements made it clear the local backend's cold GitHub-API latency dominates Lighthouse noise. Cinematic animations are a non-negotiable product requirement (AGENTS.md rule 1); the right place to revisit if live PageSpeed shows < 95 is a focused v0.7.2 with better measurement signal.
+- **Measurement methodology lesson.** Initial certification was based on localhost `next start` against a warm in-process cache — that environment has zero network latency and Lighthouse's simulated 4G doesn't bridge the gap. The prod re-measurement (above) showed the local numbers were optimistic by ~800 ms on LCP. Future perf slices certify against the deploy URL or a tunnelled prod build, not localhost.
+- One iteration attempted to close the gap by stripping the `m.div` opacity-fade entry animations on the aggregate-score and engineering-report panels. Reverted: cinematic animations are a non-negotiable product requirement (AGENTS.md rule 1). v0.7.2 will revisit with a smarter approach (defer below-fold work, identify the actual LCP element on prod, address the deterministic 0.080 CLS).
 
 ---
 

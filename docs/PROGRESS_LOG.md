@@ -19,6 +19,40 @@ Format:
 
 ---
 
+## 2026-05-21 — Claude (Opus 4.7) — v0.7.1 prod-certified (partial budget pass) + v0.7.2 scheduled
+
+**Slice:** post-v0.7.1 measurement correction.
+
+**Done:**
+- Tried `vercel env pull backend/.env.local` to run prod-equivalent locally. Pulled 44 keys but all values empty strings — Vercel masks "Sensitive" env vars on download (Postgres URL, Upstash token, Groq key, etc.). That security boundary is a feature, not a bug.
+- Pivoted: ran Lighthouse mobile directly against `https://skill-issue-tau.vercel.app/u/octocat` (3 warm runs, simulated 4G, headless Chrome). That IS the real prod environment — Upstash provisioned, Neon connected, Vercel edge in front. No need to recreate it locally.
+- **Prod-certified 3-run median: perf 90 (target 95, −5), LCP 2,804 ms (target 2,500, +304), TTI 2,866 ms (target 2,500, +366), CLS 0.080 (target 0.10, passes), TBT 228 ms.** Raw runs: 91/78/90, all CLS exactly 0.080114 (perfectly deterministic shift).
+- Corrected v0.7.1 final measurement report with a "CORRECTION" section appended; updated CHANGELOG `[0.7.1]` entry; flagged the v0.7.1 budget as "partial pass" honestly instead of claiming a clean ship; added [v0.7.2 slice to PLAN](./../PLAN.md) as the focused gap-closer.
+
+**Decisions:**
+- **Don't retag v0.7.1.** The release is already on origin + GitHub Releases. Force-push retag would muddy timeline for negligible benefit; v0.7.2 closes the gap cleaner.
+- **Don't revert the v0.7.1 changes.** The bundle wins are real (−34 KB), the methodology is the only thing wrong. Honest report is the right correction.
+- **Localhost `next start` is not a valid perf-budget certification surface.** Zero network latency + simulated 4G doesn't bridge the gap; the prod re-measurement was 800 ms higher on LCP. Future perf slices certify against the deploy URL or a tunnelled prod build.
+
+**Learned / surprises:**
+- **`vercel env pull` returns empty strings for Sensitive env vars.** All the actually-secret values (DB URLs, Upstash token, OAuth secrets, encryption keys) come back as `KEY=""`. Only non-Sensitive ones have real values. Right behaviour for a CLI that any contributor could invoke; wrong shape for "give me a prod-equivalent local backend." Workaround: measure against the deploy URL directly.
+- **Headless-Chrome CLS=0 was a measurement artifact.** Locally I got CLS=0 because the shift element wasn't in the simulated viewport at the moment Lighthouse sampled. Prod consistently shows CLS=0.080114 (three identical decimals across three runs). Real layout shift, real element to find — and it's NOT the avatars (those don't render for anonymous viewers).
+- **LCP element details came back as `n/a`** on prod runs — Lighthouse couldn't extract the element selector. v0.7.2 will need PageSpeed Insights' "Origin Summary" or Chrome DevTools' Performance panel against the live deploy to identify it.
+
+**Verified:**
+- Prod `/health` reports `version: 0.7.1, db: up, cache: up` (Vercel auto-deployed from main).
+- `https://skill-issue-tau.vercel.app/u/octocat` returns 200 with v0.7.1 build hash.
+- 3 Lighthouse runs against prod, all CLS perfectly deterministic at 0.080114.
+
+**Blocked / open:**
+- Prod LCP element identification needs DevTools / PageSpeed Insights — Lighthouse CLI couldn't extract the selector. That's the first step of v0.7.2.
+
+**Next:**
+- v0.7.2 — measurement-driven gap-closer. See PLAN.md for scope.
+- Or jump straight to v0.8.0 (Polish + observability) and fold v0.7.2 into it. User's call.
+
+---
+
 ## 2026-05-21 — Claude (Opus 4.7) — v0.7.1 shipped (frontend perf)
 
 **Slice:** v0.7.1 — Lighthouse mobile ≥ 95 / TTI/LCP ≤ 2.5s / CLS ≤ 0.1 on `/u/[username]` and `/share/[slug]`.

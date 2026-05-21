@@ -25,7 +25,8 @@
 | **v0.5.0** | Auth + persistence — GitHub OAuth + Neon Postgres | ✅ shipped |
 | **v0.6.0** | GitHub Receipts™ — shareable OG cards (dark canonical) | ✅ shipped |
 | **v0.7.0** | Caching (backend) — Upstash Redis, singleflight, GitHub-API + Report + narrative caches | ✅ shipped |
-| **v0.7.1** | Performance (frontend) — Lighthouse ≥ 95, TTI ≤ 2.5s, LCP ≤ 2.5s, CLS ≤ 0.1 | ✅ shipped |
+| **v0.7.1** | Performance (frontend) — Lighthouse ≥ 95, TTI ≤ 2.5s, LCP ≤ 2.5s, CLS ≤ 0.1 | ⚠️ shipped, partial budget pass (prod perf 90/95, LCP 2,804/2,500) |
+| **v0.7.2** | Perf gap-closer — identify prod LCP element + 0.080 CLS source, close the v0.7.1 gap | pending |
 | **v0.8.0** | Polish + observability — Sentry, analytics, cron re-ingestion, manual "Force refresh" | pending |
 | **v0.9.0** | Beta hardening — security review, abuse mitigation, load test | pending |
 | **v1.0.0** | Public launch | pending |
@@ -252,13 +253,39 @@
 - `cache: "force-cache"` and Next 16 `unstable_cache` (or the new cache-components API) where appropriate for static data.
 - TTI / LCP / CLS measurement automated via Lighthouse CI on Vercel preview deploys (optional — fine to manual-measure if CI integration is heavy).
 
-**Exit criteria:**
-- [x] Lighthouse mobile performance: `/u/octocat` warm-backend median **94** (runs 93/94/95). 1pt under target at the noise floor — live PageSpeed Insights certification pending post-deploy. `/share/{slug}` deferred to post-deploy.
-- [x] TTI **1,985 ms** (target ≤ 2,500), 515 ms under budget.
-- [x] LCP **1,985 ms** (target ≤ 2,500), CLS **0** (target ≤ 0.1) — both pass with comfortable margin.
+**Exit criteria (initial — see below for correction):**
+- [x] Frontend optimizations landed (LazyMotion shrink, optimizePackageImports, next/image avatars).
+- [~] Lighthouse mobile performance ≥ 95 on `/u/{user}`: **partial pass — prod median 90.** Localhost showed 94 but localhost has no real-network latency.
+- [~] TTI ≤ 2.5s: **partial — prod 2,866 ms (+366 ms).**
+- [~] LCP ≤ 2.5s: **partial — prod 2,804 ms (+304 ms).** CLS **0.080** passes (≤ 0.1).
 - [x] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.7.1`.
 
-**Sub-plan:** [`docs/superpowers/plans/2026-05-21-v0.7.1-frontend-perf.md`](./docs/superpowers/plans/2026-05-21-v0.7.1-frontend-perf.md) — 8 tasks, 7 landed, 1 deferred (ISR on `/share/[slug]` → v0.8.0 with on-demand revalidation). Measurements: [baseline](./docs/superpowers/measurements/2026-05-21-v0.7.1-baseline.md), [final](./docs/superpowers/measurements/2026-05-21-v0.7.1-final.md).
+**Sub-plan:** [`docs/superpowers/plans/2026-05-21-v0.7.1-frontend-perf.md`](./docs/superpowers/plans/2026-05-21-v0.7.1-frontend-perf.md) — 8 tasks, 7 landed, 1 deferred (ISR on `/share/[slug]` → v0.8.0 with on-demand revalidation). Measurements: [baseline](./docs/superpowers/measurements/2026-05-21-v0.7.1-baseline.md), [final](./docs/superpowers/measurements/2026-05-21-v0.7.1-final.md) (see "CORRECTION" section for prod-certified numbers).
+
+**Methodology lesson:** Localhost `next start` + simulated 4G isn't enough to certify a prod perf budget — the network-latency gap is ~800 ms on LCP. v0.7.2 (below) closes the gap; v0.8.0+ perf work certifies against the live deploy URL.
+
+---
+
+## v0.7.2 — Perf gap-closer (post-v0.7.1 correction)
+
+**Goal:** Close the v0.7.1 budget gap on the live deploy. Prod median (verified 2026-05-21): perf 90/95, LCP 2,804/2,500ms, TTI 2,866/2,500ms. Need to find ~310ms of LCP and ~370ms of TTI, push perf score to ≥95, and fix the deterministic 0.080 anonymous CLS.
+
+**Why this is its own slice:** Honest accounting. v0.7.1 already shipped + tagged based on optimistic localhost measurements. Re-tagging would muddy the release timeline; a focused v0.7.2 with better methodology is cleaner. Also makes the localhost-vs-prod measurement lesson explicit.
+
+**Slice scope:**
+- **Identify the prod LCP element.** Lighthouse CLI returned `n/a` for selector — use PageSpeed Insights or Chrome DevTools Performance panel against `https://skill-issue-tau.vercel.app/u/octocat` to extract the actual LCP node. Likely candidates: the aggregate-score number (text), the SVG circle's final stroke state, or the engineering-report panel's headline.
+- **Identify the 0.080 anonymous-viewer CLS source.** Reproducible to four decimals (0.080114 across 3 runs), so it's a specific element shifting. NOT the avatars (anonymous viewers don't render them). Candidates: `PositionBar` rendering after a measurement, `BadgeRow`'s flex wrap on narrow viewports, the `NarrativeCard` loading skeleton → streaming text swap, the `SaveShareControls` "sign in CTA" appearing after the session check.
+- **Targeted fix per finding** — likely one or two of: dynamic-import below-fold components (`NarrativeCard`, scoring matrix), reserve space for components that mount after auth check, defer the SVG circle animation if it's the LCP, prefetch the LCP font.
+- **Certify against live deploy.** 3-run median on `https://skill-issue-tau.vercel.app/u/octocat` after the fix; record in a new measurement report `docs/superpowers/measurements/<date>-v0.7.2-prod-certified.md`.
+
+**Exit criteria:**
+- [ ] Prod 3-run median: **performance ≥ 95** on `/u/octocat`.
+- [ ] Prod LCP ≤ 2,500 ms and TTI ≤ 2,500 ms (3-run median).
+- [ ] Prod CLS root cause documented; CLS ≤ 0.05 (room to spare, currently 0.08).
+- [ ] Measurement report committed under `docs/superpowers/measurements/`.
+- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.7.2`.
+
+**Out of scope:** the deferred `/share/[slug]` ISR + on-demand revalidation hook — still belongs to v0.8.0 because it needs the backend↔frontend invalidation channel.
 
 ---
 
