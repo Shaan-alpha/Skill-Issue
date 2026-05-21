@@ -8,6 +8,35 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
+## [0.7.2] — 2026-05-21
+
+### Performance — prod-certified
+
+Methodology corrected: measurements run directly against `https://skill-issue-tau.vercel.app/u/octocat`, 5 Lighthouse runs, median of the cold-start-filtered result. Full numbers in [`docs/superpowers/measurements/2026-05-21-v0.7.2-prod-certified.md`](./docs/superpowers/measurements/2026-05-21-v0.7.2-prod-certified.md).
+
+| Metric | v0.7.1 prod | **v0.7.2 prod** | Budget | Pass? |
+| --- | --- | --- | --- | --- |
+| Performance | 90 | **94** / 100 | ≥ 95 | ⚠️ −1 (2/5 runs ≥95) |
+| LCP | 2,804 ms | **2,773 ms** | ≤ 2,500 | ❌ +273 |
+| TTI | 2,866 ms | **2,816 ms** | ≤ 2,500 | ❌ +316 |
+| CLS | 0.080 | **0** | ≤ 0.1 | ✅ perfect |
+| TBT | 228 ms | ~155 ms | — | ✅ |
+
+**CLS structurally fixed** (both anonymous shifts eliminated). Perf score 90 → 94, TBT halved. LCP/TTI improved at the margin but remain ~10% over the strict budget — the remaining gap will be revisited with real-user metrics once v0.8.0's Sentry/PostHog land (Lighthouse-on-localhost-clicking-prod-URL has a wide noise floor; RUM is the right surface).
+
+### Changed
+- **`loading.tsx` skeleton rewritten to match `ResultsView` structure.** Lighthouse traced the 0.080 anonymous CLS to `div.min-h-screen` (the ResultsView wrapper). Root cause: skeleton had wrong section order vs the real ResultsView and was missing three components entirely (SaveShareControls, NarrativeCard, footer). When the backend `fetch` resolved, the layout reshuffled — the big-section moved from skeleton slot 2 to ResultsView slot 5, plus three new sections appeared. Skeleton now mirrors ResultsView's render order and approximate heights for every section. Skeleton → real swap is now a pure content swap with no layout shift.
+- **`SiteHeader` reserves height** with `min-h-[3.75rem]` and a sized `<div className="h-9" />` Suspense fallback (was `null`). Before: header height was effectively just `py-3` padding until `useSession()` hydrated, then expanded ~36 px when the auth pill mounted — that growth pushed `div.min-h-screen` down and was the second 0.040 of the 0.080 CLS. Now the header has its hydrated height from first paint, no shift.
+- **`NarrativeCard` dynamic-imported** in `results-view.tsx` (`ssr: false`). Below-the-fold component that pulls a heavy SSE-streaming client + `useSyncExternalStore` + `localStorage` subscription. CLS-safe placeholder reserves the real card's height. Initial bundle: 874 → 866 KB uncompressed (−8 KB); larger win is moving SSE client setup off the initial paint path.
+- **Frontend version strings** bumped `v0.7.1 → v0.7.2` (landing pill, results footer).
+- **Backend `pyproject.toml` + runtime `VERSION` constant** bumped to `0.7.2`.
+
+### Notes
+- **Methodology lesson, take two.** v0.7.1 used localhost Lighthouse and over-claimed (perf 94 locally vs 90 on prod). v0.7.2 uses prod-URL Lighthouse from the start — the honest median is 94 with substantial variance (runs span 61 to 96 perf, dominated by cold-start state). Lighthouse-on-localhost-clicking-prod has a wide noise floor; v0.8.0's RUM (Sentry/PostHog) will provide the tighter distribution needed for confident perf-budget claims.
+- **Iteration cap respected.** Plan allowed up to two iterations on a stuck budget; we used both (header fix after skeleton fix; dynamic NarrativeCard after that). The third option (LCP element identification) requires PageSpeed Insights' web UI or Chrome DevTools — both deferred to v0.8.0 where they pair with the observability work.
+
+---
+
 ## [0.7.1] — 2026-05-21
 
 ### Performance — prod-certified, partial budget pass

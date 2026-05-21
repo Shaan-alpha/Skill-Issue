@@ -1,6 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-VERSION = "0.7.1"
+VERSION = "0.7.2"
 
 
 class Settings(BaseSettings):

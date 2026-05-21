@@ -334,7 +334,7 @@ export function ResultsView({
         </section>
 
         <footer className="space-y-2 pt-8 text-center text-xs uppercase tracking-widest text-muted-foreground sm:pt-12">
-          <p>Skill Issue — GitHub Reputation Protocol v0.7.1</p>
+          <p>Skill Issue — GitHub Reputation Protocol v0.7.2</p>
         </footer>
       </main>
 
