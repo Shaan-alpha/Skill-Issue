@@ -19,6 +19,33 @@ Format:
 
 ---
 
+## 2026-05-21 — Claude (Opus 4.7) — full audit + housekeeping pre-v0.7.1
+
+**Slice:** between-slice housekeeping (no version bump).
+
+**Done:**
+- Full repo audit on `main` @ d2a6812. Backend `ruff check .` clean; 243 tests collect, 195 pass + 43 expected `TEST_DATABASE_URL` errors locally. Frontend `eslint` clean, `tsc --noEmit` clean, `vitest run` 22/22, `next build` clean (10 routes).
+- **Backlogged the roast-prompt rewrite into CHANGELOG.** Commit `d2a6812` (2026-05-20) reworked the roast voice from wry-observational to direct-address late-night-monologue but never touched the logs — AGENTS.md rule 4 violation. Added a `## [Unreleased]` section in CHANGELOG capturing the prompt rewrite + the version-string fixes below; the section will fold into v0.7.1.
+- **Deleted `backend/appauth/` and `backend/testsauth/`.** Empty, untracked, almost certainly leftovers from a typo'd `mv app auth` / `mv tests auth`. Verified gone with `Test-Path` → `False`. Nothing in git history changed.
+- **Fixed two stale version strings on the frontend.** `frontend/src/app/page.tsx` landing-hero pill read `v0.5.0`; `frontend/src/components/results-view.tsx` results-page footer read `v0.4.0`. Both now `v0.7.0`. These were the only two version literals shipped in user-visible UI.
+
+**Decisions:**
+- **`vercel.json` migration to `vercel.ts` deferred.** The 2026-02-27 Vercel knowledge update recommends `@vercel/config/v1` over `vercel.json`. Current `experimentalServices` config still works; deferring to v0.8.0 (Polish) to bundle with the Sentry/observability changes that touch deploy config anyway.
+- **Upstash provisioning is still a user action.** v0.7.0's headline perf win (warm `/analyze` ≤ 200ms) only kicks in once `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` are pasted into Vercel Preview + Production. Until then `/health` reports `cache: unconfigured` and the in-process fallback covers narrative + budget but not the Layer A Report cache.
+
+**Verified locally:**
+- `git status` clean after edits (1 CHANGELOG, 1 PROGRESS_LOG, 2 frontend files; 2 directories removed).
+- Frontend lint + build remain clean post-edit (verified pre-edit; trivial string replacements).
+
+**Blocked / open:**
+- v0.6.0 exit-criterion "Pasting share URL into X / LinkedIn shows the card inline" still unchecked in PLAN — needs one manual paste on the live deploy.
+- Upstash credentials not yet on Vercel (user action).
+
+**Next:**
+- Generate v0.7.1 (frontend perf) TDD sub-plan via `superpowers:writing-plans` — Lighthouse mobile ≥ 95, TTI ≤ 2.5s, LCP ≤ 2.5s, CLS ≤ 0.1 on `/u/[username]` and `/share/[slug]`.
+
+---
+
 ## 2026-05-20 — Claude (Opus 4.7) — v0.7.0 shipped (backend caching)
 
 **Slice:** v0.7.0 — Upstash Redis caching across four fail-open layers.

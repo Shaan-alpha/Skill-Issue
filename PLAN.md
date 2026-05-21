@@ -230,9 +230,9 @@
 - Rate limiting per-IP / per-user — stays in v0.9.0 Beta hardening.
 
 **Exit criteria:**
-- [ ] Upstash Redis DB provisioned; `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` set on Vercel Preview + Production. *(user action, post-tag)*
+- [x] Upstash Redis DB provisioned; `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` set on Vercel Preview + Production. Live `/health` reports `cache: "up"` (verified 2026-05-21).
 - [x] `GET /health` reports `cache: "up" | "down" | "unconfigured"`.
-- [ ] Two consecutive `/analyze/{user}` requests on a warm deploy: second runs in ≤ 200ms p95. *(verified post-deploy with Upstash provisioned)*
+- [ ] Two consecutive `/analyze/{user}` requests on a warm deploy: second runs in ≤ 200ms p95. *(verified post-deploy with Upstash provisioned — p95 measurement still pending)*
 - [x] `RedisCache` unit tests = 13; `singleflight()` unit tests = 6; total new tests = 55.
 - [x] Cold + warm `get_report_for_user` integration test: second call skips `_live_ingest` entirely (Layer A hit).
 - [x] `NarrativeCache` and `DailyBudget` work against both Redis (when configured) and in-process (when not).

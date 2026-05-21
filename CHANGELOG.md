@@ -8,6 +8,17 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
+## [Unreleased]
+
+### Changed
+- **Roast prompt rewritten for harder direct-address comedy** ([`d2a6812`](https://github.com/Shaan-alpha/Skill-Issue/commit/d2a6812)). Voice flipped from wry-observational ("the profile shows...") to second-person late-night-monologue ("you shipped X / your bio reads like Y"). Soft-profanity budget raised from 1 to 2–3 per response when they land a punchline. New "EVERYTHING ELSE IS GREEN" permission block tells the model to be confident-and-unfair on purpose. Few-shot anchors rewritten — Student (26/100) leads with the score itself and a rule-of-three on zeros; Senior (78/100, low recruiter signal) directly mocks the Dockerfile-tier bio. Litmus test reframed: would a comedian say this on stage?
+- Stale version strings in the frontend updated from `v0.5.0` / `v0.4.0` to `v0.7.0` ([`page.tsx`](frontend/src/app/page.tsx), [`results-view.tsx`](frontend/src/components/results-view.tsx)).
+
+### Removed
+- Two empty stray directories `backend/appauth/` and `backend/testsauth/` (untracked typo leftovers — never in git history, just on disk).
+
+---
+
 ## [0.7.0] — 2026-05-20
 
 ### Added
