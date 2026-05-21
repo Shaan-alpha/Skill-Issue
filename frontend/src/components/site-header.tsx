@@ -66,9 +66,13 @@ function HeaderInner() {
 }
 
 export function SiteHeader() {
+  // min-h reserves the header's hydrated height (auth pill = 36px content,
+  // plus py-3/py-4 padding) so the Suspense fallback → real-button swap
+  // doesn't push `div.min-h-screen` below. Lighthouse traced the ~0.04
+  // anonymous CLS to this swap.
   return (
-    <header className="sticky top-0 z-30 flex justify-end px-4 py-3 sm:px-6 sm:py-4 bg-background/70 backdrop-blur-md border-b border-white/5">
-      <Suspense fallback={null}>
+    <header className="sticky top-0 z-30 flex items-center justify-end min-h-[3.75rem] sm:min-h-[4rem] px-4 py-3 sm:px-6 sm:py-4 bg-background/70 backdrop-blur-md border-b border-white/5">
+      <Suspense fallback={<div className="h-9" aria-hidden="true" />}>
         <HeaderInner />
       </Suspense>
     </header>
