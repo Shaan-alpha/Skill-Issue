@@ -1,10 +1,11 @@
 {
   "name": "frontend",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "analyze": "next experimental-analyze --output",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest",

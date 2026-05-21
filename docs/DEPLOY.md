@@ -88,7 +88,7 @@ After the first migration: every subsequent push that includes a new migration r
 ```bash
 # Health — should report db=up and cache=up after Upstash is provisioned
 curl https://<your-vercel-host>/_/backend/health
-# -> {"status":"ok","version":"0.7.0","db":"up","cache":"up"}
+# -> {"status":"ok","version":"0.7.1","db":"up","cache":"up"}
 
 # Anonymous analyze
 curl https://<your-vercel-host>/_/backend/analyze/octocat

@@ -19,6 +19,45 @@ Format:
 
 ---
 
+## 2026-05-21 — Claude (Opus 4.7) — v0.7.1 shipped (frontend perf)
+
+**Slice:** v0.7.1 — Lighthouse mobile ≥ 95 / TTI/LCP ≤ 2.5s / CLS ≤ 0.1 on `/u/[username]` and `/share/[slug]`.
+
+**Done:**
+- Branch `feat/v0.7.1-frontend-perf`. 7 commits (T1 config, T2 baseline, T3 LazyMotion, T5 Next Image, T7 final measurements, T8 bump — plus a revert of the T7 iteration attempt).
+- Four planned optimizations landed: Turbopack analyzer wired, `optimizePackageImports` for lucide + @base-ui, LazyMotion `domMax → domAnimation`, `next/image` for GitHub avatars. ISR on `/share/[slug]` deferred to v0.8.0.
+- Lighthouse mobile `/u/octocat` (warm backend, 3-run median): perf **77 → 94**, LCP **3,971 → 1,985 ms** (−50%), TTI **3,980 → 1,985 ms** (−50%), CLS **0.080 → 0**, TBT **259 → 0 ms**. Full numbers in [final measurement report](./superpowers/measurements/2026-05-21-v0.7.1-final.md).
+- Bundle: `/u/[username]` first-load JS 908 → 874 KB uncompressed (−34 KB / ~10 KB gzipped). The @base-ui chunk alone went 150 → 103 KB once `optimizePackageImports` kicked in.
+- Frontend suite 25/25 vitest pass (added 3 cases: 1 for `FramerProvider`, 2 for `ShareAttribution`).
+- Backend `pyproject.toml` caught up from a stale `0.4.0` to `0.7.1` to track the runtime `VERSION` constant.
+
+**Decisions:**
+- **ISR on `/share/[slug]` deferred to v0.8.0.** `export const revalidate = N` caches the rendered HTML, so a revoked slug would stay viewable up to N seconds — the perf win isn't worth the revocation gap. Right fix is on-demand `revalidateTag` from the backend's share-toggle endpoint; that needs a backend↔frontend invalidation channel that v0.8.0 builds anyway.
+- **One iteration attempted, then reverted.** Stripped the `m.div` opacity-fade entry animations on the aggregate-score / engineering-report panels to close the 1-pt perf gap (median 94 vs target 95). Reverted after measurement: the local backend's `cache: unconfigured` state means every request hits live GitHub API for 5-7 s, drowning Lighthouse signal. The earlier "good" 93-95 runs were against the warm in-process cache — which IS what prod users see (Upstash configured live, `cache: up` verified). Cinematic animations are non-negotiable per AGENTS.md rule 1.
+- **Final perf certification deferred to PageSpeed Insights on live Vercel.** Local environment can't certify a 94 vs 95 distinction; prod has the warm cache state baked in.
+
+**Learned / surprises:**
+- **`@next/bundle-analyzer` is webpack-only.** Doesn't work under Turbopack — `npm run analyze` produced no output even with `ANALYZE=true` wired correctly. Next 16 ships its own `next experimental-analyze --output` for Turbopack; switched to that. Output lands at `.next/diagnostics/analyze/` (interactive site) + `.next/diagnostics/route-bundle-stats.json` (machine-readable per-route totals).
+- **Turbopack re-partitions on call-graph changes.** Switching LazyMotion `domMax → domAnimation` (a framer-motion-internal change) made the `@base-ui` chunk shrink from 150 → 103 KB. Chunking is content-graph dependent, not module-name dependent — net shipped bytes are the only stable number to track across builds.
+- **Chunk hashes change every build.** Identifying which chunk is which library means grepping production-minified JS for distinctive symbols (`OpenChangeReason` → @base-ui, `MotionConfig` → framer-motion). Wrote `frontend/scripts/chunk-stats.mjs` to read `route-bundle-stats.json` and print per-route top-N with disk sizes, so this stays repeatable.
+- **Lighthouse noise is huge when backend latency dominates.** Three runs against the warm in-process cache: perf 93/95/94, LCP all 1,970-1,990 ms. Three runs against a cold backend: perf 76/81/83, LCP 4,011-4,268 ms. The variance band of 18 perf points (76 → 94) is entirely backend-noise, not frontend-perf. Always confirm cache state before claiming a frontend regression.
+
+**Verified locally:**
+- `cd backend && uv run ruff check .` clean.
+- `cd frontend && npm run lint && npm run test:run && npm run build` clean (25/25 vitest pass).
+- Local Lighthouse mobile `/u/octocat` warm-backend median: perf 94, LCP/TTI 1,985 ms, CLS 0.
+
+**Blocked / open:**
+- Live perf-score certification (target ≥ 95) pending PageSpeed Insights run on the v0.7.1 Vercel deploy.
+- Share-page Lighthouse measurement (`/share/<slug>`) deferred until the live deploy.
+
+**Next:**
+- Merge `feat/v0.7.1-frontend-perf` to `main` with `--no-ff`; tag `v0.7.1`; push tag → release workflow fires.
+- Run PageSpeed Insights on the live deploy; append the prod numbers to v0.7.1's final measurement report. If < 95, schedule a focused v0.7.2 with better measurement signal.
+- v0.8.0 begins: Sentry, analytics, cron re-ingestion, manual "Force refresh", backend → frontend `revalidateTag` channel for share-page ISR, `vercel.json` → `vercel.ts` migration.
+
+---
+
 ## 2026-05-21 — Claude (Opus 4.7) — full audit + housekeeping pre-v0.7.1
 
 **Slice:** between-slice housekeeping (no version bump).

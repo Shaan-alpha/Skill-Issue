@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense } from "react";
+import Image from "next/image";
 import { Menu } from "@base-ui/react/menu";
 import { useSession, signIn, signOut } from "@/lib/auth";
 
@@ -29,8 +30,13 @@ function HeaderInner() {
         aria-label={`Signed in as ${login}`}
       >
         {avatar_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={avatar_url} alt="" className="size-full object-cover" />
+          <Image
+            src={avatar_url}
+            alt=""
+            width={36}
+            height={36}
+            className="size-full object-cover"
+          />
         ) : (
           <span className="grid place-items-center size-full text-xs">
             {login.slice(0, 2)}
