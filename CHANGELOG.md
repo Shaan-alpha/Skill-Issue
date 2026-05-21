@@ -8,6 +8,13 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
+## [0.7.4] — 2026-05-21
+
+### Fixed
+- **Badge evidence was unreachable on mobile.** `BadgeRow` used `@base-ui/react/tooltip`, which is hover/focus-only and doesn't fire on touch — mobile users had no way to discover what a given badge meant. Switched to `@base-ui/react/popover` with `openOnHover delay={150} closeDelay={50}`, which gives every behaviour we wanted in one primitive: tap toggles on touch, hover peeks on desktop, focus + Enter/Space works for keyboard users. Cursor changed `cursor-help` → `cursor-pointer` to signal it's actually clickable. Same evidence content, same animated popup; mobile users can now read the same explanation desktop users always could.
+
+---
+
 ## [0.7.3] — 2026-05-21
 
 ### Fixed

@@ -43,7 +43,7 @@ Engineering insight first. AI flavor second. Scoring is deterministic and explai
 
 ## Status
 
-Pre-alpha. Latest shipped release is **v0.7.3** (Hotfix: detect GitHub organizations). Live at https://skill-issue-tau.vercel.app — GitHub OAuth sign-in, Neon Postgres persistence, `/me` history, opt-in `/share/[slug]` public links. The AI narrative layer (Roast + Mentor) runs on **Groq** (`llama-3.3-70b-versatile`). v0.7.0 added Upstash Redis caching (warm `/analyze` ≤ 200 ms); v0.7.1 trimmed 34 KB off the frontend bundle and switched to `next/image` for avatars; v0.7.2 prod-certified the perf budget (CLS 0.080 → **0** structurally, perf 90 → 94, LCP 2,804 → 2,773 ms) by rewriting the loading skeleton to match the real ResultsView and reserving SiteHeader height to kill the Suspense-fallback CLS. **v0.8.0 — Polish + observability (Sentry, PostHog, cron re-ingestion, on-demand share-page revalidation, LCP element identification)** is the next slice. See [`CHANGELOG.md`](./CHANGELOG.md) for shipped slices, [`PLAN.md`](./PLAN.md) for the full roadmap, and [`docs/PROGRESS_LOG.md`](./docs/PROGRESS_LOG.md) for the most recent session handoff.
+Pre-alpha. Latest shipped release is **v0.7.4** (Hotfix: badges tappable on mobile). Live at https://skill-issue-tau.vercel.app — GitHub OAuth sign-in, Neon Postgres persistence, `/me` history, opt-in `/share/[slug]` public links. The AI narrative layer (Roast + Mentor) runs on **Groq** (`llama-3.3-70b-versatile`). v0.7.0 added Upstash Redis caching (warm `/analyze` ≤ 200 ms); v0.7.1 trimmed 34 KB off the frontend bundle and switched to `next/image` for avatars; v0.7.2 prod-certified the perf budget (CLS 0.080 → **0** structurally, perf 90 → 94, LCP 2,804 → 2,773 ms) by rewriting the loading skeleton to match the real ResultsView and reserving SiteHeader height to kill the Suspense-fallback CLS. **v0.8.0 — Polish + observability (Sentry, PostHog, cron re-ingestion, on-demand share-page revalidation, LCP element identification)** is the next slice. See [`CHANGELOG.md`](./CHANGELOG.md) for shipped slices, [`PLAN.md`](./PLAN.md) for the full roadmap, and [`docs/PROGRESS_LOG.md`](./docs/PROGRESS_LOG.md) for the most recent session handoff.
 
 ---
 
@@ -76,7 +76,7 @@ cp .env.example .env        # then edit .env and add your GITHUB_TOKEN and OPENA
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
-Verify: `curl http://localhost:8000/health` → `{"status":"ok","version":"0.7.3","db":"up"|"down","cache":"up"|"down"|"unconfigured"}`. The `db` field reports DB reachability when `DATABASE_URL` is configured; the `cache` field reports Upstash reachability (`unconfigured` when `UPSTASH_REDIS_REST_URL` isn't set — perfectly fine for local dev, the in-process fallback covers it).
+Verify: `curl http://localhost:8000/health` → `{"status":"ok","version":"0.7.4","db":"up"|"down","cache":"up"|"down"|"unconfigured"}`. The `db` field reports DB reachability when `DATABASE_URL` is configured; the `cache` field reports Upstash reachability (`unconfigured` when `UPSTASH_REDIS_REST_URL` isn't set — perfectly fine for local dev, the in-process fallback covers it).
 Hit the analyzer: `curl http://localhost:8000/analyze/octocat`.
 
 ### Frontend (`:3000`)
