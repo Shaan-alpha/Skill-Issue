@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { Image as ImageIcon } from "lucide-react";
 
 export function ShareAttribution({
@@ -13,8 +14,13 @@ export function ShareAttribution({
     <div className="flex flex-wrap items-center gap-3">
       <div className="inline-flex items-center gap-2 text-xs text-muted-foreground">
         {avatarUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={avatarUrl} alt="" className="size-5 rounded-full" />
+          <Image
+            src={avatarUrl}
+            alt=""
+            width={20}
+            height={20}
+            className="size-5 rounded-full"
+          />
         ) : null}
         <span>
           Shared by <span className="text-foreground">@{login}</span>
