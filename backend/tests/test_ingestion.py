@@ -262,3 +262,41 @@ async def test_ingest_profile_detects_readme_tests_ci_and_deployment_hints() -> 
     assert bare.has_ci is False
     # Deployment hints stay empty (or only "pinned" if pinned, which it isn't here)
     assert bare.deployment_hints == []
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_ingest_profile_rejects_organizations() -> None:
+    """
+    GitHub orgs respond to /users/{login} with the same shape as users but
+    `type: "Organization"`. The scoring engine assumes individual-developer
+    semantics (pinned repos, contribution graph, PRs opened by user) and the
+    GraphQL `user(login:)` query returns null for orgs, which previously
+    null-deref'd in profile.py and surfaced as a generic 500 to the user.
+    Now we detect early and raise NotAnIndividualError so the API layer
+    can map it to a clean 422 with a helpful message.
+    """
+    from app.ingestion.profile import NotAnIndividualError
+
+    respx.get("https://api.github.com/users/apache").mock(
+        return_value=Response(
+            200,
+            json={
+                "login": "apache",
+                "id": 47359,
+                "node_id": "MDEyOk9yZ2FuaXphdGlvbjQ3MzU5",
+                "type": "Organization",
+                "avatar_url": "https://avatars.githubusercontent.com/u/47359",
+                "html_url": "https://github.com/apache",
+            },
+        )
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        with pytest.raises(NotAnIndividualError) as excinfo:
+            await ingest_profile("apache", gh)
+
+    msg = str(excinfo.value)
+    assert "apache" in msg
+    assert "organization" in msg.lower()
+    assert "username instead" in msg.lower() or "individual" in msg.lower()
