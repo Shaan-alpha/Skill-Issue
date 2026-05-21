@@ -76,7 +76,7 @@ cp .env.example .env        # then edit .env and add your GITHUB_TOKEN and OPENA
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
-Verify: `curl http://localhost:8000/health` → `{"status":"ok","version":"0.7.0","db":"up"|"down","cache":"up"|"down"|"unconfigured"}`. The `db` field reports DB reachability when `DATABASE_URL` is configured; the `cache` field reports Upstash reachability (`unconfigured` when `UPSTASH_REDIS_REST_URL` isn't set — perfectly fine for local dev, the in-process fallback covers it).
+Verify: `curl http://localhost:8000/health` → `{"status":"ok","version":"0.7.1","db":"up"|"down","cache":"up"|"down"|"unconfigured"}`. The `db` field reports DB reachability when `DATABASE_URL` is configured; the `cache` field reports Upstash reachability (`unconfigured` when `UPSTASH_REDIS_REST_URL` isn't set — perfectly fine for local dev, the in-process fallback covers it).
 Hit the analyzer: `curl http://localhost:8000/analyze/octocat`.
 
 ### Frontend (`:3000`)
