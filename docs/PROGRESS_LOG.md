@@ -19,6 +19,26 @@ Format:
 
 ---
 
+## 2026-05-21 — Claude (Opus 4.7) — v0.7.4 hotfix (badges tappable on mobile)
+
+**Slice:** post-v0.7.3 hotfix.
+
+**Done:**
+- User reported on mobile (no cursor → can't hover) the badge meanings were unreachable. Confirmed: `BadgeRow` used `@base-ui/react/tooltip`, which only fires on hover/focus — touch produced no response.
+- Replaced `Tooltip` with `Popover` from the same Base UI surface. `Popover.Trigger` accepts `openOnHover delay={150} closeDelay={50}` so it preserves the desktop hover-to-peek feel AND tap toggles on touch by default. Keyboard users get focus + Enter/Space (Trigger renders a native `<button>`). `cursor-help` → `cursor-pointer` so the affordance reads as clickable.
+- Same animated popup, same evidence content, same `<Popover.Arrow>` styling — visually unchanged on desktop; works on mobile.
+
+**Decisions:**
+- **Popover over Tooltip.** Base UI's Tooltip is hover-only by spec. The Popover primitive supports hover *and* click in one component, which is exactly what the bug fix needed. Single primitive is simpler than wiring hover handlers onto a Tooltip and a click handler onto a separate Sheet/Drawer.
+- **Hover delay 150 ms / close delay 50 ms.** Matches the prior Tooltip feel — quick enough to feel responsive on desktop but slow enough to avoid spamming popups when sweeping the cursor across a row of badges.
+- **Ship as v0.7.4 hotfix.** Same atomic-fix pattern as v0.7.3. Mobile is the user-blocking surface here.
+
+**Verified:** lint clean, build clean, 25/25 vitest pass.
+
+**Next:** `vercel deploy --prod` → verify on a real mobile browser → tag v0.7.4 → merge.
+
+---
+
 ## 2026-05-21 — Claude (Opus 4.7) — v0.7.3 hotfix (org detection)
 
 **Slice:** post-v0.7.2 hotfix.

@@ -28,6 +28,7 @@
 | **v0.7.1** | Performance (frontend) — Lighthouse ≥ 95, TTI ≤ 2.5s, LCP ≤ 2.5s, CLS ≤ 0.1 | ⚠️ shipped, partial budget pass (prod perf 90/95, LCP 2,804/2,500) |
 | **v0.7.2** | Perf gap-closer — CLS structural fix + dynamic NarrativeCard | ⚠️ shipped, CLS perfect, perf 94/95 (1 short at noise floor) |
 | **v0.7.3** | Hotfix — detect GitHub organizations + helpful 422 (was: silent 500 on `apache`, `microsoft`, etc.) | ✅ shipped |
+| **v0.7.4** | Hotfix — badge evidence reachable on mobile (Tooltip → Popover with hover + tap) | ✅ shipped |
 | **v0.8.0** | Polish + observability — Sentry, analytics, cron re-ingestion, manual "Force refresh" | pending |
 | **v0.9.0** | Beta hardening — security review, abuse mitigation, load test | pending |
 | **v1.0.0** | Public launch | pending |
