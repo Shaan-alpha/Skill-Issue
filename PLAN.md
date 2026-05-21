@@ -26,7 +26,7 @@
 | **v0.6.0** | GitHub Receipts™ — shareable OG cards (dark canonical) | ✅ shipped |
 | **v0.7.0** | Caching (backend) — Upstash Redis, singleflight, GitHub-API + Report + narrative caches | ✅ shipped |
 | **v0.7.1** | Performance (frontend) — Lighthouse ≥ 95, TTI ≤ 2.5s, LCP ≤ 2.5s, CLS ≤ 0.1 | ⚠️ shipped, partial budget pass (prod perf 90/95, LCP 2,804/2,500) |
-| **v0.7.2** | Perf gap-closer — identify prod LCP element + 0.080 CLS source, close the v0.7.1 gap | pending |
+| **v0.7.2** | Perf gap-closer — CLS structural fix + dynamic NarrativeCard | ⚠️ shipped, CLS perfect, perf 94/95 (1 short at noise floor) |
 | **v0.8.0** | Polish + observability — Sentry, analytics, cron re-ingestion, manual "Force refresh" | pending |
 | **v0.9.0** | Beta hardening — security review, abuse mitigation, load test | pending |
 | **v1.0.0** | Public launch | pending |
@@ -279,11 +279,13 @@
 - **Certify against live deploy.** 3-run median on `https://skill-issue-tau.vercel.app/u/octocat` after the fix; record in a new measurement report `docs/superpowers/measurements/<date>-v0.7.2-prod-certified.md`.
 
 **Exit criteria:**
-- [ ] Prod 3-run median: **performance ≥ 95** on `/u/octocat`.
-- [ ] Prod LCP ≤ 2,500 ms and TTI ≤ 2,500 ms (3-run median).
-- [ ] Prod CLS root cause documented; CLS ≤ 0.05 (room to spare, currently 0.08).
-- [ ] Measurement report committed under `docs/superpowers/measurements/`.
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.7.2`.
+- [~] Prod 5-run median: **performance 94** on `/u/octocat` (target 95, 2/5 runs hit 95+). 1 point short at the Lighthouse noise floor.
+- [~] Prod LCP **2,773 ms** (target ≤ 2,500, +273) and TTI **2,816 ms** (target ≤ 2,500, +316). Improved over v0.7.1 but still over the strict budget.
+- [x] Prod CLS root cause documented + **CLS = 0** (target ≤ 0.05). Two shifts identified (loading-skeleton misalignment + SiteHeader Suspense fallback), both eliminated.
+- [x] Measurement report committed: [`docs/superpowers/measurements/2026-05-21-v0.7.2-prod-certified.md`](./docs/superpowers/measurements/2026-05-21-v0.7.2-prod-certified.md).
+- [x] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.7.2`.
+
+**Decision:** Ship with the CLS structural fix as the headline win and document the remaining LCP gap. The strict-Lighthouse-budget chase has diminishing returns vs the noise floor of lighthouse-on-localhost-against-prod-URL. Real-user metrics from v0.8.0's Sentry/PostHog will give a much tighter signal for the remaining ~10% gap on LCP/TTI.
 
 **Out of scope:** the deferred `/share/[slug]` ISR + on-demand revalidation hook — still belongs to v0.8.0 because it needs the backend↔frontend invalidation channel.
 

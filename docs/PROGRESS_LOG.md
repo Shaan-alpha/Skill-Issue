@@ -19,6 +19,44 @@ Format:
 
 ---
 
+## 2026-05-21 — Claude (Opus 4.7) — v0.7.2 shipped (CLS perfect, perf 94 noise-floor)
+
+**Slice:** v0.7.2 — close the v0.7.1 perf gap with measurement-driven fixes.
+
+**Done:**
+- Branch `feat/v0.7.2-perf-gap-closer`. 3 perf commits + version-bump commit, all prod-deployed via `vercel deploy --prod`.
+- **Lighthouse on prod, 5 runs median:** perf 90 → **94**, LCP 2,804 → 2,773 ms, **CLS 0.080 → 0** (perfect), TBT 228 → 155 ms. Full breakdown in [v0.7.2 measurement report](./superpowers/measurements/2026-05-21-v0.7.2-prod-certified.md).
+- **CLS root-caused and structurally fixed**, both shifts eliminated:
+  - 1st 0.040: `loading.tsx` skeleton had wrong section order vs `ResultsView` and was missing three components (SaveShareControls, NarrativeCard, footer). Skeleton rewritten to mirror ResultsView's exact render order + heights.
+  - 2nd 0.040: `SiteHeader` had `<Suspense fallback={null}>`, so header height was 0 until `useSession()` hydrated, then expanded ~36 px when the auth pill mounted. Header now gets `min-h-[3.75rem]` and a sized fallback div.
+- Iteration: dynamic-imported `NarrativeCard` (`ssr: false`) since it's below-the-fold and pulls a heavy SSE client. Bundle: 874 → 866 KB uncompressed (−8 KB), runtime: SSE setup moves off initial paint path. Effect was marginal (~1-2 perf points).
+
+**Decisions:**
+- **Bypass token-based preview measurement.** User provisioned a "Bypass for Automation" token in Vercel; I used it via Lighthouse's `--extra-headers` flag to measure preview deploys with auth. Iteration cycle ~5 min: edit code → `vercel deploy` → wait ~40s → 3 Lighthouse runs → analyze. Much tighter than push-to-GitHub-and-wait-for-auto-deploy.
+- **`vercel env pull` is not a path to prod-equivalent local backend.** Tried it; Vercel masks "Sensitive" env vars (Upstash token, DB URL, OAuth secrets, encryption keys) and ships them as empty strings. Right security boundary, wrong shape for local prod simulation. Pivoted to measuring against the prod URL directly.
+- **Ship at perf 94 with documented gap.** Both iteration attempts used. LCP/TTI gap is ~10% and lives at the Lighthouse noise floor (5 runs spanned 61-96 perf). RUM in v0.8.0 will give the tighter signal needed for a confident "≥ 95" claim.
+
+**Learned / surprises:**
+- **Lighthouse CLI returns `n/a` for `largest-contentful-paint-element` selector** on prod URLs in v12+. The audit ID exists but `details.items` is empty. PageSpeed Insights' web UI or Chrome DevTools Performance Insights are the right tools for LCP element identification — both deferred to v0.8.0.
+- **Cold-start variance is huge on Vercel previews.** 5 prod-URL runs spanned 61 to 96 perf on the same code. Run 1 was a cold function spin-up (TBT 1,388 ms); run 3 hit the warm path (perf 96, LCP 2,645 — under budget). Median is the right summary statistic; "did one run hit 95?" is meaningless because cold-start state dominates.
+- **Vercel preview deploys are *worse* than prod on perf metrics**, not better. Preview LCP 4,500 ms vs prod LCP 2,773 ms for identical code. Preview has no edge cache warming + uses a less-optimized infrastructure tier. Implication: iterate on preview, certify on prod.
+- **`@next/bundle-analyzer` is webpack-only** (rediscovered for v0.7.2 since `npm run analyze` was last reconfigured). Next 16's Turbopack-native `next experimental-analyze --output` is the right tool.
+
+**Verified:**
+- 25/25 vitest pass, lint clean, build clean.
+- Live prod `/health`: version `0.7.2`, db up, cache up (will update once this commit deploys).
+- Prod CLS: deterministic 0 across 5 runs.
+
+**Blocked / open:**
+- LCP element on prod still unidentified (Lighthouse CLI returns `n/a`). Needs PageSpeed Insights web UI or Chrome DevTools — folded into v0.8.0 since the observability work pulls in the same tools.
+- Strict LCP ≤ 2,500 / TTI ≤ 2,500 budget unmet (median 2,773 / 2,816). v0.8.0 RUM data will inform whether this matters at p75 / p95 real-user percentiles.
+
+**Next:**
+- Merge `feat/v0.7.2-perf-gap-closer` to `main` with `--no-ff`; tag `v0.7.2`; push.
+- v0.8.0 — Polish + observability. Sentry, PostHog, structured logging, cron re-ingestion, manual "Force refresh" button, on-demand `revalidateTag` hook for the deferred `/share/[slug]` ISR, `vercel.json` → `vercel.ts` migration, LCP-element identification using PageSpeed Insights / DevTools.
+
+---
+
 ## 2026-05-21 — Claude (Opus 4.7) — v0.7.1 prod-certified (partial budget pass) + v0.7.2 scheduled
 
 **Slice:** post-v0.7.1 measurement correction.

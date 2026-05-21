@@ -12,14 +12,50 @@ import {
   Target,
 } from "lucide-react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress, ProgressLabel } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Report, ScoreResult, TierInfo } from "@/types";
 import { PositionBar } from "@/components/position-bar";
 import { BadgeRow } from "@/components/badge-row";
-import { NarrativeCard } from "@/components/narrative-card";
 import { SaveShareControls } from "@/components/save-share-controls";
+
+// NarrativeCard pulls a heavy SSE-streaming client that only matters
+// once the user reaches the AI section. Defer it so the initial JS
+// bundle is smaller and LCP paints sooner. CLS=0 (locked by the
+// loading skeleton + header fix) means the deferred mount doesn't
+// shift anything — the placeholder reserves the real card's height.
+const NarrativeCard = dynamic(
+  () => import("@/components/narrative-card").then((m) => ({ default: m.NarrativeCard })),
+  {
+    ssr: false,
+    loading: () => (
+      <section className="space-y-4" aria-label="AI Narrative Analysis">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+              <span>Executive Overview</span>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-accent/20 text-accent font-mono font-normal">
+                AI
+              </span>
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Real-time synthesized breakdown of your engineering footprint.
+            </p>
+          </div>
+          <div className="h-8 w-40 rounded-full bg-white/5" aria-hidden="true" />
+        </div>
+        <div className="glass rounded-2xl p-5 sm:p-6 space-y-3">
+          <div className="h-4 w-full rounded bg-white/5" />
+          <div className="h-4 w-full rounded bg-white/5" />
+          <div className="h-4 w-5/6 rounded bg-white/5" />
+          <div className="h-4 w-3/4 rounded bg-white/5" />
+        </div>
+      </section>
+    ),
+  },
+);
 
 
 function tierChipLabel(tier: TierInfo): string {
@@ -298,7 +334,7 @@ export function ResultsView({
         </section>
 
         <footer className="space-y-2 pt-8 text-center text-xs uppercase tracking-widest text-muted-foreground sm:pt-12">
-          <p>Skill Issue — GitHub Reputation Protocol v0.7.1</p>
+          <p>Skill Issue — GitHub Reputation Protocol v0.7.2</p>
         </footer>
       </main>
 
