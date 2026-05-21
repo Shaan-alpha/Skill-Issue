@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { ResultsView } from "@/components/results-view";
+import { NotAnIndividual } from "@/components/not-an-individual";
 import { Report } from "@/types";
 
 interface AuthHints {
@@ -8,7 +9,19 @@ interface AuthHints {
   shareSlug: string | null;
 }
 
-async function getAnalysis(username: string, cookieHeader: string): Promise<Report> {
+// Backend returns 422 with { detail } when /users/{login} resolves to an
+// Organization (or other non-User type). We surface the message directly
+// instead of routing through error.tsx — Next.js error boundaries strip
+// the actual response detail in prod and would show the generic "API may
+// be down" copy, which is misleading for a deterministic input error.
+type AnalysisResult =
+  | { kind: "ok"; report: Report }
+  | { kind: "not_individual"; detail: string };
+
+async function getAnalysis(
+  username: string,
+  cookieHeader: string,
+): Promise<AnalysisResult> {
   const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
   const res = await fetch(`${baseUrl}/analyze/${username}`, {
     cache: "no-store",
@@ -16,9 +29,19 @@ async function getAnalysis(username: string, cookieHeader: string): Promise<Repo
   });
 
   if (res.status === 404 || res.status === 400) notFound();
+  if (res.status === 422) {
+    let detail = `'${username}' is a GitHub organization, not a user.`;
+    try {
+      const body = (await res.json()) as { detail?: string };
+      if (body.detail) detail = body.detail;
+    } catch {
+      // fall through with the default message
+    }
+    return { kind: "not_individual", detail };
+  }
   if (!res.ok) throw new Error(`Backend returned ${res.status}`);
 
-  return res.json();
+  return { kind: "ok", report: (await res.json()) as Report };
 }
 
 async function loadAuthHints(
@@ -63,7 +86,12 @@ export default async function AnalysisPage({
     .map((c) => `${c.name}=${c.value}`)
     .join("; ");
 
-  const report = await getAnalysis(username, cookieHeader);
+  const result = await getAnalysis(username, cookieHeader);
+  if (result.kind === "not_individual") {
+    return <NotAnIndividual username={username} detail={result.detail} />;
+  }
+
+  const { report } = result;
   // Use the canonical login from the backend response, not the URL slug —
   // GitHub logins are case-insensitive in URLs but the backend stores the
   // canonical case (e.g. URL `/u/shaan-alpha`, stored target_login

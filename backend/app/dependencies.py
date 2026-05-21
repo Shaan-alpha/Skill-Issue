@@ -12,7 +12,7 @@ from app.cache.client import RedisCache
 from app.cache.keys import NAMESPACE_REPORT, report_key
 from app.cache.locks import singleflight
 from app.github.client import GitHubClient
-from app.ingestion.profile import ingest_profile
+from app.ingestion.profile import NotAnIndividualError, ingest_profile
 from app.models import Report
 from app.narrative.budget import DailyBudget
 from app.narrative.cache import NarrativeCache
@@ -146,6 +146,8 @@ async def _live_ingest(
     async with GitHubClient(token=access_token, cache=cache) as gh:
         try:
             profile = await ingest_profile(username, gh)
+        except NotAnIndividualError as e:
+            raise HTTPException(status_code=422, detail=str(e)) from e
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:
                 raise HTTPException(

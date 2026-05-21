@@ -19,6 +19,33 @@ Format:
 
 ---
 
+## 2026-05-21 — Claude (Opus 4.7) — v0.7.3 hotfix (org detection)
+
+**Slice:** post-v0.7.2 hotfix.
+
+**Done:**
+- User reported `skill-issue-tau.vercel.app/u/apache` failing with "Analysis failed — API may be down" copy. Confirmed: `apache` is a GitHub organization (REST `/users/apache` returns `"type": "Organization"`, node_id base64 decodes to `Organization47359`). Our backend returned a generic 500; the frontend's hardcoded "API may be down" fallback fired because Next's `error.tsx` strips response detail in prod.
+- Root cause: `pinned.get("user", {}).get("pinnedItems", {})` in `app/ingestion/profile.py` null-deref'd because GraphQL `user(login:)` returns `{"user": null}` for orgs. `.get("user", {})` returns the *default* only when the key is absent, not when the value is null. The catch-all `except Exception` in `_live_ingest` swallowed it into a generic 500.
+- Fix: new `NotAnIndividualError` in `app/ingestion/profile.py`, raised early when `user.get("type") == "Organization"` (REST-based check happens before any GraphQL call). Dependency layer maps it to a 422 with detail `"'<login>' is a GitHub organization, not a user. Skill Issue scores individual developers — try a username instead."`
+- Frontend: new `<NotAnIndividual>` server component reads the 422 detail and shows a Building2 icon + "Try a username" / "View on GitHub" CTAs. Plumbed through `page.tsx`'s typed result discriminator (`AnalysisResult = ok | not_individual`) instead of Next's error boundary.
+- Backend test: `test_ingest_profile_rejects_organizations` mocks the apache org response, asserts the right exception with the right message shape.
+
+**Decisions:**
+- **Hotfix as v0.7.3, ship now.** Atomic, low-risk, user-blocking for every GitHub org input (apache, microsoft, google, vercel, apple, kubernetes, ...). Folding into v0.8.0 means days/weeks of misleading copy.
+- **Detect at ingestion entry, not at URL validation.** A regex check at the URL layer would have to fetch the user anyway. The check sits right after `gh.get_user(...)` where we already have the data.
+- **422 over 400.** The login is syntactically valid (it's a real GitHub account), just semantically wrong for our scoring engine. 422 (Unprocessable Entity) is the right code for "we understood the request but can't process the entity."
+
+**Verified:**
+- 25/25 vitest + 244 backend tests collect cleanly (5 from `tests/test_ingestion.py` including the new case, all pass).
+- Lint + build + ruff all clean.
+- Build ships `not-an-individual.tsx` as a server component (no client JS for the failure path).
+
+**Blocked / open:** None.
+
+**Next:** `vercel deploy --prod` → verify `/u/apache` shows the new state + `/u/octocat` still works → tag v0.7.3 → merge to main. Then v0.8.0.
+
+---
+
 ## 2026-05-21 — Claude (Opus 4.7) — v0.7.2 shipped (CLS perfect, perf 94 noise-floor)
 
 **Slice:** v0.7.2 — close the v0.7.1 perf gap with measurement-driven fixes.

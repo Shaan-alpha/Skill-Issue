@@ -8,6 +8,20 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
+## [0.7.3] — 2026-05-21
+
+### Fixed
+- **Analyzing a GitHub organization (e.g. `apache`, `microsoft`, `google`) crashed with a generic 500 + misleading "API may be down" frontend copy.** Root cause: GitHub's REST `/users/{login}` endpoint returns the same shape for users and orgs (orgs are a special account type), so our ingestion happily called the GraphQL `user(login:)` query — which returns `{"user": null}` for orgs. The downstream `pinned.get("user", {}).get("pinnedItems", {})` chain null-deref'd (the `.get("user", {})` default only fires when the *key* is absent; it returns the actual `None` when the value is null), the catch-all `except Exception` in `_live_ingest` swallowed it into a generic 500, and the frontend's `error.tsx` showed its hardcoded "API may be down" copy.
+- **Detection now happens at ingestion entry.** New `NotAnIndividualError` in `app/ingestion/profile.py`, raised when `/users/{login}` returns `"type": "Organization"`. The dependency layer maps it to a 422 with detail `"'<login>' is a GitHub organization, not a user. Skill Issue scores individual developers — try a username instead."`
+- **Frontend surfaces the 422 specifically.** New `<NotAnIndividual>` component (server-rendered, no JS) shows the actual detail message + Building2 icon + "Try a username" / "View on GitHub" CTAs. Routes through `page.tsx`'s typed result discriminator rather than Next's error boundary (which strips response detail in prod).
+- Backend test coverage: `test_ingest_profile_rejects_organizations` (mocks `apache` org response, asserts `NotAnIndividualError` raised with the expected message shape).
+
+### Changed
+- Backend version bumped to `0.7.3` in `pyproject.toml` + `app/settings.py`.
+- Frontend version strings (landing pill, results footer) bumped to `v0.7.3`.
+
+---
+
 ## [0.7.2] — 2026-05-21
 
 ### Performance — prod-certified

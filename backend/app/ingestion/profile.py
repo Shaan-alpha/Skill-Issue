@@ -12,6 +12,12 @@ from app.models import Profile, Repo
 if TYPE_CHECKING:
     from app.github.client import GitHubClient
 
+
+class NotAnIndividualError(Exception):
+    """Raised when /users/{login} resolves to an Organization (or other
+    non-User account type). The dependency layer maps this to a 422
+    so the frontend can render a specific message."""
+
 # How many repos to inspect for README / tests / CI / deployment signals.
 # Matches the cap used for language aggregation. Beyond this, signals are
 # diminishing and the API cost is real.
@@ -104,6 +110,19 @@ async def _enrich_repo_signals(repo: Repo, gh: GitHubClient) -> None:
 
 async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
     user = await gh.get_user(username)
+    # GitHub reuses the /users/{login} endpoint for organisations — same shape,
+    # different `type`. Our scoring engine assumes an individual developer
+    # (pinned repos, contribution graph, PRs opened, commit cadence). Orgs
+    # also break the GraphQL queries since `user(login:)` returns null for
+    # an org and downstream `.get(...).get(...)` chains null-deref. Detect
+    # early and surface a clean 422 so the caller can render a helpful
+    # message instead of a generic 500.
+    if user.get("type") == "Organization":
+        raise NotAnIndividualError(
+            f"'{username}' is a GitHub organization, not a user. "
+            "Skill Issue scores individual developers — try a username instead."
+        )
+
     repos_raw = await gh.list_repos(username)
     pinned = await gh.graphql(PINNED_REPOS, {"login": username})
     external = await gh.graphql(EXTERNAL_PRS, {"login": username})
