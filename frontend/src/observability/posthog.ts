@@ -11,15 +11,19 @@ export function initPostHog(): void {
   const host = process.env.NEXT_PUBLIC_POSTHOG_HOST ?? "https://us.i.posthog.com";
   posthog.init(key, {
     api_host: host,
-    capture_pageview: true,
+    // "history_change" is the App-Router-correct value — Next.js client-side
+    // navigations don't trigger a full page load, so the boolean `true` would
+    // miss every next/link navigation. PostHog defaults shifted to this on
+    // 2025-05-24.
+    capture_pageview: "history_change",
     capture_pageleave: true,
     capture_performance: true,
     autocapture: false,
-    person_profiles: "identified_only",
-    loaded: () => {
-      initialised = true;
-    },
+    // person_profiles defaults to "identified_only" — no need to set.
   });
+  // Set eagerly so calls fired between init() and the loaded-callback don't
+  // get blocked by our no-op guard — PostHog's SDK buffers pre-loaded calls
+  // internally, but only if we actually forward them.
   initialised = true;
 }
 

@@ -1,3 +1,5 @@
+import * as Sentry from "@sentry/nextjs";
+
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     await import("./src/observability/sentry.server");
@@ -7,19 +9,7 @@ export async function register() {
   }
 }
 
-export async function onRequestError(
-  err: unknown,
-  request: { path: string; method: string; headers: Record<string, string> },
-  context: { routerKind: string; routePath: string; routeType: string },
-) {
-  const Sentry = await import("@sentry/nextjs");
-  Sentry.captureException(err, {
-    extra: {
-      next_request_path: request.path,
-      next_request_method: request.method,
-      next_router_kind: context.routerKind,
-      next_route_path: context.routePath,
-      next_route_type: context.routeType,
-    },
-  });
-}
+// Sentry's purpose-built handler for Next 16's onRequestError hook — captures
+// the error + full request + full context (renderSource, revalidateReason,
+// renderType — fields our previous hand-roll dropped on the floor).
+export const onRequestError = Sentry.captureRequestError;
