@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { signIn, useSession } from "@/lib/auth";
 import type { ShareResponse } from "@/types";
+import { trackShareToggled } from "@/observability/events";
 
 interface Props {
   /** Pre-existing share slug, if any. */
@@ -53,12 +54,14 @@ export function SaveShareControls({ initialShareSlug, analysisId, username }: Pr
       if (shareSlug) {
         await fetch(url, { method: "DELETE", credentials: "include" });
         setShareSlug(null);
+        trackShareToggled({ now: "private" });
         setToast("Share revoked");
       } else {
         const r = await fetch(url, { method: "POST", credentials: "include" });
         if (r.ok) {
           const body: ShareResponse = await r.json();
           setShareSlug(body.share_slug);
+          trackShareToggled({ now: "public" });
           try {
             await navigator.clipboard.writeText(body.share_url);
             setToast("Share URL copied to clipboard");

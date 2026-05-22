@@ -1,6 +1,7 @@
 "use client";
 
 import { m } from "framer-motion";
+import { useEffect } from "react";
 import {
   ArrowLeft,
   ExternalLink,
@@ -20,6 +21,7 @@ import { Report, ScoreResult, TierInfo } from "@/types";
 import { PositionBar } from "@/components/position-bar";
 import { BadgeRow } from "@/components/badge-row";
 import { SaveShareControls } from "@/components/save-share-controls";
+import { trackAnalyzeSubmitted } from "@/observability/events";
 
 // NarrativeCard pulls a heavy SSE-streaming client that only matters
 // once the user reaches the AI section. Defer it so the initial JS
@@ -124,6 +126,15 @@ export function ResultsView({
   analysisId,
   initialShareSlug,
 }: ResultsViewProps) {
+  useEffect(() => {
+    if (!report) return;
+    trackAnalyzeSubmitted({
+      tier: report.tier.name,
+      score: report.total,
+      badge_count: report.badges.length,
+    });
+  }, [report]);
+
   const canonicalUsername = report.username;
   const { breakdown } = report;
   const items = [
