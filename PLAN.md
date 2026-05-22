@@ -30,7 +30,7 @@
 | **v0.7.3** | Hotfix — detect GitHub organizations + helpful 422 (was: silent 500 on `apache`, `microsoft`, etc.) | ✅ shipped |
 | **v0.7.4** | Hotfix — badge evidence reachable on mobile (Tooltip → Popover with hover + tap) | ✅ shipped |
 | **v0.7.5** | Hotfix — Roast/Mentor toggle symmetric on mobile (flex-1 split 50/50) | ✅ shipped |
-| **v0.8.0** | Polish + observability — Sentry (FE+BE), PostHog (events + web-vitals), structured logging, axe a11y pass, on-voice 404/500, error-budget doc | pending |
+| **v0.8.0** | Polish + observability — Sentry (FE+BE), PostHog (events + web-vitals), structured logging, axe a11y pass, on-voice 404/500, error-budget doc | ✅ shipped |
 | **v0.8.1** | Cron daily re-ingestion of saved analyses (paired with Sentry so failures aren't silent) | deferred from v0.8.0 |
 | **v0.8.2** | Manual "Force refresh" on `/me` + `DELETE /me/cache/{username}` (Layer A invalidation) | deferred from v0.8.0 |
 | **v0.8.3** | On-demand `revalidateTag` for `/share/[slug]` ISR (closes v0.7.1's deferred share-page caching) | deferred from v0.7.1 |
@@ -324,14 +324,14 @@
 Each deferred item is independent and earns its own patch release, matching the v0.7.x cadence.
 
 **Exit criteria:**
-- [ ] Backend Sentry catches a deliberate test exception with `request_id` tag attached; no PII in the event body.
-- [ ] Frontend Sentry catches a deliberate client throw with source-mapped stack.
-- [ ] PostHog dashboard shows all 5 named events flowing from prod within 24h of deploy.
-- [ ] PostHog web-vitals capture identifies the prod LCP element on `/u/[username]` (closes v0.7.2's open gap).
-- [ ] `npx @axe-core/cli` returns zero critical issues on all 5 audited routes.
-- [ ] `docs/OBSERVABILITY.md` exists; defines critical vs acceptable error classes + alert intent.
-- [ ] PII contract (spec §6) verified by test for every listed field.
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.8.0` tagged + released.
+- [x] Backend Sentry catches a deliberate test exception with `request_id` tag attached; no PII in the event body.
+- [x] Frontend Sentry catches a deliberate client throw with source-mapped stack.
+- [x] PostHog dashboard shows all 5 named events flowing from prod within 24h of deploy.
+- [x] PostHog web-vitals capture identifies the prod LCP element on `/u/[username]` (closes v0.7.2's open gap).
+- [x] `npx @axe-core/cli` returns zero critical issues on all 5 audited routes.
+- [x] `docs/OBSERVABILITY.md` exists; defines critical vs acceptable error classes + alert intent.
+- [x] PII contract (spec §6) verified by test for every listed field.
+- [x] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.8.0` tagged + released.
 
 ---
 

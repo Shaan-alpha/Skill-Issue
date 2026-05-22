@@ -19,6 +19,50 @@ Format:
 
 ---
 
+## 2026-05-22 — Claude (Opus 4.7) — v0.8.0 shipped (Polish + Observability)
+
+**Slice:** v0.8.0 — Sentry FE+BE + PostHog + structlog + on-voice 404 + axe-clean.
+
+**Done:**
+- All 14 tasks from [`docs/superpowers/plans/2026-05-22-v0.8.0-polish-observability.md`](./superpowers/plans/2026-05-22-v0.8.0-polish-observability.md). Subagent-driven execution; ~6 hours wall-clock.
+- New `app/observability/` backend module: structlog config + `RequestIDMiddleware` + Sentry init with PII-scrub `before_send`. ~21 new tests across `tests/observability/`. All 244 backend tests + 21 new = 265+ pass.
+- New `frontend/src/observability/` module: Sentry client/server/edge SDK + PostHog provider + typed event helpers + shared scrub.ts. 9 new vitest cases. Suite at 34/34 passing.
+- Five PostHog events wired at their call sites (`results-view.tsx`, `save-share-controls.tsx`, `card-actions.tsx`, `mode-pill-toggle.tsx`, `site-header.tsx`).
+- On-voice 404 (`app/not-found.tsx`) + warmer 500 + `Sentry.captureException` hook.
+- `docs/OBSERVABILITY.md` defines error budget + alert intent + event taxonomy + PII contract.
+- Axe baseline + fixes committed at [`docs/superpowers/measurements/2026-05-22-v0.8.0-axe-baseline.md`](./superpowers/measurements/2026-05-22-v0.8.0-axe-baseline.md). **Zero critical, zero serious, zero moderate** across all 5 audited routes.
+
+**Decisions (highlights — full set in spec §2):**
+- **PostHog over Vercel Speed Insights for RUM** — same 1M-event budget covers web vitals, 12-month retention vs Speed Insights' 30-day Hobby cap.
+- **`@sentry/nextjs` v10.x** with one v8/v9 → v10 API shift handled: `hideSourceMaps: true` → `sourcemaps: { disable: true }`.
+- **Single shared scrub list** at `frontend/src/observability/scrub.ts` consumed by client + server Sentry — eliminates the drift that would have existed with two parallel inline copies.
+- **`x-vercel-id` added to the FE scrub list** — was a contract drift found in code review.
+- **`@internal` JSDoc on bare `track()`** — typed helpers in `events.ts` are the public contract.
+
+**Learned / surprises:**
+- Lucide-react v1.x removed branded icons. `Github` doesn't exist anymore; substituted `ExternalLink` on the 404 page (documented in TECH_STACK.md but caught at implementation time anyway).
+- The axe `landmark-one-main` violations on `/u/octocat` were actually surfaced through the loading skeleton + scoped not-found pages, not the main results-view component. Audit results depend on backend availability — when the backend's down locally, the empty/error states get audited instead. Worth memo-ing for future a11y passes: certify against full data flow, not just happy path.
+- ChromeDriver 149 vs Chrome 148 mismatch required `npx browser-driver-manager install chrome` before axe runs would succeed. Documented in the measurement report.
+- React 19 `use()` + Suspense played correctly in `<ObservabilityProvider>` once we split the SessionIdentifier into a Suspense boundary — same pattern as `SiteHeader`.
+
+**Verified locally:**
+- Backend: `uv run pytest -q` passes (existing 244 + 21 new observability tests). ruff clean.
+- Frontend: `npm run lint && npm run test:run && npm run build` clean. 34/34 vitest passing.
+- Axe: 0 critical / 0 serious / 0 moderate on all 5 audited routes against a local prod build.
+
+**Blocked / open:**
+- Live Sentry event + PostHog event verification deferred to post-deploy (24h soak).
+- Sentry alert rules deferred to v0.8.x patch — need ~1 week of baseline error rates.
+- CI integration of `@axe-core/cli` deferred to v0.8.x patch.
+- `/share/<slug>` axe audit deferred — needs a live public slug.
+
+**Next:**
+- Merge `feat/v0.8.0-polish-observability` to `main` with `--no-ff`. Tag `v0.8.0`. Push tag → release workflow fires.
+- Post-deploy: trigger a deliberate test exception on each Sentry project; confirm `$pageview` + `analyze_submitted` show up in PostHog Live Events; confirm web-vitals dashboard identifies the prod LCP element (closes v0.7.2).
+- v0.8.1 begins: cron daily re-ingestion of saved analyses.
+
+---
+
 ## 2026-05-22 — Claude (Opus 4.7) — v0.7.5 closed out, v0.8.0 scope locked
 
 **Slice:** between-slice — v0.7.5 release ritual + v0.8.0 brainstorm.
