@@ -14,6 +14,7 @@ export default function Loading() {
   return (
     <div className="min-h-screen bg-background px-4 py-6 sm:px-6 sm:py-12">
       <main className="mx-auto max-w-6xl animate-in space-y-8 sm:space-y-12">
+        <h1 className="sr-only">Loading engineering report&hellip;</h1>
         {/* 1. Header */}
         <header className="flex flex-wrap items-center justify-between gap-3">
           <Skeleton className="h-4 w-28 bg-white/5" />
