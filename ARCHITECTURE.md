@@ -140,6 +140,15 @@ Four fail-open layers; every operation swallows Redis exceptions and falls throu
 
 Bumping `KEY_PREFIX` in `app/cache/client.py` invalidates every namespace at once.
 
+### Observability — Sentry + PostHog + structlog (v0.8.0)
+
+Two thin cross-cutting layers. Both fail open — telemetry is never a correctness boundary.
+
+- **Backend `app/observability/`** — `structlog` JSON logging (console renderer in dev) with a `request_id` contextvar bound by `RequestIDMiddleware` (UUID4 per request). Sentry FastAPI integration captures unhandled exceptions; a `before_send` PII scrub hook strips `access_token`, `access_token_ct`, `oauth_state`, `oauth_code`, `session_id`, full `Cookie`/`Authorization` headers, and `email` before the envelope leaves the process. `request_id` is tagged on every Sentry event and echoed in the `X-Request-ID` response header so frontend breadcrumbs can correlate.
+- **Frontend `src/observability/`** — Sentry browser SDK via Next 16's `instrumentation.ts`, with source maps uploaded at build time. PostHog browser SDK wraps the layout via `<ObservabilityProvider>` — auto-pageviews + web-vitals capture + named events (`analyze_submitted`, `share_toggled`, `share_card_copied`, `mode_toggled`, `sign_in_clicked`). Signed-in users identified by the opaque `si_session` cookie value (never GitHub login, never email); anonymous viewers use PostHog's auto-distinct ID.
+- **Correlation contract:** one `request_id` per request flows through middleware → structlog → Sentry tag → response header. One canonical session ID across PostHog `identify()` and Sentry `user.id`.
+- **Real-user perf metrics:** PostHog `enable_web_vitals_autocapture` captures LCP / CLS / INP per visitor with element selectors — closes v0.7.2's "couldn't identify the prod LCP element" gap without adding a second vendor.
+
 ### Auth — GitHub OAuth (v0.5.0)
 
 - Server-side OAuth code flow (no PKCE — GitHub OAuth Apps don't support it). State in a short-lived httpOnly cookie.

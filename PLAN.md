@@ -30,8 +30,12 @@
 | **v0.7.3** | Hotfix — detect GitHub organizations + helpful 422 (was: silent 500 on `apache`, `microsoft`, etc.) | ✅ shipped |
 | **v0.7.4** | Hotfix — badge evidence reachable on mobile (Tooltip → Popover with hover + tap) | ✅ shipped |
 | **v0.7.5** | Hotfix — Roast/Mentor toggle symmetric on mobile (flex-1 split 50/50) | ✅ shipped |
-| **v0.8.0** | Polish + observability — Sentry, analytics, cron re-ingestion, manual "Force refresh" | pending |
-| **v0.9.0** | Beta hardening — security review, abuse mitigation, load test | pending |
+| **v0.8.0** | Polish + observability — Sentry (FE+BE), PostHog (events + web-vitals), structured logging, axe a11y pass, on-voice 404/500, error-budget doc | pending |
+| **v0.8.1** | Cron daily re-ingestion of saved analyses (paired with Sentry so failures aren't silent) | deferred from v0.8.0 |
+| **v0.8.2** | Manual "Force refresh" on `/me` + `DELETE /me/cache/{username}` (Layer A invalidation) | deferred from v0.8.0 |
+| **v0.8.3** | On-demand `revalidateTag` for `/share/[slug]` ISR (closes v0.7.1's deferred share-page caching) | deferred from v0.7.1 |
+| **v0.8.4** | `vercel.json` → `vercel.ts` migration (Vercel 2026-02-27 knowledge update) | deferred from pre-v0.7.1 |
+| **v0.9.0** | Beta hardening — security review, abuse mitigation, load test, legal | pending |
 | **v1.0.0** | Public launch | pending |
 
 ---
@@ -296,22 +300,88 @@
 
 ## v0.8.0 — Polish + observability
 
-**Goal:** The product feels finished. We can see what users do and what breaks.
+**Goal:** By the end of this slice we can answer three questions in production: what broke (Sentry), what did users actually do (PostHog + web vitals), and is the page accessible (axe = 0 critical). Nothing else.
 
-**Slice scope:**
-- Sentry (frontend + backend)
-- PostHog or Plausible analytics
-- Structured logging on every backend route
-- 404 / 500 / rate-limit pages with on-voice copy
-- Accessibility audit (axe): zero criticals
-- Empty states and skeleton loaders everywhere
-- **Cron re-ingestion** for saved analyses (daily refresh) — paired with Sentry so cron failures aren't silent
-- **Manual "Force refresh"** button on `/me` and `DELETE /me/cache/{username}` backend route — invalidates the Layer A Report cache from v0.7.0
+**Design spec:** [`docs/superpowers/specs/2026-05-22-v0.8.0-polish-observability-design.md`](./docs/superpowers/specs/2026-05-22-v0.8.0-polish-observability-design.md).
+
+**Slice scope (locked 2026-05-22):**
+- **Backend observability** — `structlog` JSON logging + request-ID middleware + Sentry FE/BE init with PII scrub hook.
+- **Frontend observability** — Sentry browser SDK via `instrumentation.ts`; PostHog browser SDK with auto-pageviews + web-vitals capture (RUM, replaces the deferred Speed Insights idea — free-free 12-month retention vs Speed Insights' 30-day Hobby cap).
+- **Named PostHog events** — `analyze_submitted`, `share_toggled`, `share_card_copied`, `mode_toggled`, `sign_in_clicked`.
+- **On-voice failure pages** — new `app/not-found.tsx`; refresh `app/error.tsx` copy + add `Sentry.captureException` hook.
+- **Empty-state + skeleton audit** — verify `/me`, `/u/[username]/card`, `/share/[slug]` already have appropriate states (most do post-v0.7.2).
+- **Accessibility pass** — `@axe-core/cli` against `/`, `/u/octocat`, `/u/octocat/card`, `/me`, `/share/<slug>`; fix all criticals.
+- **Error budget doc** — `docs/OBSERVABILITY.md` defining critical-vs-acceptable classes + alert intent (rules wired later in a v0.8.x patch).
+
+**Deferred to v0.8.x patches:**
+- Cron daily re-ingestion → v0.8.1
+- Manual "Force refresh" + `DELETE /me/cache/{username}` → v0.8.2
+- On-demand `revalidateTag` for `/share/[slug]` ISR → v0.8.3
+- `vercel.json` → `vercel.ts` migration → v0.8.4
+- Sentry alert-rule wiring → v0.8.x once real error rates are known
+- CI integration of `@axe-core/cli` → v0.8.x
+
+Each deferred item is independent and earns its own patch release, matching the v0.7.x cadence.
 
 **Exit criteria:**
-- [ ] Error budget defined; dashboards live
-- [ ] Axe critical issues = 0
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.8.0`
+- [ ] Backend Sentry catches a deliberate test exception with `request_id` tag attached; no PII in the event body.
+- [ ] Frontend Sentry catches a deliberate client throw with source-mapped stack.
+- [ ] PostHog dashboard shows all 5 named events flowing from prod within 24h of deploy.
+- [ ] PostHog web-vitals capture identifies the prod LCP element on `/u/[username]` (closes v0.7.2's open gap).
+- [ ] `npx @axe-core/cli` returns zero critical issues on all 5 audited routes.
+- [ ] `docs/OBSERVABILITY.md` exists; defines critical vs acceptable error classes + alert intent.
+- [ ] PII contract (spec §6) verified by test for every listed field.
+- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.8.0` tagged + released.
+
+---
+
+## v0.8.1 — Cron daily re-ingestion (deferred from v0.8.0)
+
+**Goal:** Saved analyses refresh themselves overnight so a user who comes back tomorrow doesn't see stale data. Failures are visible because v0.8.0's Sentry is already in place.
+
+**Slice scope:**
+- Vercel Cron entry (likely `vercel.json` for now; folds into v0.8.4's `vercel.ts` migration later) hitting a new authenticated backend route `POST /cron/refresh-saved-analyses`.
+- Chunking: respect Vercel function timeout (300s) by processing N analyses per invocation; resume tokens persisted in Postgres if the queue is larger than one chunk.
+- Sentry breadcrumb / structured log for every refresh attempt; one Sentry capture per chunk failure.
+
+**Exit criteria:** TBD when the slice begins.
+
+---
+
+## v0.8.2 — Manual "Force refresh" (deferred from v0.8.0)
+
+**Goal:** Signed-in users can invalidate the Layer A Report cache for any of their saved analyses from `/me`.
+
+**Slice scope:**
+- Backend: `DELETE /me/cache/{username}` route — auth-required, deletes the `report:` key from Upstash. Logs the action.
+- Frontend: small "Force refresh" affordance on each `/me` grid item; tracked via PostHog `force_refresh_clicked`.
+
+**Exit criteria:** TBD when the slice begins.
+
+---
+
+## v0.8.3 — On-demand `revalidateTag` for `/share/[slug]` ISR (deferred from v0.7.1)
+
+**Goal:** Public share pages can be ISR-cached safely because revocation immediately busts the tag.
+
+**Slice scope:**
+- `/share/[slug]` route gets `unstable_cache` (or Next 16 Cache Components equivalent) with a per-slug tag.
+- Backend share-toggle endpoints (`POST` + `DELETE`) call a small frontend webhook (`POST /api/revalidate?tag=share:<slug>`) authenticated with a shared secret.
+- Both sides covered by tests including the "revoked slug renders 404 immediately" assertion.
+
+**Exit criteria:** TBD when the slice begins.
+
+---
+
+## v0.8.4 — `vercel.json` → `vercel.ts` migration
+
+**Goal:** Track the 2026-02-27 Vercel knowledge update by moving the project config to typed TypeScript.
+
+**Slice scope:**
+- Replace `vercel.json` with `vercel.ts` using `@vercel/config/v1`.
+- Move the `experimentalServices` declarations + any cron entries shipped in v0.8.1 to the typed config.
+
+**Exit criteria:** TBD when the slice begins.
 
 ---
 
