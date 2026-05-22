@@ -17,6 +17,7 @@ from app.db.engine import engine
 from app.db.session import get_db
 from app.dependencies import get_cache, get_report_for_user
 from app.models import Report
+from app.observability import RequestIDMiddleware, init_logging, init_sentry
 from app.persistence.analyses import record_run, upsert_analysis
 from app.routers import analyses, auth, me, narrative, share
 from app.settings import VERSION, settings
@@ -26,6 +27,13 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    init_logging(level=settings.log_level, log_format=settings.log_format)
+    init_sentry(
+        dsn=settings.sentry_dsn,
+        environment=settings.sentry_environment,
+        traces_sample_rate=settings.sentry_traces_sample_rate,
+        release=VERSION,
+    )
     try:
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
@@ -55,6 +63,7 @@ app.add_middleware(
     allow_headers=["*"],
     allow_credentials=True,
 )
+app.add_middleware(RequestIDMiddleware)
 
 app.include_router(narrative.router)
 app.include_router(auth.router)
