@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# axe-core scratch output (T11/T12 — measurement reports under docs/ are the canonical record)
+axe-*.json

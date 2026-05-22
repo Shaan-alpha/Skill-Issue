@@ -19,6 +19,41 @@ Format:
 
 ---
 
+## 2026-05-22 — Claude (Opus 4.7) — v0.8.0 build hotfix + post-ship sweep
+
+**Slice:** post-v0.8.0 (no version bump — fix-forward on main).
+
+**Done:**
+- **Build hotfix shipped as commit `3304087` on main.** First Vercel deploy after the v0.8.0 tag failed with `TypeError: The "path" argument must be of type string. Received undefined at ignore-listed frames`. Root cause: `@sentry/nextjs` v10's webpack plugin processes `node_modules` paths for stack-trace ignore-listing even when `sourcemaps: { disable: true }` is set, and dereferences `org`/`project` config in the process. Both env vars were `undefined` because `SENTRY_AUTH_TOKEN` (and therefore `SENTRY_ORG`/`SENTRY_PROJECT`) were never provisioned. Removed `withSentryConfig` from `frontend/next.config.ts` entirely — runtime Sentry init in `sentry.{client,server,edge}.ts` + `instrumentation.ts` is unaffected and continues to capture errors. Source-map upload is the only thing lost, which we never had configured anyway.
+- **Live verified:** prod `/health` now reports `{"version":"0.8.0","db":"up","cache":"up"}`. Polled with a 15s backoff loop until the health endpoint flipped over.
+- **Sweep of stale references.** Fixed `README.md`'s curl example (`"version":"0.7.5"` → `"0.8.0"`); `docs/DEPLOY.md`'s verifying-a-deploy snippet (same). Updated `CHANGELOG.md` `[0.8.0]` Changed-section line about `next.config.ts` to reflect actual shipped state (no wrapper) — keeps the changelog honest as a living document even though the GitHub Release page is a snapshot. Updated `docs/OBSERVABILITY.md` to note source-map upload + `ignoreListedFrames` are deferred to a v0.8.x patch (re-add the wrapper once auth-token-related env vars are provisioned).
+- **Cleanup.** Added `axe-*.json` to `frontend/.gitignore` (axe-core CLI scratch files from T11/T12); removed the 5 stale scratch files from the working tree.
+
+**Decisions:**
+- **Don't re-tag v0.8.0.** The GitHub Release page is a snapshot of what was tagged. Re-tagging would muddy the timeline for negligible benefit (the build fix is on main, the deploy is live). Future cold agents trace through the changelog → progress log → commit log naturally.
+- **Don't bump version for the hotfix.** Every prior hotfix (v0.7.3 / v0.7.4 / v0.7.5) got its own minor version because each was a user-facing fix to shipped code. This one is a build-time fix that never reached users — the v0.7.5 → v0.8.0 deploy hadn't landed yet. v0.8.x slot inventory stays clean for cron (v0.8.1), force-refresh (v0.8.2), revalidateTag (v0.8.3), vercel.ts (v0.8.4).
+- **Re-add `withSentryConfig` only when source-map upload is wired.** The wrapper exists to enable build-time work (source-map upload + ignore-list processing). Without `SENTRY_AUTH_TOKEN` provisioned, the wrapper adds risk (the bug we hit) without benefit. Defer to a v0.8.x patch that pairs the wrapper with the env-var provisioning.
+
+**Learned / surprises:**
+- **`@sentry/nextjs` v10 has a different failure mode from v8/v9** when `org`/`project` are undefined. v8 silently no-op'd; v10's `ignoreListedFrames` plugin (added late 2025) dereferences these paths during build and crashes with a misleading "path is undefined" stack trace deep inside `ignore-listed frames`. The error message gave no hint that env-var provisioning was the root cause — needed to reason from the plugin's known behaviour. Worth memo-ing: when `@sentry/nextjs` build crashes inside `ignore-listed frames`, suspect missing org/project + auth token before suspecting an SDK bug.
+- **Vercel's auto-deploy on push to main triggered cleanly this time** (~3 min from push to live). The v0.5.0 PROGRESS_LOG entry noted three-of-five flakiness; today the integration behaved. Worth a retroactive note: the flakiness may have been correlated with the multi-service `experimentalServices` change shipped that session.
+
+**Verified:**
+- Frontend `npm run lint && npm run build` clean after the next.config.ts change.
+- Prod `/health` reports `{"status":"ok","version":"0.8.0","db":"up","cache":"up"}`.
+- Backend ruff clean, 200+ tests still pass (DB-fixture errors unchanged).
+- All v0.7.5 stale references swept (except in genuinely-historical contexts — CHANGELOG `[0.7.5]` section, PLAN version-map, prior PROGRESS_LOG entries).
+- `git status` clean on main; ahead of origin/main by 0.
+
+**Blocked / open:**
+- **Sentry source-map upload** still not wired — Sentry will receive errors but stack traces won't be symbolicated to original source files. Re-add `withSentryConfig` in a v0.8.x patch after provisioning `SENTRY_AUTH_TOKEN` + `SENTRY_ORG` + `SENTRY_PROJECT` in Vercel env.
+- **Live Sentry / PostHog event verification** still pending — needs a deliberate test exception + a real page-view session to confirm events arrive end-to-end (not blocking, but the v0.8.0 exit criteria call for it within 24h).
+
+**Next:**
+- v0.8.1 — Cron daily re-ingestion of saved analyses. Sentry pipeline is now in place, so cron failures surface as Sentry events rather than silent timeouts.
+
+---
+
 ## 2026-05-22 — Claude (Opus 4.7) — v0.8.0 shipped (Polish + Observability)
 
 **Slice:** v0.8.0 — Sentry FE+BE + PostHog + structlog + on-voice 404 + axe-clean.

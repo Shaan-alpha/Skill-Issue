@@ -25,7 +25,7 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 ### Changed
 - Backend `lifespan` now calls `init_logging()` + `init_sentry()` at startup before the DB ping.
 - `RequestIDMiddleware` added to the FastAPI middleware stack — runs first on requests (outermost), so CORS rejections also get tagged with a request_id.
-- `next.config.ts` wrapped with `withSentryConfig({ silent: true, sourcemaps: { disable: true } })` (v10 API — `hideSourceMaps` was renamed).
+- `next.config.ts` left as a plain `NextConfig` export. The `withSentryConfig` wrapper was attempted but reverted in commit `3304087` post-tag — its `ignoreListedFrames` feature throws `TypeError: path argument must be of type string` when `SENTRY_ORG`/`SENTRY_PROJECT` are unset, which they will be until we provision `SENTRY_AUTH_TOKEN` for source-map upload. Runtime Sentry init lives in `instrumentation.ts` + `sentry.{client,server,edge}.ts` and is unaffected. A v0.8.x patch re-adds the wrapper once those three auth-token-related env vars are provisioned.
 - `layout.tsx` wraps children in `<ObservabilityProvider>` with a Suspense-isolated `<SessionIdentifier>` so PostHog identification waits for `useSession()` to resolve without blocking child render.
 - **Accessibility hardening on 4 pages**: `<div>` → `<main>` on `/u/[username]/not-found.tsx`, `/u/[username]/error.tsx`, root `/not-found.tsx`; added `sr-only` `<h1>` to `/u/[username]/loading.tsx` and `/me/loading.tsx`. Closes `landmark-one-main`, `page-has-heading-one`, and `region` axe rules. Added explicit `text-foreground` to the 404 GitHub link (was 2.38:1 contrast in headless light mode).
 - Frontend version strings (`v0.7.5 → v0.8.0`) updated in the landing pill + results footer.

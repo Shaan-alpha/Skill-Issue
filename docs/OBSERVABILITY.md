@@ -117,3 +117,15 @@ Scrub points:
 - Frontend: [`frontend/src/observability/scrub.ts`](../frontend/src/observability/scrub.ts) (consumed by both `sentry.client.ts` and `sentry.server.ts` `beforeSend`).
 
 If a new sensitive field is added to the data model, update BOTH scrubbers and the test suite for each.
+
+## Deferred (re-enable in a v0.8.x patch)
+
+These pieces of observability are NOT in v0.8.0 — each lands as a focused patch
+once the prerequisite is in place.
+
+| Feature | Why deferred | Prerequisite to re-enable |
+| --- | --- | --- |
+| **Sentry source-map upload** | `next.config.ts` does NOT wrap with `withSentryConfig` in v0.8.0 — the wrapper's `ignoreListedFrames` plugin crashes at build time when `SENTRY_ORG`/`SENTRY_PROJECT` are unset. Frontend stack traces in Sentry will show minified function names until this lands. | Provision `SENTRY_AUTH_TOKEN` (Sentry Settings → Organization → Auth Tokens) + add `SENTRY_ORG` + `SENTRY_PROJECT` to Vercel env. Then re-add `withSentryConfig(nextConfig, { silent: true, sourcemaps: { disable: false }, org, project })` to `next.config.ts`. |
+| **Sentry alert rules** | Need ~1 week of baseline error rates before setting thresholds. Premature rules either page constantly or miss real issues. | One week of live error data captured. Then wire the four "Alert intent" rules above via Sentry Alerts UI. |
+| **CI integration of `@axe-core/cli`** | v0.8.0 ran axe locally against a prod build. CI integration needs a preview-URL hook + a chromedriver version pin. | A v0.8.x patch that adds the chromedriver pin + GitHub Action against the Vercel preview URL. |
+| **`/share/<slug>` axe audit** | Required a live public slug at audit time. | One-off: pick a live slug, run `npx @axe-core/cli https://skill-issue-tau.vercel.app/share/<slug>`, append result to `docs/superpowers/measurements/2026-05-22-v0.8.0-axe-baseline.md`. |
