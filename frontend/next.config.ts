@@ -1,5 +1,4 @@
 import type { NextConfig } from "next";
-import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   experimental: {
@@ -16,12 +15,9 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withSentryConfig(nextConfig, {
-  silent: true,
-  // hideSourceMaps was removed in v10; use sourcemaps.disable instead
-  sourcemaps: {
-    disable: true,
-  },
-  org: process.env.SENTRY_ORG,
-  project: process.env.SENTRY_PROJECT,
-});
+// Sentry runtime init lives in src/observability/sentry.{client,server,edge}.ts
+// + instrumentation.ts. The withSentryConfig wrapper is only needed for build-
+// time source-map upload + the webpack plugin's ignore-listed-frames feature,
+// which fails when SENTRY_ORG / SENTRY_PROJECT aren't set. Re-add the wrapper
+// in a v0.8.x patch once we provision an auth token and source-map upload.
+export default nextConfig;
