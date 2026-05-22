@@ -42,5 +42,12 @@ class Settings(BaseSettings):
     # 15 minutes — fallback TTL for layers that don't pick a specific one.
     cache_default_ttl_seconds: int = 900
 
+    # v0.8.0 — observability
+    sentry_dsn: str | None = None
+    sentry_environment: str = "development"
+    sentry_traces_sample_rate: float = 0.1
+    log_level: str = "INFO"
+    log_format: str = "json"  # "json" in prod, "console" in dev
+
 
 settings = Settings()
