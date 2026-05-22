@@ -1,37 +1,7 @@
 "use client";
 
 import * as Sentry from "@sentry/nextjs";
-
-// PII contract mirror of the backend's scrub list (see spec §6).
-const SCRUB_HEADER_NAMES = new Set(["cookie", "set-cookie", "authorization"]);
-const SCRUB_EXTRA_KEYS = new Set([
-  "access_token",
-  "access_token_ct",
-  "oauth_state",
-  "oauth_code",
-  "session_id",
-  "email",
-]);
-
-function scrubHeaders(headers: Record<string, string> | undefined) {
-  if (!headers) return headers;
-  const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(headers)) {
-    if (!SCRUB_HEADER_NAMES.has(k.toLowerCase())) out[k] = v;
-  }
-  return out;
-}
-
-function scrubObject<T>(value: T): T {
-  if (value === null || typeof value !== "object") return value;
-  if (Array.isArray(value)) return value.map(scrubObject) as unknown as T;
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-    if (SCRUB_EXTRA_KEYS.has(k)) continue;
-    out[k] = scrubObject(v);
-  }
-  return out as unknown as T;
-}
+import { scrubHeaders, scrubObject } from "./scrub";
 
 const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
 
