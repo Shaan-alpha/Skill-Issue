@@ -8,6 +8,14 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
+## [0.7.5] — 2026-05-21
+
+### Fixed
+- **Roast / Mentor mode toggle was visibly asymmetric on mobile.** Container had `inline-flex` (sizes to content on desktop), but its parent in `NarrativeCard` uses `flex-col` on mobile (`align-items: stretch` by default), so the toggle stretched to fill the full row width while the two pills kept their natural `min-w-[7.5rem]` widths — leaving uneven empty space and making the active pill look disproportionately larger than the inactive one.
+- **Fix:** container now uses `flex w-full sm:inline-flex sm:w-auto`, and each pill switches to `flex-1 sm:flex-none sm:min-w-[7.5rem]`. Result: on mobile the toggle fills its row and the two pills split it 50/50 (perfectly symmetric); on desktop the toggle keeps its natural compact size next to the heading. Same `layoutId` spring animation between modes; same Roast/Mentor colour treatment.
+
+---
+
 ## [0.7.4] — 2026-05-21
 
 ### Fixed

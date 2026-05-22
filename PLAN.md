@@ -29,6 +29,7 @@
 | **v0.7.2** | Perf gap-closer — CLS structural fix + dynamic NarrativeCard | ⚠️ shipped, CLS perfect, perf 94/95 (1 short at noise floor) |
 | **v0.7.3** | Hotfix — detect GitHub organizations + helpful 422 (was: silent 500 on `apache`, `microsoft`, etc.) | ✅ shipped |
 | **v0.7.4** | Hotfix — badge evidence reachable on mobile (Tooltip → Popover with hover + tap) | ✅ shipped |
+| **v0.7.5** | Hotfix — Roast/Mentor toggle symmetric on mobile (flex-1 split 50/50) | ✅ shipped |
 | **v0.8.0** | Polish + observability — Sentry, analytics, cron re-ingestion, manual "Force refresh" | pending |
 | **v0.9.0** | Beta hardening — security review, abuse mitigation, load test | pending |
 | **v1.0.0** | Public launch | pending |
