@@ -74,9 +74,18 @@ def init_sentry(
     traces_sample_rate: float,
     release: str,
 ) -> None:
-    """Idempotent Sentry initialisation. No-op when DSN is unset."""
+    """Initialise the Sentry SDK. No-op when DSN is unset OR already initialised.
+
+    Calling `sentry_sdk.init` twice creates a new client and orphans the first
+    without flushing — guard against that explicitly so test runs that import
+    this module multiple times don't drop events.
+    """
     if not dsn:
         logging.getLogger(__name__).info("sentry: DSN unset, skipping init")
+        return
+
+    if sentry_sdk.is_initialized():
+        logging.getLogger(__name__).warning("sentry: already initialised, skipping re-init")
         return
 
     sentry_sdk.init(

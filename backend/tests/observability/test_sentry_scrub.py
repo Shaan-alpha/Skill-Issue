@@ -118,3 +118,22 @@ def test_init_sentry_calls_sdk_when_dsn_set(monkeypatch):
     assert captured["release"] == "0.8.0"
     assert captured["send_default_pii"] is False
     assert callable(captured["before_send"])
+
+
+def test_init_sentry_skips_when_already_initialised(monkeypatch):
+    """A second init_sentry call should NOT create a second client."""
+    init_calls: list[dict] = []
+
+    def _fake_init(**kwargs):
+        init_calls.append(kwargs)
+
+    monkeypatch.setattr("sentry_sdk.init", _fake_init)
+    monkeypatch.setattr("sentry_sdk.is_initialized", lambda: True)
+
+    init_sentry(
+        dsn="https://abc@o123.ingest.sentry.io/456",
+        environment="production",
+        traces_sample_rate=0.1,
+        release="0.8.0",
+    )
+    assert init_calls == []  # second call skipped
