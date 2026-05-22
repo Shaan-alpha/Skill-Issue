@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 VERSION = "0.7.5"
@@ -47,7 +49,7 @@ class Settings(BaseSettings):
     sentry_environment: str = "development"
     sentry_traces_sample_rate: float = 0.1
     log_level: str = "INFO"
-    log_format: str = "json"  # "json" in prod, "console" in dev
+    log_format: Literal["json", "console"] = "json"  # "json" in prod, "console" in dev
 
 
 settings = Settings()
