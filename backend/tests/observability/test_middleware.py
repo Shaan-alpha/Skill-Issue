@@ -75,3 +75,11 @@ def test_incoming_x_request_id_is_replaced_when_malformed(app: FastAPI):
     rid = response.headers["x-request-id"]
     assert rid != "not-a-uuid"
     uuid.UUID(rid)  # the replacement is a valid UUID
+
+
+def test_incoming_x_request_id_strips_whitespace(app: FastAPI):
+    client = TestClient(app)
+    incoming = "11111111-2222-3333-4444-555555555555"
+    response = client.get("/ping", headers={"X-Request-ID": f"  {incoming}  "})
+    assert response.headers["x-request-id"] == incoming
+    assert response.json()["rid"] == incoming

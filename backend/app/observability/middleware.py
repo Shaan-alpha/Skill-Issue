@@ -21,7 +21,7 @@ import structlog
 def _coerce_uuid(value: str | None) -> str:
     if value:
         try:
-            return str(uuid.UUID(value))
+            return str(uuid.UUID(value.strip()))
         except (ValueError, AttributeError):
             pass
     return str(uuid.uuid4())
