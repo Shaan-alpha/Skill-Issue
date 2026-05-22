@@ -33,6 +33,11 @@ export function resetPostHog(): void {
   posthog.reset();
 }
 
+/**
+ * @internal Implementation backbone for the typed helpers in `events.ts`.
+ * Callers should use the typed helpers (trackAnalyzeSubmitted, etc.) — they
+ * enforce the event-name + payload contract. Don't call this directly.
+ */
 export function track(
   event: string,
   properties: Record<string, unknown> = {},
