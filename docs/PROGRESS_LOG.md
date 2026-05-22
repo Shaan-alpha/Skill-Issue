@@ -19,6 +19,87 @@ Format:
 
 ---
 
+## 2026-05-22 — Claude (Opus 4.7) — v0.8.0 shipped (Polish + Observability)
+
+**Slice:** v0.8.0 — Sentry FE+BE + PostHog + structlog + on-voice 404 + axe-clean.
+
+**Done:**
+- All 14 tasks from [`docs/superpowers/plans/2026-05-22-v0.8.0-polish-observability.md`](./superpowers/plans/2026-05-22-v0.8.0-polish-observability.md). Subagent-driven execution; ~6 hours wall-clock.
+- New `app/observability/` backend module: structlog config + `RequestIDMiddleware` + Sentry init with PII-scrub `before_send`. ~21 new tests across `tests/observability/`. All 244 backend tests + 21 new = 265+ pass.
+- New `frontend/src/observability/` module: Sentry client/server/edge SDK + PostHog provider + typed event helpers + shared scrub.ts. 9 new vitest cases. Suite at 34/34 passing.
+- Five PostHog events wired at their call sites (`results-view.tsx`, `save-share-controls.tsx`, `card-actions.tsx`, `mode-pill-toggle.tsx`, `site-header.tsx`).
+- On-voice 404 (`app/not-found.tsx`) + warmer 500 + `Sentry.captureException` hook.
+- `docs/OBSERVABILITY.md` defines error budget + alert intent + event taxonomy + PII contract.
+- Axe baseline + fixes committed at [`docs/superpowers/measurements/2026-05-22-v0.8.0-axe-baseline.md`](./superpowers/measurements/2026-05-22-v0.8.0-axe-baseline.md). **Zero critical, zero serious, zero moderate** across all 5 audited routes.
+
+**Decisions (highlights — full set in spec §2):**
+- **PostHog over Vercel Speed Insights for RUM** — same 1M-event budget covers web vitals, 12-month retention vs Speed Insights' 30-day Hobby cap.
+- **`@sentry/nextjs` v10.x** with one v8/v9 → v10 API shift handled: `hideSourceMaps: true` → `sourcemaps: { disable: true }`.
+- **Single shared scrub list** at `frontend/src/observability/scrub.ts` consumed by client + server Sentry — eliminates the drift that would have existed with two parallel inline copies.
+- **`x-vercel-id` added to the FE scrub list** — was a contract drift found in code review.
+- **`@internal` JSDoc on bare `track()`** — typed helpers in `events.ts` are the public contract.
+
+**Learned / surprises:**
+- Lucide-react v1.x removed branded icons. `Github` doesn't exist anymore; substituted `ExternalLink` on the 404 page (documented in TECH_STACK.md but caught at implementation time anyway).
+- The axe `landmark-one-main` violations on `/u/octocat` were actually surfaced through the loading skeleton + scoped not-found pages, not the main results-view component. Audit results depend on backend availability — when the backend's down locally, the empty/error states get audited instead. Worth memo-ing for future a11y passes: certify against full data flow, not just happy path.
+- ChromeDriver 149 vs Chrome 148 mismatch required `npx browser-driver-manager install chrome` before axe runs would succeed. Documented in the measurement report.
+- React 19 `use()` + Suspense played correctly in `<ObservabilityProvider>` once we split the SessionIdentifier into a Suspense boundary — same pattern as `SiteHeader`.
+
+**Verified locally:**
+- Backend: `uv run pytest -q` passes (existing 244 + 21 new observability tests). ruff clean.
+- Frontend: `npm run lint && npm run test:run && npm run build` clean. 34/34 vitest passing.
+- Axe: 0 critical / 0 serious / 0 moderate on all 5 audited routes against a local prod build.
+
+**Blocked / open:**
+- Live Sentry event + PostHog event verification deferred to post-deploy (24h soak).
+- Sentry alert rules deferred to v0.8.x patch — need ~1 week of baseline error rates.
+- CI integration of `@axe-core/cli` deferred to v0.8.x patch.
+- `/share/<slug>` axe audit deferred — needs a live public slug.
+
+**Next:**
+- Merge `feat/v0.8.0-polish-observability` to `main` with `--no-ff`. Tag `v0.8.0`. Push tag → release workflow fires.
+- Post-deploy: trigger a deliberate test exception on each Sentry project; confirm `$pageview` + `analyze_submitted` show up in PostHog Live Events; confirm web-vitals dashboard identifies the prod LCP element (closes v0.7.2).
+- v0.8.1 begins: cron daily re-ingestion of saved analyses.
+
+---
+
+## 2026-05-22 — Claude (Opus 4.7) — v0.7.5 closed out, v0.8.0 scope locked
+
+**Slice:** between-slice — v0.7.5 release ritual + v0.8.0 brainstorm.
+
+**Done:**
+- **v0.7.5 release ritual completed.** Branch `fix/v0.7.5-mode-toggle-symmetry` was on origin with shipped code + version bump + CHANGELOG entry, but `main` didn't have it and the `v0.7.5` tag didn't exist — release workflow had never fired. Verified branch health (frontend lint + 25/25 vitest + build clean; backend ruff clean + 200 tests pass with the usual 39 DB-fixture skips). Merged with `--no-ff`, synced `backend/uv.lock` (chore commit, mirroring the v0.7.2 pattern), tagged `v0.7.5`, pushed. Release workflow fired in 8s; [v0.7.5 GitHub Release](https://github.com/Shaan-alpha/Skill-Issue/releases/tag/v0.7.5) live with the CHANGELOG section as body. Local + remote feature branch deleted.
+- **Refreshed `project_skill-issue` memory** — was 7 days old and still listed `Roast / Mentor / Recruiter / CTO / Career` modes. Recruiter/CTO/Career were dropped on 2026-05-19 (parked under "Beyond v1.0"). Memory now reflects the shipped state plus the post-v0.6.0 stack (Base UI, Neon, Upstash, Groq) and v0.7.5 surface area.
+- **v0.8.0 brainstormed + scope locked.** Branch `feat/v0.8.0-polish-observability` created and pushed. Spec at [`docs/superpowers/specs/2026-05-22-v0.8.0-polish-observability-design.md`](./superpowers/specs/2026-05-22-v0.8.0-polish-observability-design.md). 6 phases, ~19 numbered tasks, every dep on a free-permanent-tier (Sentry 5K errors/mo; PostHog 1M events/mo + 12-month retention; structlog + axe-core OSS).
+
+**Decisions:**
+- **v0.8.0 = "observability core" cut only.** Five originally-co-located PLAN items lifted into their own v0.8.x patches (cron → v0.8.1, force-refresh → v0.8.2, share-page revalidateTag → v0.8.3, `vercel.json` → `vercel.ts` → v0.8.4, Sentry alert rules → unscheduled patch). Pattern matches v0.7.x where each focused slice shipped clean.
+- **RUM via PostHog web vitals**, not Vercel Speed Insights. User constraint was "free-free, not 30-day-limited free." Speed Insights' Hobby tier retention is 30 days; PostHog free retention is 12 months under the same 1M-event budget that already covers product analytics. One vendor surface instead of two.
+- **PostHog over Plausible or Vercel Web Analytics.** Plausible is paid-only ($9/mo) at any scale; Vercel Web Analytics caps retention on Hobby. PostHog free tier covers events + replay + web vitals + 12-month retention permanently. Heavier SDK but the funnel + retention surface is what we actually need before v1.0 launch.
+- **Error budget = one markdown page**, no Sentry alert-rule wiring in v0.8.0. We don't know real error rates yet; alerts come in a v0.8.x patch once a week of data lands.
+- **Single canonical session ID for cross-tool correlation.** The `si_session` cookie's opaque token (32 random bytes, not GitHub login) doubles as PostHog `identify()` ID and Sentry user ID. Per-request `request_id` (UUID4) flows from middleware → structlog → Sentry tag → `X-Request-ID` response header. Frontend can attach the response header to a Sentry breadcrumb for FE↔BE correlation.
+
+**Learned / surprises:**
+- **v0.7.5 had been shipped to production without the release ritual.** Prod health endpoint reported `0.7.5` since the deploy fired from the feature branch, but the GitHub Release didn't exist and `main` was a commit behind. Worth memo-ing: when a hotfix is small, the temptation to skip the merge-tag-push cycle is real — always finish the AGENTS.md rule 3 ritual before moving on.
+- **PostHog vs Plausible vs Vercel Web Analytics was a deceptively simple question.** Plausible is privacy-respecting but paid; Vercel's Hobby tier caps retention to a sliding 30-day window; PostHog free tier is the only one that meets the "free-free, not 30-day-limited" bar AND covers the events surface we'll need pre-v1.0.
+- **Vercel Speed Insights would have meant a second vendor.** Initial proposal had Speed Insights for RUM + PostHog for events. The free-free constraint forced consolidation onto PostHog's web-vitals autocapture (added late 2025). One fewer SDK in the bundle, one fewer dashboard to learn.
+
+**Verified:**
+- v0.7.5 prod health: `{"status":"ok","version":"0.7.5","db":"up","cache":"up"}`.
+- GitHub Release [v0.7.5](https://github.com/Shaan-alpha/Skill-Issue/releases/tag/v0.7.5) published by the workflow.
+- `git status` clean; spec + this entry are the next commit on `feat/v0.8.0-polish-observability`.
+
+**Blocked / open:**
+- **Provisioning gate:** v0.8.0 implementation needs the user to (a) create the Sentry FE + BE projects and paste both DSNs into Vercel Preview + Production as Sensitive vars, and (b) create the PostHog project and paste `NEXT_PUBLIC_POSTHOG_KEY` + `NEXT_PUBLIC_POSTHOG_HOST`. AGENTS.md rule 5: ask first.
+- **v0.6.0 exit criterion still unchecked** — manual paste of a live `/share/<slug>` URL into X / LinkedIn / Discord to confirm the OG card renders inline. One-off post-deploy task; not blocking v0.8.0.
+
+**Next:**
+- User provisions Sentry + PostHog accounts; pastes the four env vars into Vercel.
+- Generate the v0.8.0 TDD plan via `superpowers:writing-plans` against the spec; save to `docs/superpowers/plans/2026-05-22-v0.8.0-polish-observability.md`. Estimated ~19 tasks, ~8h focused execution.
+- Implement Phase 1 → Phase 6 in order. Verify against the **prod** deploy URL before tagging (v0.7.1 lesson stands).
+
+---
+
 ## 2026-05-21 — Claude (Opus 4.7) — v0.7.4 hotfix (badges tappable on mobile)
 
 **Slice:** post-v0.7.3 hotfix.

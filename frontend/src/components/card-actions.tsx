@@ -2,6 +2,7 @@
 
 import { Copy, Download, Link2 } from "lucide-react";
 import { useState } from "react";
+import { trackShareCardCopied } from "@/observability/events";
 
 interface Props {
   /** Path or absolute URL to the PNG. */
@@ -31,6 +32,7 @@ export function CardActions({ imageUrl, pageUrl }: Props) {
         await navigator.clipboard.write([
           new window.ClipboardItem({ "image/png": blob }),
         ]);
+        trackShareCardCopied({ method: "png_clipboard" });
         flash("PNG copied to clipboard");
       } else {
         flash("Copy not supported — use Download");
@@ -45,6 +47,7 @@ export function CardActions({ imageUrl, pageUrl }: Props) {
   async function copyUrl() {
     try {
       await navigator.clipboard.writeText(pageUrl);
+      trackShareCardCopied({ method: "url" });
       flash("URL copied");
     } catch {
       flash("Copy failed");
@@ -69,6 +72,7 @@ export function CardActions({ imageUrl, pageUrl }: Props) {
       <a
         href={imageUrl}
         download
+        onClick={() => trackShareCardCopied({ method: "png_download" })}
         className="inline-flex items-center gap-2 rounded-full border border-border bg-card/60 px-4 py-1.5 text-xs font-medium hover:bg-card/80 transition-colors"
       >
         <Download className="size-3.5" aria-hidden="true" />

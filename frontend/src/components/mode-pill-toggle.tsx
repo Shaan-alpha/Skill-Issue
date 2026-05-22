@@ -4,6 +4,7 @@ import { NarrativeMode } from "@/types";
 import { m } from "framer-motion";
 import { Compass, Flame } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { trackModeToggled } from "@/observability/events";
 
 interface ModePillToggleProps {
   mode: NarrativeMode;
@@ -35,7 +36,7 @@ export function ModePillToggle({
       <button
         role="radio"
         aria-checked={mode === "roast"}
-        onClick={() => onModeChange("roast")}
+        onClick={() => { trackModeToggled({ from: mode, to: "roast" }); onModeChange("roast"); }}
         className={cn(
           "relative flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium transition-colors z-10 sm:flex-none sm:min-w-[7.5rem]",
           mode === "roast"
@@ -59,7 +60,7 @@ export function ModePillToggle({
       <button
         role="radio"
         aria-checked={mode === "mentor"}
-        onClick={() => onModeChange("mentor")}
+        onClick={() => { trackModeToggled({ from: mode, to: "mentor" }); onModeChange("mentor"); }}
         className={cn(
           "relative flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium transition-colors z-10 sm:flex-none sm:min-w-[7.5rem]",
           mode === "mentor"

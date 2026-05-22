@@ -1,6 +1,6 @@
 [project]
 name = "skill-issue-backend"
-version = "0.7.5"
+version = "0.8.0"
 description = "Skill Issue backend — FastAPI service that ingests a GitHub profile and returns a deterministic engineering report."
 readme = "README.md"
 authors = [
@@ -18,7 +18,9 @@ dependencies = [
     "openai>=1.50",
     "pydantic>=2",
     "pydantic-settings>=2.14.1",
+    "sentry-sdk[fastapi]>=2.0",
     "sqlalchemy[asyncio]>=2.0,<2.1",
+    "structlog>=24.0",
     "upstash-redis>=1.2",
     "uvicorn[standard]>=0.47.0",
 ]

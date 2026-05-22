@@ -8,6 +8,40 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
+## [0.8.0] — 2026-05-22
+
+### Added
+- **Sentry — backend project (`skill-issue-backend`)** with FastAPI + asyncpg + httpx + logging integrations. PII scrub (`before_send`) strips `Cookie` / `Authorization` / `x-vercel-id` headers, `access_token` / `access_token_ct` / `oauth_state` / `oauth_code` / `session_id` / `email` fields from every event. Idempotent `init_sentry` guards against double-initialisation.
+- **Sentry — frontend project (`skill-issue-frontend`)** via `@sentry/nextjs` 10.x. Three runtime targets covered: browser (`sentry.client.ts`), Node server-component (`sentry.server.ts`), edge (`sentry.edge.ts`). Source maps generated but upload disabled by default (`sourcemaps: { disable: true }` — lands in a v0.8.x patch when `SENTRY_AUTH_TOKEN` is provisioned). `onRequestError` Next 16 hook captures unhandled server errors. Browser + server share a single PII scrub list at `frontend/src/observability/scrub.ts`.
+- **PostHog (`skill-issue`)** product analytics + real-user web vitals capture. Five named events: `analyze_submitted`, `share_toggled`, `share_card_copied`, `mode_toggled`, `sign_in_clicked`. Typed helpers in `frontend/src/observability/events.ts` are the only public contract — bare `track()` is marked `@internal`. Anonymous viewers use PostHog's auto-distinct-ID; signed-in viewers identified by the opaque `si_session` cookie value (never GitHub login or email). `<ObservabilityProvider>` wraps the layout; `<SessionIdentifier>` is Suspense-isolated for React 19 `use()` semantics.
+- **Real-user web vitals** (LCP / CLS / INP / FCP / TTFB) captured by PostHog per visitor with element selectors — closes v0.7.2's open "couldn't ID the prod LCP element" gap. Free tier covers 12-month retention.
+- **`structlog`** JSON renderer in prod, console in dev. Every log line carries the `request_id` from the new `RequestIDMiddleware` (UUID4, also echoed in `X-Request-ID` response header). RFC 7230 whitespace is stripped from incoming `X-Request-ID` so upstream trace chains aren't broken.
+- **`RequestIDMiddleware`** — pure ASGI, binds the request_id into structlog's contextvars + Sentry's `isolation_scope` per-request. Honours an incoming `X-Request-ID` header when it's a valid UUID. Clears contextvars in a `finally` block so a mid-flight exception can't leak state.
+- **`docs/OBSERVABILITY.md`** — error-budget classes (critical / acceptable / noise), alert intent, event taxonomy, cross-tool correlation guide, PII contract.
+- **On-voice 404 page** (`app/not-found.tsx`) — Skill-Issue-voiced copy + CTAs to landing and the GitHub repo. Project design-system tokens (`glass`, `text-muted-foreground`, grid background) instead of generic neutrals.
+- **`Sentry.captureException` hook** in `app/error.tsx` so every unhandled client error reaches Sentry with the source-mapped stack.
+- **`@axe-core/cli`** dev dep. Baseline + post-fix audit captured at `docs/superpowers/measurements/2026-05-22-v0.8.0-axe-baseline.md`. **Zero critical, zero serious, zero moderate** axe issues across `/`, `/u/octocat`, `/u/octocat/card`, `/me`, `/this-does-not-exist` (the spec only required zero critical — we cleared the higher bar).
+
+### Changed
+- Backend `lifespan` now calls `init_logging()` + `init_sentry()` at startup before the DB ping.
+- `RequestIDMiddleware` added to the FastAPI middleware stack — runs first on requests (outermost), so CORS rejections also get tagged with a request_id.
+- `next.config.ts` wrapped with `withSentryConfig({ silent: true, sourcemaps: { disable: true } })` (v10 API — `hideSourceMaps` was renamed).
+- `layout.tsx` wraps children in `<ObservabilityProvider>` with a Suspense-isolated `<SessionIdentifier>` so PostHog identification waits for `useSession()` to resolve without blocking child render.
+- **Accessibility hardening on 4 pages**: `<div>` → `<main>` on `/u/[username]/not-found.tsx`, `/u/[username]/error.tsx`, root `/not-found.tsx`; added `sr-only` `<h1>` to `/u/[username]/loading.tsx` and `/me/loading.tsx`. Closes `landmark-one-main`, `page-has-heading-one`, and `region` axe rules. Added explicit `text-foreground` to the 404 GitHub link (was 2.38:1 contrast in headless light mode).
+- Frontend version strings (`v0.7.5 → v0.8.0`) updated in the landing pill + results footer.
+- Backend `pyproject.toml` + `app/settings.py::VERSION` + frontend `package.json` synced at `0.8.0`.
+
+### Notes
+- **Free-tier discipline.** Every new tool used a permanent free tier — Sentry (5K errors/mo + 50 replays/mo), PostHog (1M events/mo + 12-month retention), structlog + axe-core (OSS). No expiring trials, no 30-day-retention-only services.
+- **Deferred slices.** Five originally-co-located PLAN items moved to focused v0.8.x patches: cron re-ingestion (v0.8.1), manual "Force refresh" (v0.8.2), `/share/[slug]` ISR + `revalidateTag` (v0.8.3), `vercel.json → vercel.ts` migration (v0.8.4). Sentry alert rules deferred to a v0.8.x patch once a week of baseline data is captured. CI integration of `@axe-core/cli` also deferred to a v0.8.x patch.
+
+### Security
+- Sentry's `send_default_pii` is explicitly `False` on both frontend and backend; even if a future SDK upgrade defaults this on, our `before_send` / `beforeSend` scrub will still drop the listed fields.
+- The frontend PII scrub list is hoisted to a single source of truth (`frontend/src/observability/scrub.ts`) consumed by both client and server Sentry init — eliminates contract drift.
+- `x-vercel-id` added to the scrub list on both frontend and backend (was missing from frontend in initial implementation, caught by code review).
+
+---
+
 ## [0.7.5] — 2026-05-21
 
 ### Fixed

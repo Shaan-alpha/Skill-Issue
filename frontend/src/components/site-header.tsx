@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import Image from "next/image";
 import { Menu } from "@base-ui/react/menu";
 import { useSession, signIn, signOut } from "@/lib/auth";
+import { trackSignInClicked } from "@/observability/events";
 
 function HeaderInner() {
   const session = useSession();
@@ -12,7 +13,7 @@ function HeaderInner() {
     return (
       <button
         type="button"
-        onClick={signIn}
+        onClick={() => { trackSignInClicked(); signIn(); }}
         className="inline-flex items-center gap-2 rounded-full border border-border bg-card/40 px-4 py-1.5 text-sm font-medium text-foreground hover:bg-card/60 transition-colors"
         aria-label="Sign in with GitHub"
       >

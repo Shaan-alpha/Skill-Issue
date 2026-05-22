@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { FramerProvider } from "@/components/framer-provider";
 import { SiteHeader } from "@/components/site-header";
+import { ObservabilityProvider } from "@/observability/provider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -40,7 +41,9 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <SiteHeader />
-        <FramerProvider>{children}</FramerProvider>
+        <ObservabilityProvider>
+          <FramerProvider>{children}</FramerProvider>
+        </ObservabilityProvider>
       </body>
     </html>
   );
