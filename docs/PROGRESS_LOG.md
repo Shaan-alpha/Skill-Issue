@@ -19,6 +19,48 @@ Format:
 
 ---
 
+## 2026-05-22 — Claude (Opus 4.7) — post-v0.8.0 audit sweep + v0.8.1 design
+
+**Slice:** between-slice — full repo audit + v0.8.1 (cron re-ingestion) brainstorm.
+
+**Done:**
+- **Full repo audit on `main` @ e8cb2d3.** Backend `ruff check .` clean, 221 pytest pass (the 44 DB-fixture errors are `TEST_DATABASE_URL`-gated and documented-expected since v0.5.0). Frontend `eslint` clean, `tsc --noEmit` clean, `npm run test:run` 34/34 vitest pass, `npm run build` clean (10 routes). Zero `TODO/FIXME/XXX/HACK` markers across the source tree.
+- **`style(backend) 81c89af`**: Applied `ruff format` to 51 drifted Python files. `ruff check` was being enforced post-v0.8.0 but `ruff format` had silently drifted across the v0.5.0 → v0.8.0 commits. Pure whitespace/style normalization, no behavior change, tests still pass at exactly 221.
+- **`chore(deps) f93dc8a`**: `uv lock --upgrade` brought 10 backend deps to latest within existing `>=` constraints (ruff 0.15.13→.14, starlette 1.0.0→.1, openai 2.37→2.38, joserfc, jiter, click, certifi, greenlet, idna, watchfiles). `npm update` bumped 4 frontend minors within `^` ranges (@base-ui/react 1.4→1.5, framer-motion 12.38→12.40, shadcn 4.7→4.8, @types/react patch). Side effect: `qs` transitive DoS advisory cleared.
+- **`chore(deps) a3b60fb`**: Bumped `happy-dom ^15 → ^20` to clear GHSA-37j7-fg3j-429f (critical VM Context Escape RCE). Dev-only vitest env so real blast radius is nil — we never feed untrusted HTML through it — but AGENTS.md rule 1 ("modern tools always") + the critical severity made the bump cheap. 34/34 vitest still passes, lint + tsc + build still clean.
+- **v0.8.1 design spec written.** [`docs/superpowers/specs/2026-05-22-v0.8.1-cron-reingest-design.md`](./superpowers/specs/2026-05-22-v0.8.1-cron-reingest-design.md). Brainstormed scope with user; locked four big decisions (target set = all saved analyses, token = owner-session-with-app-fallback, chunking = simple-cap-spill-to-tomorrow, cache = write-through via existing `get_report_for_user`). Spec is 11 sections, ~180 lines, ready for the writing-plans pass.
+
+**Decisions:**
+- **Defer all major-version bumps to v0.9.0.** vitest 3→4, eslint 9→10, typescript 5→6, @types/node 20→25 — all available, none security-driven, all carry codemod risk right before cron work lands. v0.9.0 is already the hardening slice; batch them there.
+- **happy-dom v20 over deferral.** Critical advisory + dev-only impact + AGENTS.md rule 1 alignment made this a clear "bump now" — but only because tests passed unchanged on first run. If breakage had surfaced, deferral would have been the right call.
+- **Sentry source-map upload stays deferred** to a future v0.8.x patch — needs `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` / `SENTRY_PROJECT` provisioning the user hasn't authorized yet. Runtime Sentry capture continues to work; only stack-trace symbolication is degraded.
+- **v0.8.1 chunking = simple cap, not recursive self-invocation.** YAGNI applied — until we observe `deadline_reached=true` on consecutive nights with growing backlog, the single-fire-with-spill model is enough. Recursive self-invocation (or Vercel Workflow DevKit, the modern Vercel way) is a v0.9.x escalation.
+- **No narrative pre-warming in v0.8.1.** Burning LLM budget against an uncertain "user returns tomorrow AND looks at the narrative" prior is the wrong tradeoff. New scores_hash naturally misses the existing (user, scores_hash, mode) cache key; next request regenerates fresh.
+
+**Learned / surprises:**
+- **`ruff format` and `ruff check` are independent passes.** `ruff check` had been the only gate for many slices, and 51 files of style drift accumulated invisibly because `ruff format --check` was never wired into the pre-commit / pre-push flow. Worth memo-ing for v0.9.0 hardening: add `ruff format --check` alongside `ruff check` in whatever CI/pre-commit story we land.
+- **Vercel `vercel env pull` doesn't actually leak Sensitive vars** (rediscovered from v0.7.1) — `SENTRY_AUTH_TOKEN` would behave like the other Sensitive secrets. Tooling that needs build-time auth tokens has to be provisioned in Vercel directly and used in the build environment, not pulled locally.
+- **Layer A Redis cache key = lowercased target_login** (re-noted from v0.7.0) — means cron refreshing one user's save of `octocat` warms the cache for every other user's save of `octocat`. N:1 GH-call savings for free without any special dedup logic at the persistence layer. That's the cleanest part of the v0.8.1 design — no work required to get it.
+- **Tokens live on `sessions`, not `users`** (re-noted from v0.5.0). A user whose session has expired contributes no quota — falls back to the shared `GITHUB_TOKEN`. This is the correct security boundary (logged-out users shouldn't have their tokens reused) but it does mean the per-user-quota story is only as good as session retention.
+
+**Verified:**
+- All four commits clean on `main`; `git status` clean; ahead of origin/main by 4.
+- Frontend `npm audit`: critical RCE cleared (4 vulns → 2 moderate, both Next-transitive postcss out of our control until Next 16.3).
+- Backend `uv pip list --outdated`: only pydantic-core remains held back by resolver (unchanged in upgrade pass).
+- Spec self-review pass: no placeholders, internally consistent, scope is focused (one slice).
+
+**Blocked / open:**
+- **`CRON_SECRET` provisioning** is the gating user action for v0.8.1 deploy — needs a 32-byte random hex string pasted into Vercel Production + Preview as a Sensitive env var. AGENTS.md rule 5 — Claude does not provision.
+- **Hobby-tier Vercel Cron limits.** v0.8.1 design assumes daily cron is available on Hobby; if Hobby is more restrictive than the design expects, the writing-plans phase will surface it.
+- **v0.8.0 live verification still pending** — deliberate test exception + real page-view to confirm Sentry / PostHog events arrive. Not blocking v0.8.1 design but worth doing alongside the v0.8.1 deploy.
+
+**Next:**
+- User reviews `docs/superpowers/specs/2026-05-22-v0.8.1-cron-reingest-design.md`.
+- On approval, invoke `superpowers:writing-plans` against the spec → save to `docs/superpowers/plans/2026-05-22-v0.8.1-cron-reingest.md`. Expect ~10-12 TDD tasks per the spec's §11 ordering.
+- Branch `feat/v0.8.1-cron-reingest` off `main`; implement; ship.
+
+---
+
 ## 2026-05-22 — Claude (Opus 4.7) — v0.8.0 build hotfix + post-ship sweep
 
 **Slice:** post-v0.8.0 (no version bump — fix-forward on main).
