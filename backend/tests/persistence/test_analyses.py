@@ -7,6 +7,7 @@ from app.db.models import Analysis, User
 from app.persistence.analyses import (
     AnalysisNotFound,
     get_analysis_by_slug,
+    get_user_analysis_by_target,
     list_user_analyses,
     record_run,
     revoke_share_slug,
@@ -153,3 +154,35 @@ async def test_list_user_analyses_sort_score_desc(db):
     )
     rows, _ = await list_user_analyses(db, user_id=u.id, sort="score_desc", page=1, page_size=20)
     assert [r.target_login for r in rows] == ["hi", "lo"]
+
+
+async def test_get_user_analysis_by_target_returns_owned_row(db):
+    u = await _user(db)
+    a = await upsert_analysis(db, user_id=u.id, target_login="octocat")
+    await db.commit()
+
+    found = await get_user_analysis_by_target(db, user_id=u.id, target_login="octocat")
+    assert found is not None
+    assert found.id == a.id
+
+
+async def test_get_user_analysis_by_target_returns_none_when_not_owned(db):
+    owner = await _user(db, gh_id=1, login="alice")
+    other = await _user(db, gh_id=2, login="bob")
+    await upsert_analysis(db, user_id=owner.id, target_login="octocat")
+    await db.commit()
+
+    found = await get_user_analysis_by_target(db, user_id=other.id, target_login="octocat")
+    assert found is None
+
+
+async def test_get_user_analysis_by_target_case_insensitive(db):
+    """v0.5.0 lesson — GitHub canonical case is `Shaan-alpha` but URL slugs
+    are usually lowercased. Match on lower() so case mismatches don't 404."""
+    u = await _user(db)
+    a = await upsert_analysis(db, user_id=u.id, target_login="Shaan-alpha")
+    await db.commit()
+
+    found = await get_user_analysis_by_target(db, user_id=u.id, target_login="shaan-alpha")
+    assert found is not None
+    assert found.id == a.id

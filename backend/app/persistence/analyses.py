@@ -83,6 +83,24 @@ async def record_run(
     return run
 
 
+async def get_user_analysis_by_target(
+    db: AsyncSession,
+    *,
+    user_id: int,
+    target_login: str,
+) -> Analysis | None:
+    """Return the user's saved Analysis for this target, or None.
+
+    Matches case-insensitively on target_login. v0.5.0 stored canonical
+    GitHub case ('Shaan-alpha'); URL slugs usually arrive lowercased.
+    """
+    stmt = select(Analysis).where(
+        Analysis.user_id == user_id,
+        func.lower(Analysis.target_login) == target_login.lower(),
+    )
+    return await db.scalar(stmt)
+
+
 async def _owned_analysis(db: AsyncSession, analysis_id: int, owner_id: int) -> Analysis:
     a = await db.scalar(
         select(Analysis).where(Analysis.id == analysis_id, Analysis.user_id == owner_id)
