@@ -4,8 +4,11 @@ import hmac
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import settings as settings_module
+from app.cron import run_refresh_chunk
+from app.db.session import get_db
 
 router = APIRouter(prefix="/cron", tags=["cron"])
 
@@ -37,7 +40,26 @@ def require_cron_auth(
 
 @router.post("/refresh-saved-analyses")
 async def refresh_saved_analyses(
+    db: Annotated[AsyncSession, Depends(get_db)],
     _auth: Annotated[None, Depends(require_cron_auth)],
-) -> dict[str, int]:
-    """Placeholder body — Task 5 replaces this with the real orchestrator call."""
-    return {"processed": 0, "succeeded": 0, "skipped": 0, "rate_limited": 0, "deadline_reached": 0}
+) -> dict[str, object]:
+    summary = await run_refresh_chunk(db)
+    return {
+        "processed": summary.processed,
+        "succeeded": summary.succeeded,
+        "skipped": summary.skipped,
+        "rate_limited": summary.rate_limited,
+        "deadline_reached": summary.deadline_reached,
+        "outcomes": [
+            {
+                "analysis_id": o.analysis_id,
+                "target_login": o.target_login,
+                "owner_user_id": o.owner_user_id,
+                "token_source": str(o.token_source),
+                "status": o.status,
+                "duration_ms": o.duration_ms,
+                "error": o.error,
+            }
+            for o in summary.outcomes
+        ],
+    }
