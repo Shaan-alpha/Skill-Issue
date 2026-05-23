@@ -19,7 +19,7 @@ from app.dependencies import get_cache, get_report_for_user
 from app.models import Report
 from app.observability import RequestIDMiddleware, init_logging, init_sentry
 from app.persistence.analyses import record_run, upsert_analysis
-from app.routers import analyses, auth, cron, me, narrative, share
+from app.routers import analyses, auth, cron, me, narrative, refresh, share
 from app.settings import VERSION, settings
 
 logger = logging.getLogger(__name__)
@@ -69,6 +69,7 @@ app.include_router(me.router)
 app.include_router(analyses.router)
 app.include_router(share.router)
 app.include_router(cron.router)
+app.include_router(refresh.router)
 
 
 @app.get("/health")
