@@ -1,4 +1,5 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "experimentalServices": {
     "frontend": {
       "entrypoint": "frontend",
@@ -15,5 +16,17 @@
       "path": "/_/backend/cron/refresh-saved-analyses",
       "schedule": "0 3 * * *"
     }
-  ]
+  ],
+  "git": {
+    "deploymentEnabled": {
+      "feat/*": false,
+      "fix/*": false,
+      "chore/*": false,
+      "docs/*": false,
+      "ops/*": false,
+      "style/*": false,
+      "refactor/*": false,
+      "test/*": false
+    }
+  }
 }
