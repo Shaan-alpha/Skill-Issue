@@ -67,6 +67,7 @@ In Vercel → **Settings** → **Environment Variables**, add (Production + Prev
 | `OPENAI_API_KEY` | Your Groq API key (it's an OpenAI-compatible endpoint) | ✅ |
 | `UPSTASH_REDIS_REST_URL` | from step 2 (Upstash) | ✅ |
 | `UPSTASH_REDIS_REST_TOKEN` | from step 2 (Upstash) | ✅ |
+| `CRON_SECRET` | 32+ byte random hex string. Vercel Cron injects `Authorization: Bearer ${CRON_SECRET}` on every fire; the backend's `require_cron_auth` constant-time-compares it. Unset = `POST /cron/refresh-saved-analyses` returns 503. Generate: `python -c "import secrets; print(secrets.token_hex(32))"`. (v0.8.1+) | ✅ |
 
 ### 5. Run the initial Alembic migration
 
