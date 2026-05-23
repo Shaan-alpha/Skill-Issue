@@ -126,11 +126,12 @@ time curl -s -o /dev/null https://<your-vercel-host>/_/backend/analyze/octocat
 
 Cold call: ~5-8s. Warm call (cached): ≤200ms p95 target. If the warm call isn't fast, check `/health` for `cache: "up"` and verify the env vars survived the deploy.
 
-## Known limits as of v0.7.0
+## Known limits as of v0.8.0
 
 - **No rate limiting.** Anyone can hit `/analyze` and burn through the ingestion budget. v0.9.0 territory (Beta hardening).
-- **No Sentry / structured logging.** Errors are visible in Vercel Runtime Logs only. v0.8.0 adds Sentry + analytics.
-- **No background re-ingestion.** Saved analyses don't auto-refresh — users see the cached Report until its 6h TTL expires. v0.8.0 adds a cron + manual "Force refresh" button (paired with Sentry so silent failures are visible).
+- **No background re-ingestion.** Saved analyses don't auto-refresh — users see the cached Report until its 6h TTL expires. **v0.8.1** adds the nightly cron + write-through to the Layer A cache (gated on `CRON_SECRET`); **v0.8.2** adds the manual "Force refresh" button on `/me`.
+- **Sentry source-map upload not wired.** Frontend stack traces in Sentry show minified function names — runtime capture still works, only symbolication is degraded. Lands in a v0.8.x patch once `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` / `SENTRY_PROJECT` are provisioned.
+- **Sentry alert rules not wired.** v0.8.0 ships the integration but not the thresholds; needs ~1 week of baseline data first. Patch lands when the data is in.
 - **Custom domain** — pre-v1.0.
 
 ## What's intentionally not here

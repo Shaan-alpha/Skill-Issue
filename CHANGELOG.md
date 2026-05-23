@@ -8,6 +8,23 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
+## [Unreleased]
+
+> Post-v0.8.0 housekeeping. Will roll into the `[0.8.1]` section when that slice ships, following the same convention used for pre-v0.7.1 / pre-v0.5.0 audits.
+
+### Security
+- **`happy-dom` `^15` → `^20`** to clear GHSA-37j7-fg3j-429f (VM Context Escape can lead to Remote Code Execution). Dev-only test environment — we never feed untrusted HTML through it, so real blast radius is nil — but AGENTS.md rule 1 ("modern tools always") + the critical severity made the bump cheap. 34/34 vitest still passes. Remaining `npm audit` is two moderate advisories inside Next 16.2.6's transitive `postcss`, cleared when Next 16.3 ships.
+
+### Changed
+- **`ruff format` pass on 51 backend files.** `ruff check` was being enforced post-v0.8.0 but `ruff format` had silently drifted across the v0.5.0 → v0.8.0 commits. Pure whitespace/style normalization, no behavior change; the 221 non-DB-fixture tests still pass at exactly 221. `docs/TECH_STACK.md` now notes that `ruff check` and `ruff format` are independent passes.
+- **Backend dep refresh** (`uv lock --upgrade`, all within existing `>=` constraints): ruff 0.15.13 → 0.15.14, starlette 1.0.0 → 1.0.1, openai 2.37 → 2.38, joserfc 1.6.5 → 1.6.7, jiter 0.14 → 0.15, click 8.3.3 → 8.4.1, certifi 2026.4.22 → 2026.5.20, greenlet 3.5.0 → 3.5.1, idna 3.15 → 3.16, watchfiles 1.1.1 → 1.2.0.
+- **Frontend dep refresh** (`npm update`, within `^` ranges — `package.json` unchanged): @base-ui/react 1.4.1 → 1.5.0, framer-motion 12.38 → 12.40, shadcn 4.7 → 4.8, @types/react 19.2.14 → 19.2.15. Side effect: `qs` transitive DoS advisory cleared.
+
+### Notes
+- v0.8.1 design spec landed at [`docs/superpowers/specs/2026-05-22-v0.8.1-cron-reingest-design.md`](./docs/superpowers/specs/2026-05-22-v0.8.1-cron-reingest-design.md). Implementation gated on `CRON_SECRET` provisioning (user action — AGENTS.md rule 5).
+
+---
+
 ## [0.8.0] — 2026-05-22
 
 ### Added

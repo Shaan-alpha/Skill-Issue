@@ -6,30 +6,30 @@
 
 ## Frontend — `frontend/`
 
-| Tool | Pinned (as of 2026-05-20) | Why |
+| Tool | Pinned (as of 2026-05-22) | Why |
 | --- | --- | --- |
 | **Next.js** | `16.2.6` | App Router, partial prerendering, streaming, Vercel-native. v16 dropped some conventions; check `frontend/AGENTS.md` before assuming v13/v14 patterns. |
 | **React** | `19.2.6` | Server Components, Actions, the modern data flow |
 | **TypeScript** | `^5` | Sane component contracts |
 | **TailwindCSS** | `^4` | Utility-first; `@tailwindcss/postcss` is the v4 pipeline. No tailwind.config — config lives in `globals.css` via `@theme`. |
 | **tw-animate-css** | `^1.4` | v4-compatible replacement for `tailwindcss-animate` |
-| **shadcn/ui** | `^4.7` (devDependency, CLI only) | Component baseline; we own the source. The package is a CLI scaffolder — *do not* import from it at runtime. Style: `base-nova` (Base UI primitives, not Radix). |
-| **Framer Motion** | `^12.38` | Animation; prefer spring physics over linear easings. Use `LazyMotion` + `m.*` namespace, not `motion.*`, to keep the initial bundle lean. |
-| **@base-ui/react** | `^1.4` | Headless primitives (Progress, Tooltip) — accessible and unstyled; we own the visual layer. Used for the v0.3.0 position-bar Progress and badge-row Tooltip. |
+| **shadcn/ui** | `^4.8` (devDependency, CLI only) | Component baseline; we own the source. The package is a CLI scaffolder — *do not* import from it at runtime. Style: `base-nova` (Base UI primitives, not Radix). |
+| **Framer Motion** | `^12.40` | Animation; prefer spring physics over linear easings. Use `LazyMotion` + `m.*` namespace, not `motion.*`, to keep the initial bundle lean. |
+| **@base-ui/react** | `^1.5` | Headless primitives (Progress, Tooltip) — accessible and unstyled; we own the visual layer. Used for the v0.3.0 position-bar Progress and badge-row Tooltip. |
 | **lucide-react** | `^1.16` | Icon set. **Branded icons (`Github`, `Twitter`, etc.) were removed in 1.x** — substitute generic equivalents (`ExternalLink`) or inline an SVG. |
 | **`next/og` (`ImageResponse`)** | bundled with Next 16 | OG card generation (v0.6.0). File-convention routes `opengraph-image.tsx` + `twitter-image.tsx` at the route segment auto-wire meta tags. Satori-based — strict about explicit `display: flex` on every multi-child div. |
 | **Inter font** | OFL 1.1, bundled under `public/fonts/` | Medium + Bold TTF bundled because satori reads font bytes per request — fetching remotely would add cold-start latency. |
-| **Vitest** | `^3.2` + `happy-dom@^15` + `@testing-library/react@^16` + `@testing-library/jest-dom@^6` | First frontend test framework, added in v0.6.0. Picked over node:test for native TS/JSX, picked happy-dom over jsdom for speed. |
+| **Vitest** | `^3.2` + `happy-dom@^20` + `@testing-library/react@^16` + `@testing-library/jest-dom@^6` | First frontend test framework, added in v0.6.0. Picked over node:test for native TS/JSX, picked happy-dom over jsdom for speed. happy-dom bumped from `^15` to `^20` on 2026-05-22 to clear GHSA-37j7-fg3j-429f (VM Context Escape RCE — dev-only impact, but AGENTS.md rule 1). |
 
 **Bundler:** Turbopack (Next.js default in 16+).
 
-**Linting / formatting:** **ESLint** via `eslint-config-next` 16.2.6. Decision logged 2026-05-15 — chosen because the Next.js codemods and recommended rules ship through this config. Revisit Biome at v0.8.0 if perf or DX warrants.
+**Linting / formatting:** **ESLint** via `eslint-config-next` 16.2.6. Decision logged 2026-05-15 — chosen because the Next.js codemods and recommended rules ship through this config. Decision kept through v0.8.0; revisit Biome at v0.9.0 or v1.0 if perf/DX warrants.
 
 ---
 
 ## Backend — `backend/`
 
-| Tool | Pinned (as of 2026-05-20) | Why |
+| Tool | Pinned (as of 2026-05-22) | Why |
 | --- | --- | --- |
 | **Python** | `3.12+` | Modern type system, performance, structural pattern matching |
 | **FastAPI** | `0.136` | Async-native, Pydantic-integrated, OpenAPI for free |
@@ -45,7 +45,7 @@
 | **pytest** | `9.x` | Test runner with async support |
 | **pytest-asyncio** | `1.3` | `asyncio_mode = "auto"` so async tests don't need decorators |
 | **respx** | `0.23` | httpx mocking for GitHub client + e2e tests |
-| **ruff** | `0.15.13` | Linter + formatter — one tool for both. Configured in `backend/ruff.toml` (py312, line 100, E/F/I/UP/B/SIM/TCH/RUF). |
+| **ruff** | `0.15.14` | Linter + formatter — one tool for both. Configured in `backend/ruff.toml` (py312, line 100, E/F/I/UP/B/SIM/TCH/RUF). Note: `ruff check` and `ruff format` are independent passes — run both, not just one. v0.8.0 post-ship audit caught 51 format-drifted files because only `ruff check` was being enforced. |
 | Static typing | deferred — ruff covers the lint surface | The mypy/pyright pick was punted past v0.1.0; revisit when payoff justifies the maintenance |
 
 **Package manager:** `uv` (not pip, not poetry). Faster, simpler, lockfile-first.

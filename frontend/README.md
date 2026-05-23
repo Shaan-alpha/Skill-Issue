@@ -34,7 +34,7 @@ npm run build
 ```
 
 - **`npm run lint`** — ESLint via `eslint-config-next`.
-- **`npm run test:run`** — Vitest 3 + happy-dom + Testing Library (added in v0.6.0). 22 unit + snapshot tests cover the OG palette, data fetchers, OgCard, and CardActions.
+- **`npm run test:run`** — Vitest 3 + happy-dom 20 + Testing Library (added in v0.6.0; happy-dom bumped to v20 on 2026-05-22). 34 unit + snapshot tests cover the OG palette, data fetchers, OgCard, CardActions, events wiring, PostHog provider, and FramerProvider.
 - **`npm run build`** — TypeScript + Next 16 build with Turbopack.
 
 ## Stack

@@ -104,7 +104,7 @@
   - `/share/[slug]` — public read-only view + matching OG/Twitter image routes
   - `/me` — authenticated history (v0.5.0+)
 - **State:** server-driven by default; `useSyncExternalStore` for the localStorage-backed `useSession()` and mode-preference hooks (avoids React 19's `react-hooks/set-state-in-effect` rule).
-- **Tests:** Vitest 3 + happy-dom + Testing Library (added in v0.6.0). 22 frontend tests cover the OG palette, data fetchers, OgCard component, and CardActions interactions.
+- **Tests:** Vitest 3 + happy-dom 20 + Testing Library (added in v0.6.0). 34 frontend tests cover the OG palette, data fetchers, OgCard, CardActions, events wiring, PostHog provider, and FramerProvider.
 
 ### Backend — `backend/` (FastAPI)
 
@@ -145,7 +145,7 @@ Bumping `KEY_PREFIX` in `app/cache/client.py` invalidates every namespace at onc
 Two thin cross-cutting layers. Both fail open — telemetry is never a correctness boundary.
 
 - **Backend `app/observability/`** — `structlog` JSON logging (console renderer in dev) with a `request_id` contextvar bound by `RequestIDMiddleware` (UUID4 per request). Sentry FastAPI integration captures unhandled exceptions; a `before_send` PII scrub hook strips `access_token`, `access_token_ct`, `oauth_state`, `oauth_code`, `session_id`, full `Cookie`/`Authorization` headers, and `email` before the envelope leaves the process. `request_id` is tagged on every Sentry event and echoed in the `X-Request-ID` response header so frontend breadcrumbs can correlate.
-- **Frontend `src/observability/`** — Sentry browser SDK via Next 16's `instrumentation.ts`, with source maps uploaded at build time. PostHog browser SDK wraps the layout via `<ObservabilityProvider>` — auto-pageviews + web-vitals capture + named events (`analyze_submitted`, `share_toggled`, `share_card_copied`, `mode_toggled`, `sign_in_clicked`). Signed-in users identified by the opaque `si_session` cookie value (never GitHub login, never email); anonymous viewers use PostHog's auto-distinct ID.
+- **Frontend `src/observability/`** — Sentry browser SDK via Next 16's `instrumentation.ts`. Source-map upload is deferred to a v0.8.x patch (requires `SENTRY_AUTH_TOKEN` + `SENTRY_ORG` + `SENTRY_PROJECT` provisioning); runtime capture works without it but stack traces stay minified until the wrapper is re-added. PostHog browser SDK wraps the layout via `<ObservabilityProvider>` — auto-pageviews + web-vitals capture + named events (`analyze_submitted`, `share_toggled`, `share_card_copied`, `mode_toggled`, `sign_in_clicked`). Signed-in users identified by the opaque `si_session` cookie value (never GitHub login, never email); anonymous viewers use PostHog's auto-distinct ID.
 - **Correlation contract:** one `request_id` per request flows through middleware → structlog → Sentry tag → response header. One canonical session ID across PostHog `identify()` and Sentry `user.id`.
 - **Real-user perf metrics:** PostHog `enable_web_vitals_autocapture` captures LCP / CLS / INP per visitor with element selectors — closes v0.7.2's "couldn't identify the prod LCP element" gap without adding a second vendor.
 
@@ -203,5 +203,5 @@ These are explicitly unresolved. Decisions get logged in [`docs/PROGRESS_LOG.md`
 2. ~~**Streaming framework**~~ — Resolved in v0.4.0: **SSE.**
 3. ~~**OG image runtime**~~ — Resolved in v0.6.0: **`next/og` `ImageResponse` (satori-based).**
 4. ~~**Cache provider**~~ — Resolved in v0.7.0: **Upstash Redis via the REST API.**
-5. **Background ingestion** — cron on Vercel vs. Inngest vs. Vercel Queues. Decision in v0.8.0 alongside Sentry.
+5. ~~**Background ingestion**~~ — Resolved 2026-05-22 in [v0.8.1 design spec](./docs/superpowers/specs/2026-05-22-v0.8.1-cron-reingest-design.md): **Vercel Cron + simple-cap-spill-to-tomorrow chunking**, no self-invocation, no resume tokens. Fail-open with Sentry breadcrumbs per attempt + capture on rate-limit cliffs.
 6. **Production domain** — pre-v1.0.

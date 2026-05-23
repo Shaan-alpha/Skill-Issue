@@ -339,12 +339,27 @@ Each deferred item is independent and earns its own patch release, matching the 
 
 **Goal:** Saved analyses refresh themselves overnight so a user who comes back tomorrow doesn't see stale data. Failures are visible because v0.8.0's Sentry is already in place.
 
-**Slice scope:**
-- Vercel Cron entry (likely `vercel.json` for now; folds into v0.8.4's `vercel.ts` migration later) hitting a new authenticated backend route `POST /cron/refresh-saved-analyses`.
-- Chunking: respect Vercel function timeout (300s) by processing N analyses per invocation; resume tokens persisted in Postgres if the queue is larger than one chunk.
-- Sentry breadcrumb / structured log for every refresh attempt; one Sentry capture per chunk failure.
+**Design spec:** [`docs/superpowers/specs/2026-05-22-v0.8.1-cron-reingest-design.md`](./docs/superpowers/specs/2026-05-22-v0.8.1-cron-reingest-design.md).
 
-**Exit criteria:** TBD when the slice begins.
+**Slice scope (locked 2026-05-22):**
+- Vercel Cron entry in `vercel.json` (folds into v0.8.4's `vercel.ts` migration later) hitting a new bearer-authed backend route `POST /cron/refresh-saved-analyses` at 03:00 UTC.
+- Refresh target: **all** saved analyses (every row in `analyses`), oldest-not-refreshed-in-24h first.
+- Chunk cap: N=25 per fire, 240s wall-clock budget (60s safety margin under Vercel's 300s timeout). Overflow spills to tomorrow — no self-invocation, no resume tokens (YAGNI applied).
+- Token strategy: owner's latest unexpired session token (v0.5.0 encryption boundary), falling back to `GITHUB_TOKEN`. Decrypted per request, never logged.
+- Cache strategy: write-through via existing `get_report_for_user` — Layer A Redis dedupe means multi-user saves of the same target only cost one GH fetch.
+- No narrative pre-warming (would burn LLM budget against an uncertain "user returns tomorrow AND reads narrative" prior).
+- Sentry breadcrumb per attempt; capture on rate-limit cliff (403) or DB error.
+
+**Exit criteria:**
+- [ ] `POST /cron/refresh-saved-analyses` without auth header → 401.
+- [ ] With correct bearer + `TEST_DATABASE_URL` set → 200, summary JSON shape per spec §5.
+- [ ] One bad analysis (404 / RuntimeError) doesn't block subsequent rows.
+- [ ] A new `analysis_runs` row appears for each successfully-refreshed analysis; Layer A Redis populated.
+- [ ] Wall-clock cap honored; 403 rate-limit cliff stops the chunk + triggers a Sentry capture.
+- [ ] `vercel.json` declares the cron entry; `CRON_SECRET` documented in `docs/DEPLOY.md`.
+- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.8.1`.
+
+**Sub-plan:** When implementation starts, generate the TDD plan via `superpowers:writing-plans` against the spec; save to `docs/superpowers/plans/2026-05-22-v0.8.1-cron-reingest.md`. Expect ~10-12 tasks per spec §11 ordering.
 
 ---
 
