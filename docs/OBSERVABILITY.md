@@ -99,6 +99,23 @@ we capture".
 | `$pageview` | _(auto)_ | Every route navigation (PostHog auto-captures) |
 | `$web_vitals` | LCP / CLS / INP / FCP / TTFB | Per-page web vitals (PostHog auto-captures) |
 
+### Cron event taxonomy (v0.8.1)
+
+Cron emits structured logs (no PostHog wiring — server-only, no user
+context). Sentry breadcrumbs on every attempt; Sentry capture on the
+rate-limit cliff or DB error. Names in the table below are the conceptual
+labels — the orchestrator currently emits English-prose `logger.warning` /
+`logger.error` lines that the structlog → Sentry integration converts into
+breadcrumbs/events.
+
+| Event | Level | Sentry | Fired when |
+| --- | --- | --- | --- |
+| `cron.refresh_started` | info | breadcrumb | Top of `run_refresh_chunk`, with `chunk_limit`, `deadline_seconds` |
+| `cron.refresh_succeeded` | info | breadcrumb | Per row, with `analysis_id`, `target_login`, `owner_user_id`, `token_source`, `duration_ms` |
+| `cron.refresh_skipped` | warn | breadcrumb | Per row that hit GH 404, GH 422, or any non-rate-limit exception |
+| `cron.refresh_rate_limited` | error | **capture** | First 403 with `X-RateLimit-Remaining: 0`. Chunk halts. |
+| `cron.refresh_chunk_complete` | info | breadcrumb | After commit, with `processed`, `succeeded`, `skipped`, `rate_limited`, `deadline_reached` |
+
 ## PII contract
 
 These fields must never reach Sentry or PostHog. Code that handles them is

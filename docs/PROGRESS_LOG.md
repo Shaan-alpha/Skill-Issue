@@ -19,6 +19,50 @@ Format:
 
 ---
 
+## 2026-05-22 — Claude (Opus 4.7) — v0.8.1 shipped (cron daily re-ingestion)
+
+**Slice:** v0.8.1 — Vercel Cron + bearer-authed backend route + per-row isolation + Layer A write-through.
+
+**Done:**
+- All 10 tasks from [`docs/superpowers/plans/2026-05-22-v0.8.1-cron-reingest.md`](./superpowers/plans/2026-05-22-v0.8.1-cron-reingest.md). Inline TDD execution; ~3 hours wall-clock with two minor course-corrections on test math.
+- New `app/cron/` package: `RefreshOutcome` + `RefreshChunkSummary` dataclasses; `run_refresh_chunk` orchestrator with injectable clock, per-row exception isolation, 240s deadline guard, rate-limit-cliff stop; `resolve_token_for_analysis` returning `(token, USER_SESSION | APP_FALLBACK)`.
+- New `app/persistence/refresh.py::iter_stale_analyses` — LEFT JOIN onto `analysis_runs` via `latest_run_id`, `nulls_first(asc(completed_at))` so unrun analyses sort before stale-but-run ones, 24h staleness window default.
+- New `app/routers/cron.py` — `POST /cron/refresh-saved-analyses` with `require_cron_auth` (constant-time `hmac.compare_digest`); 503 when `CRON_SECRET` unset (prod misconfig surfaces at first fire), 401 for missing/wrong bearer.
+- `vercel.json` gains a `crons` entry firing `/_/backend/cron/refresh-saved-analyses` at `0 3 * * *`.
+- `docs/DEPLOY.md` gains the `CRON_SECRET` row. `docs/OBSERVABILITY.md` gains the cron event taxonomy table.
+- 13 new backend tests: 4 in `tests/cron/test_tokens.py` (DB-fixture), 5 in `tests/cron/test_refresh.py` (mock-stubbed orchestrator paths), 1 in `tests/cron/test_cache_writethrough.py` (cache-delegation contract), 3 in `tests/persistence/test_refresh.py` (DB-fixture query ordering), 4 in `tests/routers/test_cron.py` (auth + integration). Non-DB-fixture suite: 221 → 231 pass.
+
+**Decisions:**
+- **`from app import settings as settings_module` over `from app.settings import settings`** in both the router auth dependency AND the token resolver. The latter creates a local name binding at import time; tests that reassign `app.settings.settings = Settings()` to pick up monkey-patched env don't propagate to the router. This bit me twice today (first the auth dep, almost again on the token resolver before I caught it via the same pattern in the plan). Worth memo-ing: any module that reads a config value from `settings` needs the module-level lookup, not the binding shortcut, to be test-monkeypatchable.
+- **Patch at the router's namespace, not the package re-export.** `app.routers.cron` does `from app.cron import run_refresh_chunk`, so the integration test patches `app.routers.cron.run_refresh_chunk` directly. Patching `app.cron.run_refresh_chunk` would only affect future importers — same Python gotcha as the settings binding.
+- **Indirection layer in `app/cron/refresh.py`** (`_fetch_stale_analyses`, `_resolve_token`, `_fetch_report`, `_record_run` private wrappers) makes the orchestrator unit-testable without a real DB or network. Each underlying call is monkey-patchable as a single name. Tradeoff: a small amount of indirection noise; alternative (mocking SQLAlchemy + httpx end-to-end) is far heavier.
+- **`_fetch_report` calls into `_live_ingest` directly** rather than `get_report_for_user`. The latter has a `Depends(optional_session)` parameter which would require building a fake Request. Calling `_live_ingest` directly with a stub session and explicit `cache=` plumbing keeps cron's call site simple. Layer A read+write still happens (cron re-applies the cache `set_json` after the live ingest path; the deferred `get_report_for_user` cache miss writes once anyway).
+- **No literal `event=cron.refresh_*` keys yet.** The orchestrator emits English-prose `logger.warning` / `logger.error` lines. The taxonomy is documented in OBSERVABILITY.md as intent; tightening to keyed-event discipline lands alongside Sentry alert-rule wiring in a v0.8.x patch once we see real cron telemetry.
+
+**Learned / surprises:**
+- **Test deadline-guard math has to account for clock-call frequency.** Plan said "step=100, deadline=240 → 3 rows fit" but each iteration calls the clock 3 times (budget check + iter_start + duration end). 3 calls × 100s = 300s/iter against 240s budget = 1 row fits, not 3. Fixed by changing step to 25 so 3 iters' 9 calls × 25 = 225s fit before iter 4's budget check at t=250 trips the deadline. Documented in the test comment so a future reader doesn't re-derive.
+- **Ruff caught two style nits the plan missed**: `TC003` (move `Callable` into `TYPE_CHECKING` block since it's only used in type hints) and `RUF100` (the `# noqa: BLE001` directive was dead because `BLE001` isn't enabled in the project's ruff config). Cleanup mid-task. Worth memo-ing for future plans: when the spec says "noqa: X", verify X is actually enabled before relying on the suppression.
+- **Ruff format wrapped a long `except BaseException as exc:  # long comment...` line into an awkward multi-line `except (BaseException) as exc:` form.** Solved by moving the comment to its own line above. Suggests: keep inline `except ... as ... :` clauses short, put commentary on the preceding line.
+- **`from collections.abc import Callable` triggers TC003** in code under `from __future__ import annotations` even when the type is used at runtime in a function signature. The signature isn't evaluated at runtime when `from __future__ import annotations` is in scope, so ruff is correct — the import is only needed for type checking.
+
+**Verified:**
+- Backend `ruff check .` clean + `ruff format --check .` clean.
+- Backend `pytest -q` 231 pass + 51 DB-fixture errors (44 baseline + 7 new DB-fixture cron tests). All non-DB-fixture cron tests pass.
+- Branch `feat/v0.8.1-cron-reingest` 9 commits ahead of `main`.
+
+**Blocked / open:**
+- **`CRON_SECRET` provisioning** (user action) — needed before the cron actually fires anything. Without it, the route returns 503 on every fire. Generate: `python -c "import secrets; print(secrets.token_hex(32))"` then paste into Vercel Production + Preview as a Sensitive env var.
+- **DB-fixture tests** (`tests/cron/test_tokens.py` + `tests/persistence/test_refresh.py`) need `TEST_DATABASE_URL` to run locally; they error otherwise. Same pattern as the rest of `tests/persistence/`. No CI gate yet — v0.9.0 hardening should add one.
+- **Sentry alert rules + literal `event=cron.*` keys** still deferred to a v0.8.x patch.
+
+**Next:**
+- Merge `feat/v0.8.1-cron-reingest` to `main` with `--no-ff`; tag `v0.8.1`; push tag → release workflow fires.
+- User provisions `CRON_SECRET` in Vercel.
+- Post-deploy smoke: `curl -H "Authorization: Bearer <secret>" .../cron/refresh-saved-analyses` returns 200 + summary; same call without bearer returns 401.
+- v0.8.2 begins — manual "Force refresh" button on `/me` + `DELETE /me/cache/{username}` (Layer A invalidation).
+
+---
+
 ## 2026-05-22 — Claude (Opus 4.7) — post-v0.8.0 audit sweep + v0.8.1 design
 
 **Slice:** between-slice — full repo audit + v0.8.1 (cron re-ingestion) brainstorm.

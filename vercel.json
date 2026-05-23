@@ -9,5 +9,11 @@
       "entrypoint": "backend",
       "routePrefix": "/_/backend"
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/_/backend/cron/refresh-saved-analyses",
+      "schedule": "0 3 * * *"
+    }
+  ]
 }

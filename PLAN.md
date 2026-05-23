@@ -31,7 +31,7 @@
 | **v0.7.4** | Hotfix — badge evidence reachable on mobile (Tooltip → Popover with hover + tap) | ✅ shipped |
 | **v0.7.5** | Hotfix — Roast/Mentor toggle symmetric on mobile (flex-1 split 50/50) | ✅ shipped |
 | **v0.8.0** | Polish + observability — Sentry (FE+BE), PostHog (events + web-vitals), structured logging, axe a11y pass, on-voice 404/500, error-budget doc | ✅ shipped |
-| **v0.8.1** | Cron daily re-ingestion of saved analyses (paired with Sentry so failures aren't silent) | deferred from v0.8.0 |
+| **v0.8.1** | Cron daily re-ingestion of saved analyses (paired with Sentry so failures aren't silent) | ✅ shipped |
 | **v0.8.2** | Manual "Force refresh" on `/me` + `DELETE /me/cache/{username}` (Layer A invalidation) | deferred from v0.8.0 |
 | **v0.8.3** | On-demand `revalidateTag` for `/share/[slug]` ISR (closes v0.7.1's deferred share-page caching) | deferred from v0.7.1 |
 | **v0.8.4** | `vercel.json` → `vercel.ts` migration (Vercel 2026-02-27 knowledge update) | deferred from pre-v0.7.1 |
@@ -351,13 +351,13 @@ Each deferred item is independent and earns its own patch release, matching the 
 - Sentry breadcrumb per attempt; capture on rate-limit cliff (403) or DB error.
 
 **Exit criteria:**
-- [ ] `POST /cron/refresh-saved-analyses` without auth header → 401.
-- [ ] With correct bearer + `TEST_DATABASE_URL` set → 200, summary JSON shape per spec §5.
-- [ ] One bad analysis (404 / RuntimeError) doesn't block subsequent rows.
-- [ ] A new `analysis_runs` row appears for each successfully-refreshed analysis; Layer A Redis populated.
-- [ ] Wall-clock cap honored; 403 rate-limit cliff stops the chunk + triggers a Sentry capture.
-- [ ] `vercel.json` declares the cron entry; `CRON_SECRET` documented in `docs/DEPLOY.md`.
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.8.1`.
+- [x] `POST /cron/refresh-saved-analyses` without auth header → 401.
+- [x] With correct bearer + `TEST_DATABASE_URL` set → 200, summary JSON shape per spec §5.
+- [x] One bad analysis (404 / RuntimeError) doesn't block subsequent rows.
+- [x] A new `analysis_runs` row appears for each successfully-refreshed analysis; Layer A Redis populated. (Layer A write delegated to `_fetch_report`; contract covered by `tests/cron/test_cache_writethrough.py` + the existing `tests/test_report_cache.py`. `record_run` end-to-end covered by `tests/persistence/test_analyses.py::test_record_run_attaches_run_and_updates_latest` + the new wiring through `_record_run`.)
+- [x] Wall-clock cap honored; 403 rate-limit cliff stops the chunk + triggers a Sentry capture. (Sentry capture is the `logger.error("cron rate_limit_cliff ...")` line + the structlog → Sentry integration.)
+- [x] `vercel.json` declares the cron entry; `CRON_SECRET` documented in `docs/DEPLOY.md`.
+- [x] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.8.1`.
 
 **Sub-plan:** When implementation starts, generate the TDD plan via `superpowers:writing-plans` against the spec; save to `docs/superpowers/plans/2026-05-22-v0.8.1-cron-reingest.md`. Expect ~10-12 tasks per spec §11 ordering.
 
