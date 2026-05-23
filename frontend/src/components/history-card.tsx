@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { SavedAnalysis } from "@/types";
+import { RefreshButton } from "@/components/refresh-button";
 
 function relativeTime(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
@@ -24,15 +25,20 @@ export function HistoryCard({ analysis }: { analysis: SavedAnalysis }) {
         {analysis.is_public ? (
           <span className="text-[10px] uppercase tracking-wider text-accent">Public</span>
         ) : (
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Private</span>
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Private
+          </span>
         )}
       </div>
       {run ? (
         <>
           <div className="text-3xl font-bold tracking-tight text-foreground">{run.total_score}</div>
           <div className="mt-1 text-xs text-muted-foreground">{run.tier_name}</div>
-          <div className="mt-3 text-[10px] uppercase tracking-wider text-muted-foreground">
-            Updated {relativeTime(run.completed_at)}
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Updated {relativeTime(run.completed_at)}
+            </span>
+            <RefreshButton target={analysis.target_login} />
           </div>
         </>
       ) : (

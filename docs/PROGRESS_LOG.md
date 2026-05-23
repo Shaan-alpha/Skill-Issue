@@ -19,6 +19,43 @@ Format:
 
 ---
 
+## 2026-05-23 — Claude (Opus 4.7) — v0.8.2 shipped (manual force refresh)
+
+**Slice:** v0.8.2 — synchronous `POST /me/refresh/{username}` + 10/hour per-user rate limit + `<RefreshButton>` client component on `/me`.
+
+**Done:**
+- All 10 tasks from [`docs/superpowers/plans/2026-05-22-v0.8.2-force-refresh.md`](./superpowers/plans/2026-05-22-v0.8.2-force-refresh.md). Inline TDD execution; ~1.5h wall-clock with one course-correction (wrong Pydantic model names in plan stubs — `BucketScore`/`Badge` were guesses; real ones are `ScoreResult`/`ScoreBreakdown`/`TierInfo`).
+- Backend: `app/routers/refresh.py` (POST /me/refresh/{username} with require_session + ownership + rate-limit gate + cache invalidate + re-ingest + record_run), `app/cache/rate_limit.py` (generic `try_increment_counter` with EXPIRE-on-first-write, fail-open), `app/cache/keys.py::rate_limit_key`, `app/persistence/analyses.py::get_user_analysis_by_target` (case-insensitive), `Settings.force_refresh_per_user_per_hour`. 13 new tests; suite at 240 non-DB-fixture pass.
+- Frontend: `<RefreshButton>` client component with `idle/pending/success/error/rate_limited` state machine, embedded in `<HistoryCard>` with `e.preventDefault()` + `e.stopPropagation()` to suppress nested-Link navigation. `trackForceRefreshClicked` typed PostHog helper (folded into the same commit as RefreshButton because the component dynamic-imports it). 3 new vitest cases + 1 surface-row in events-wiring; suite at 37.
+
+**Decisions:**
+- **Synchronous over invalidate-only** (locked at brainstorm) — users expect "refresh" to mean "new data now"; PLAN.md's original `DELETE /me/cache/...` wording would have left the cache empty and required a second click. Picked `POST /me/refresh/{username}` instead.
+- **Strict ownership** — refuses 404 if the target isn't in the caller's `analyses`. Without this, the route is a back door to bypass the global `GET /analyze` cache (any signed-in user could pound `POST /me/refresh/torvalds` to force cold ingest on demand). Strict ownership keeps the cost-of-abuse equal to cost-of-saving.
+- **Per-user 10/hour cap** — insurance against malicious spam, not load. At 100-users/day operating ceiling, normal use never hits it. Cheap (~30 lines reusing v0.7.0 Upstash). v0.9.0 will add global IP-level limits on top.
+- **Generic `try_increment_counter`** — takes a `name` parameter so v0.9.0's other rate limits can reuse it without copy-paste.
+- **`<RefreshButton>` inside `<HistoryCard>`** instead of replacing the card — card stays server-rendered for SEO + fast paint; only the button hydrates.
+- **`trackForceRefreshClicked` folded into Task 7's commit** — the component imports it dynamically, so splitting would leave a dangling reference between commits. The plan's split was artificial.
+
+**Learned / surprises:**
+- **Plan-stub model names slipped.** I'd written `BucketScore`/inline `Badge` field types in the plan's test fixtures, but the real models are `ScoreResult`/`ScoreBreakdown`/`TierInfo`. Caught when implementing — fixed inline. Lesson for future plans: even with the spec written, the plan's stub code should be cross-checked against the actual model definitions, not assumed from the plan author's mental model.
+- **`uv lock` after `pyproject.toml` version bump** — needed to sync `skill-issue-backend v0.8.1 → v0.8.2` in the lockfile. Same chore-pattern as v0.8.1 except this time I caught it before commit.
+- **`HistoryCard` is wrapped in `<Link>`** — embedding `<RefreshButton>` requires `e.preventDefault()` AND `e.stopPropagation()` on the button's click handler. Standard nested-interactive-element pattern in React.
+- **Real Report `generated_at: datetime` field is required** — I missed it on first stub-fixture write. Pydantic threw, fixed inline with `datetime.now(UTC)`.
+
+**Verified:**
+- Backend `ruff check .` + `ruff format --check .` clean. `pytest -q --no-header`: 240 pass.
+- Frontend `npm run lint` + `npx tsc --noEmit` + `npm run test:run` (37 pass) + `npm run build` all clean.
+
+**Blocked / open:**
+- Real prod 429 verification needs a manual spam test after deploy (curl + saved session cookie 11 times in a row).
+- Frontend bundle impact of `<RefreshButton>` not measured — should be ~5KB (lucide RefreshCw is already imported elsewhere). Not budget-relevant at this scale.
+
+**Next:**
+- Merge `feat/v0.8.2-force-refresh` to `main` with `--no-ff`; tag `v0.8.2`; push tag → release workflow fires.
+- v0.8.3 begins — on-demand `revalidateTag` for `/share/[slug]` ISR (closes v0.7.1's deferred share-page caching).
+
+---
+
 ## 2026-05-22 — Claude (Opus 4.7) — v0.8.1 shipped (cron daily re-ingestion)
 
 **Slice:** v0.8.1 — Vercel Cron + bearer-authed backend route + per-row isolation + Layer A write-through.

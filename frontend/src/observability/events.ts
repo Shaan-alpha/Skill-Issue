@@ -40,3 +40,13 @@ export function trackModeToggled(props: ModeToggledProps): void {
 export function trackSignInClicked(): void {
   track("sign_in_clicked", {});
 }
+
+export type ForceRefreshClickedProps = {
+  target_login: string;
+  duration_ms: number;
+  success: boolean;
+};
+
+export function trackForceRefreshClicked(props: ForceRefreshClickedProps): void {
+  track("force_refresh_clicked", props);
+}

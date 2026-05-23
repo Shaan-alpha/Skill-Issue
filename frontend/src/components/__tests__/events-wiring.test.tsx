@@ -6,6 +6,7 @@ vi.mock("@/observability/events", () => ({
   trackShareCardCopied: vi.fn(),
   trackModeToggled: vi.fn(),
   trackSignInClicked: vi.fn(),
+  trackForceRefreshClicked: vi.fn(),
 }));
 
 describe("events wiring", () => {
@@ -16,5 +17,6 @@ describe("events wiring", () => {
     expect(typeof events.trackShareCardCopied).toBe("function");
     expect(typeof events.trackModeToggled).toBe("function");
     expect(typeof events.trackSignInClicked).toBe("function");
+    expect(typeof events.trackForceRefreshClicked).toBe("function");
   });
 });

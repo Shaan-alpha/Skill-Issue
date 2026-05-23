@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-VERSION = "0.8.1"
+VERSION = "0.8.2"
 
 
 class Settings(BaseSettings):
@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     # responds 503 so misconfig is visible at the first fire instead of
     # silently no-op'ing.
     cron_secret: str | None = None
+
+    # v0.8.2 — force-refresh rate limit
+    # Per-user cap on force-refresh actions per UTC hour. Reset on bucket
+    # rollover. Override via env FORCE_REFRESH_PER_USER_PER_HOUR.
+    force_refresh_per_user_per_hour: int = 10
 
 
 settings = Settings()
