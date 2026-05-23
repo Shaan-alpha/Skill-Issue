@@ -25,9 +25,7 @@ def load_enc_key() -> bytes:
     except Exception as exc:
         raise InvalidEncKey(f"SESSION_TOKEN_ENC_KEY is not valid base64: {exc}") from exc
     if len(key) != 32:
-        raise InvalidEncKey(
-            f"SESSION_TOKEN_ENC_KEY must decode to 32 bytes, got {len(key)}"
-        )
+        raise InvalidEncKey(f"SESSION_TOKEN_ENC_KEY must decode to 32 bytes, got {len(key)}")
     return key
 
 

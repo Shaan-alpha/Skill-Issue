@@ -18,6 +18,7 @@ class NotAnIndividualError(Exception):
     non-User account type). The dependency layer maps this to a 422
     so the frontend can render a specific message."""
 
+
 # How many repos to inspect for README / tests / CI / deployment signals.
 # Matches the cap used for language aggregation. Beyond this, signals are
 # diminishing and the API cost is real.

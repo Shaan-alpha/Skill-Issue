@@ -11,7 +11,9 @@ from app.persistence.analyses import upsert_analysis
 
 
 async def _setup(db, monkeypatch):
-    monkeypatch.setenv("SESSION_TOKEN_ENC_KEY", base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())
+    monkeypatch.setenv(
+        "SESSION_TOKEN_ENC_KEY", base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()
+    )
     u = User(github_id=1, github_login="o")
     db.add(u)
     await db.flush()
@@ -28,7 +30,10 @@ async def _client():
 async def test_share_creates_slug(db, monkeypatch):
     sid, aid = await _setup(db, monkeypatch)
     from app.db.session import get_db
-    async def _o(): yield db
+
+    async def _o():
+        yield db
+
     app.dependency_overrides[get_db] = _o
 
     async with await _client() as ac:
@@ -44,7 +49,10 @@ async def test_share_creates_slug(db, monkeypatch):
 async def test_revoke_share_returns_204(db, monkeypatch):
     sid, aid = await _setup(db, monkeypatch)
     from app.db.session import get_db
-    async def _o(): yield db
+
+    async def _o():
+        yield db
+
     app.dependency_overrides[get_db] = _o
 
     async with await _client() as ac:
@@ -66,7 +74,10 @@ async def test_share_wrong_owner_returns_403(db, monkeypatch):
     sid_other = await create_session(db, user_id=u2.id, github_access_token="t", ttl_days=30)
     await db.commit()
     from app.db.session import get_db
-    async def _o(): yield db
+
+    async def _o():
+        yield db
+
     app.dependency_overrides[get_db] = _o
 
     async with await _client() as ac:

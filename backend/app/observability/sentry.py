@@ -4,6 +4,7 @@ Scrubbing happens in `before_send`. The full PII contract lives in the v0.8.0
 design spec §6. Anything new added there must be added here too — this is the
 single point where PII can leak out of the process.
 """
+
 from __future__ import annotations
 
 import logging

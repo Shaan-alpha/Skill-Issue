@@ -164,22 +164,62 @@ ROAST_FEW_SHOT: list[dict[str, str]] = [
             total=26,
             badges=[],
             breakdown={
-                "repo_quality": _bucket(6, 30, [
-                    {"detail": "20% of non-fork repos have READMEs", "signal": "readme_majority", "weight": 6},
-                ]),
-                "engineering_maturity": _bucket(4, 20, [
-                    {"detail": "Writes in 1 language significantly", "signal": "language_diversity", "weight": 4},
-                ]),
+                "repo_quality": _bucket(
+                    6,
+                    30,
+                    [
+                        {
+                            "detail": "20% of non-fork repos have READMEs",
+                            "signal": "readme_majority",
+                            "weight": 6,
+                        },
+                    ],
+                ),
+                "engineering_maturity": _bucket(
+                    4,
+                    20,
+                    [
+                        {
+                            "detail": "Writes in 1 language significantly",
+                            "signal": "language_diversity",
+                            "weight": 4,
+                        },
+                    ],
+                ),
                 "oss_collab": _bucket(0, 15, []),
                 "consistency": _bucket(0, 10, []),
-                "recruiter_signal": _bucket(8, 15, [
-                    {"detail": "Portfolio/Website linked: https://example.dev", "signal": "professional_presence", "weight": 5},
-                    {"detail": "Profile README present (412 chars)", "signal": "profile_completion", "weight": 3},
-                ]),
-                "learning_trajectory": _bucket(8, 10, [
-                    {"detail": "+3 new repos in last 12 months", "signal": "repo_growth", "weight": 5},
-                    {"detail": "Activity in both Y1 and Y2", "signal": "yoy_activity", "weight": 3},
-                ]),
+                "recruiter_signal": _bucket(
+                    8,
+                    15,
+                    [
+                        {
+                            "detail": "Portfolio/Website linked: https://example.dev",
+                            "signal": "professional_presence",
+                            "weight": 5,
+                        },
+                        {
+                            "detail": "Profile README present (412 chars)",
+                            "signal": "profile_completion",
+                            "weight": 3,
+                        },
+                    ],
+                ),
+                "learning_trajectory": _bucket(
+                    8,
+                    10,
+                    [
+                        {
+                            "detail": "+3 new repos in last 12 months",
+                            "signal": "repo_growth",
+                            "weight": 5,
+                        },
+                        {
+                            "detail": "Activity in both Y1 and Y2",
+                            "signal": "yoy_activity",
+                            "weight": 3,
+                        },
+                    ],
+                ),
             },
         ),
     },
@@ -211,32 +251,87 @@ ROAST_FEW_SHOT: list[dict[str, str]] = [
             sub_rank=80,
             total=77,
             badges=[
-                {"slug": "oss-contributor", "evidence": "Merged 52 external PRs across 6 organisations"},
+                {
+                    "slug": "oss-contributor",
+                    "evidence": "Merged 52 external PRs across 6 organisations",
+                },
                 {"slug": "pr-master", "evidence": "52 external PRs merged"},
                 {"slug": "polyglot", "evidence": "Significant contribution in 5 languages"},
             ],
             breakdown={
-                "repo_quality": _bucket(26, 30, [
-                    {"detail": "92% of non-fork repos have READMEs", "signal": "readme_majority", "weight": 6},
-                    {"detail": "85% have CI workflows", "signal": "ci_majority", "weight": 5},
-                    {"detail": "License majority: MIT", "signal": "license_majority", "weight": 4},
-                ]),
-                "engineering_maturity": _bucket(18, 20, [
-                    {"detail": "Writes significantly in 5 languages", "signal": "language_diversity", "weight": 5},
-                    {"detail": "Builds substantial repos (>200KB)", "signal": "multi_folder_structure", "weight": 4},
-                ]),
-                "oss_collab": _bucket(15, 15, [
-                    {"detail": "52 merged external PRs", "signal": "external_prs", "weight": 8},
-                    {"detail": "Contributed to 6 distinct orgs", "signal": "org_diversity", "weight": 7},
-                ]),
-                "consistency": _bucket(8, 10, [
-                    {"detail": "Commits in 11 of last 12 months", "signal": "monthly_cadence", "weight": 5},
-                    {"detail": "Longest dry spell: 14 days", "signal": "dry_spell", "weight": 3},
-                ]),
+                "repo_quality": _bucket(
+                    26,
+                    30,
+                    [
+                        {
+                            "detail": "92% of non-fork repos have READMEs",
+                            "signal": "readme_majority",
+                            "weight": 6,
+                        },
+                        {"detail": "85% have CI workflows", "signal": "ci_majority", "weight": 5},
+                        {
+                            "detail": "License majority: MIT",
+                            "signal": "license_majority",
+                            "weight": 4,
+                        },
+                    ],
+                ),
+                "engineering_maturity": _bucket(
+                    18,
+                    20,
+                    [
+                        {
+                            "detail": "Writes significantly in 5 languages",
+                            "signal": "language_diversity",
+                            "weight": 5,
+                        },
+                        {
+                            "detail": "Builds substantial repos (>200KB)",
+                            "signal": "multi_folder_structure",
+                            "weight": 4,
+                        },
+                    ],
+                ),
+                "oss_collab": _bucket(
+                    15,
+                    15,
+                    [
+                        {"detail": "52 merged external PRs", "signal": "external_prs", "weight": 8},
+                        {
+                            "detail": "Contributed to 6 distinct orgs",
+                            "signal": "org_diversity",
+                            "weight": 7,
+                        },
+                    ],
+                ),
+                "consistency": _bucket(
+                    8,
+                    10,
+                    [
+                        {
+                            "detail": "Commits in 11 of last 12 months",
+                            "signal": "monthly_cadence",
+                            "weight": 5,
+                        },
+                        {
+                            "detail": "Longest dry spell: 14 days",
+                            "signal": "dry_spell",
+                            "weight": 3,
+                        },
+                    ],
+                ),
                 "recruiter_signal": _bucket(4, 15, []),
-                "learning_trajectory": _bucket(6, 10, [
-                    {"detail": "Account age 7.2 years", "signal": "account_longevity", "weight": 3},
-                ]),
+                "learning_trajectory": _bucket(
+                    6,
+                    10,
+                    [
+                        {
+                            "detail": "Account age 7.2 years",
+                            "signal": "account_longevity",
+                            "weight": 3,
+                        },
+                    ],
+                ),
             },
         ),
     },
@@ -273,24 +368,68 @@ MENTOR_FEW_SHOT: list[dict[str, str]] = [
             total=40,
             badges=[],
             breakdown={
-                "repo_quality": _bucket(12, 30, [
-                    {"detail": "60% of non-fork repos have READMEs", "signal": "readme_majority", "weight": 6},
-                    {"detail": "Top repo has 8 stars", "signal": "popular_repo", "weight": 3},
-                ]),
-                "engineering_maturity": _bucket(6, 20, [
-                    {"detail": "Writes in 2 languages significantly", "signal": "language_diversity", "weight": 4},
-                ]),
+                "repo_quality": _bucket(
+                    12,
+                    30,
+                    [
+                        {
+                            "detail": "60% of non-fork repos have READMEs",
+                            "signal": "readme_majority",
+                            "weight": 6,
+                        },
+                        {"detail": "Top repo has 8 stars", "signal": "popular_repo", "weight": 3},
+                    ],
+                ),
+                "engineering_maturity": _bucket(
+                    6,
+                    20,
+                    [
+                        {
+                            "detail": "Writes in 2 languages significantly",
+                            "signal": "language_diversity",
+                            "weight": 4,
+                        },
+                    ],
+                ),
                 "oss_collab": _bucket(0, 15, []),
-                "consistency": _bucket(6, 10, [
-                    {"detail": "Commits in 8 of last 12 months", "signal": "monthly_cadence", "weight": 4},
-                ]),
-                "recruiter_signal": _bucket(10, 15, [
-                    {"detail": "Portfolio linked: https://example.dev", "signal": "professional_presence", "weight": 5},
-                    {"detail": "Profile README (1.1k chars)", "signal": "profile_completion", "weight": 3},
-                ]),
-                "learning_trajectory": _bucket(6, 10, [
-                    {"detail": "+4 new repos in last 12 months", "signal": "repo_growth", "weight": 5},
-                ]),
+                "consistency": _bucket(
+                    6,
+                    10,
+                    [
+                        {
+                            "detail": "Commits in 8 of last 12 months",
+                            "signal": "monthly_cadence",
+                            "weight": 4,
+                        },
+                    ],
+                ),
+                "recruiter_signal": _bucket(
+                    10,
+                    15,
+                    [
+                        {
+                            "detail": "Portfolio linked: https://example.dev",
+                            "signal": "professional_presence",
+                            "weight": 5,
+                        },
+                        {
+                            "detail": "Profile README (1.1k chars)",
+                            "signal": "profile_completion",
+                            "weight": 3,
+                        },
+                    ],
+                ),
+                "learning_trajectory": _bucket(
+                    6,
+                    10,
+                    [
+                        {
+                            "detail": "+4 new repos in last 12 months",
+                            "signal": "repo_growth",
+                            "weight": 5,
+                        },
+                    ],
+                ),
             },
         ),
     },
@@ -328,28 +467,80 @@ MENTOR_FEW_SHOT: list[dict[str, str]] = [
                 {"slug": "polyglot", "evidence": "Significant contribution in 4 languages"},
             ],
             breakdown={
-                "repo_quality": _bucket(22, 30, [
-                    {"detail": "80% of non-fork repos have READMEs", "signal": "readme_majority", "weight": 6},
-                    {"detail": "Top repo has 47 stars", "signal": "popular_repo", "weight": 5},
-                    {"detail": "50% have CI workflows", "signal": "ci_majority", "weight": 5},
-                ]),
-                "engineering_maturity": _bucket(14, 20, [
-                    {"detail": "Writes significantly in 4 languages", "signal": "language_diversity", "weight": 5},
-                    {"detail": "Builds substantial repos (>200KB)", "signal": "multi_folder_structure", "weight": 4},
-                ]),
-                "oss_collab": _bucket(4, 15, [
-                    {"detail": "3 merged external PRs", "signal": "external_prs", "weight": 4},
-                ]),
-                "consistency": _bucket(7, 10, [
-                    {"detail": "Commits in 9 of last 12 months", "signal": "monthly_cadence", "weight": 4},
-                    {"detail": "Longest dry spell: 28 days", "signal": "dry_spell", "weight": 3},
-                ]),
-                "recruiter_signal": _bucket(8, 15, [
-                    {"detail": "Portfolio linked", "signal": "professional_presence", "weight": 5},
-                ]),
-                "learning_trajectory": _bucket(5, 10, [
-                    {"detail": "Account age 4.1 years", "signal": "account_longevity", "weight": 3},
-                ]),
+                "repo_quality": _bucket(
+                    22,
+                    30,
+                    [
+                        {
+                            "detail": "80% of non-fork repos have READMEs",
+                            "signal": "readme_majority",
+                            "weight": 6,
+                        },
+                        {"detail": "Top repo has 47 stars", "signal": "popular_repo", "weight": 5},
+                        {"detail": "50% have CI workflows", "signal": "ci_majority", "weight": 5},
+                    ],
+                ),
+                "engineering_maturity": _bucket(
+                    14,
+                    20,
+                    [
+                        {
+                            "detail": "Writes significantly in 4 languages",
+                            "signal": "language_diversity",
+                            "weight": 5,
+                        },
+                        {
+                            "detail": "Builds substantial repos (>200KB)",
+                            "signal": "multi_folder_structure",
+                            "weight": 4,
+                        },
+                    ],
+                ),
+                "oss_collab": _bucket(
+                    4,
+                    15,
+                    [
+                        {"detail": "3 merged external PRs", "signal": "external_prs", "weight": 4},
+                    ],
+                ),
+                "consistency": _bucket(
+                    7,
+                    10,
+                    [
+                        {
+                            "detail": "Commits in 9 of last 12 months",
+                            "signal": "monthly_cadence",
+                            "weight": 4,
+                        },
+                        {
+                            "detail": "Longest dry spell: 28 days",
+                            "signal": "dry_spell",
+                            "weight": 3,
+                        },
+                    ],
+                ),
+                "recruiter_signal": _bucket(
+                    8,
+                    15,
+                    [
+                        {
+                            "detail": "Portfolio linked",
+                            "signal": "professional_presence",
+                            "weight": 5,
+                        },
+                    ],
+                ),
+                "learning_trajectory": _bucket(
+                    5,
+                    10,
+                    [
+                        {
+                            "detail": "Account age 4.1 years",
+                            "signal": "account_longevity",
+                            "weight": 3,
+                        },
+                    ],
+                ),
             },
         ),
     },
@@ -391,8 +582,7 @@ def build_messages(mode: Mode, report: Report) -> list[dict[str, str]]:
             "points": b.points,
             "max_points": b.max_points,
             "evidence": [
-                {"detail": e.detail, "signal": e.signal, "weight": e.weight}
-                for e in b.evidence
+                {"detail": e.detail, "signal": e.signal, "weight": e.weight} for e in b.evidence
             ],
         }
 

@@ -47,9 +47,7 @@ async def _enrich_repo_professional(repo_full_name: str, gh: "GitHubClient") -> 
     license_task = gh.get_license(owner, name)
     workflows_task = gh.list_workflow_files(owner, name)
     readme_task = gh.get_repo_readme_text(owner, name)
-    license_id, workflows, readme = await asyncio.gather(
-        license_task, workflows_task, readme_task
-    )
+    license_id, workflows, readme = await asyncio.gather(license_task, workflows_task, readme_task)
     return {
         "full_name": repo_full_name,
         "license_id": license_id,
@@ -71,24 +69,18 @@ async def _enrich_repo_senior(repo_full_name: str, gh: "GitHubClient") -> dict[s
 def _commit_message_quality(messages: list[str]) -> int:
     if not messages:
         return 0
-    good = sum(
-        1 for m in messages if len(m.splitlines()[0]) >= 50 or _CONVENTIONAL_PREFIX.match(m)
-    )
+    good = sum(1 for m in messages if len(m.splitlines()[0]) >= 50 or _CONVENTIONAL_PREFIX.match(m))
     return round(good / len(messages) * 100)
 
 
-async def enrich_for_tier(
-    profile: Profile, base_tier: TierName, gh: "GitHubClient"
-) -> None:
+async def enrich_for_tier(profile: Profile, base_tier: TierName, gh: "GitHubClient") -> None:
     """Populate Profile depth-signal fields appropriate to the user's base tier."""
     non_fork = [r for r in profile.repos if not r.is_fork]
     top10 = non_fork[:10]
     top5 = non_fork[:5]
 
     if _at_least(base_tier, "Professional Developer"):
-        results = await asyncio.gather(
-            *(_enrich_repo_professional(r.full_name, gh) for r in top10)
-        )
+        results = await asyncio.gather(*(_enrich_repo_professional(r.full_name, gh) for r in top10))
         profile.licensed_repos = [
             str(r["full_name"]) for r in results if r["license_id"] is not None
         ]
@@ -105,9 +97,7 @@ async def enrich_for_tier(
 
     if _at_least(base_tier, "Senior Engineer"):
         profile.review_avg_comments = await gh.get_review_depth(profile.username)
-        dep_results = await asyncio.gather(
-            *(_enrich_repo_senior(r.full_name, gh) for r in top5)
-        )
+        dep_results = await asyncio.gather(*(_enrich_repo_senior(r.full_name, gh) for r in top5))
         profile.dep_files = {
             str(r["full_name"]): list(r["dep_files"])  # type: ignore[arg-type]
             for r in dep_results

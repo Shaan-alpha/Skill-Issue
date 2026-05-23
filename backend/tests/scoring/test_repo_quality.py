@@ -46,9 +46,7 @@ def test_repo_quality_license_majority_fires_when_half_or_more_licensed() -> Non
     from app.models import Profile
     from app.scoring import repo_quality
 
-    profile = Profile.model_validate_json(
-        (FIXTURES / "profile_senior.json").read_text()
-    )
+    profile = Profile.model_validate_json((FIXTURES / "profile_senior.json").read_text())
     profile.licensed_repos = [r.full_name for r in profile.repos[: len(profile.repos) // 2 + 1]]
     result = repo_quality.score(profile)
     assert any(e.signal == "license_majority" for e in result.evidence)
@@ -59,9 +57,7 @@ def test_repo_quality_license_majority_does_not_fire_when_few_licensed() -> None
     from app.models import Profile
     from app.scoring import repo_quality
 
-    profile = Profile.model_validate_json(
-        (FIXTURES / "profile_senior.json").read_text()
-    )
+    profile = Profile.model_validate_json((FIXTURES / "profile_senior.json").read_text())
     profile.licensed_repos = [profile.repos[0].full_name]
     result = repo_quality.score(profile)
     assert not any(e.signal == "license_majority" for e in result.evidence)

@@ -27,9 +27,9 @@ class TierInfo(BaseModel):
 
 
 class Badge(BaseModel):
-    slug: str           # kebab-case stable identifier
-    name: str           # display name
-    evidence: str       # one-line trigger explanation
+    slug: str  # kebab-case stable identifier
+    name: str  # display name
+    evidence: str  # one-line trigger explanation
 
 
 class Evidence(BaseModel):

@@ -38,18 +38,36 @@ def _profile_with_external(prs: int, reviews: int, orgs: int = 0) -> Profile:
 
 
 def test_oss_contributor_threshold() -> None:
-    assert any(b.slug == "oss-contributor" for b in compute_badges(_profile_with_external(10, 0, 2), _zero_breakdown()))
-    assert not any(b.slug == "oss-contributor" for b in compute_badges(_profile_with_external(9, 0, 2), _zero_breakdown()))
+    assert any(
+        b.slug == "oss-contributor"
+        for b in compute_badges(_profile_with_external(10, 0, 2), _zero_breakdown())
+    )
+    assert not any(
+        b.slug == "oss-contributor"
+        for b in compute_badges(_profile_with_external(9, 0, 2), _zero_breakdown())
+    )
 
 
 def test_pr_master_threshold() -> None:
-    assert any(b.slug == "pr-master" for b in compute_badges(_profile_with_external(50, 0, 2), _zero_breakdown()))
-    assert not any(b.slug == "pr-master" for b in compute_badges(_profile_with_external(49, 0, 2), _zero_breakdown()))
+    assert any(
+        b.slug == "pr-master"
+        for b in compute_badges(_profile_with_external(50, 0, 2), _zero_breakdown())
+    )
+    assert not any(
+        b.slug == "pr-master"
+        for b in compute_badges(_profile_with_external(49, 0, 2), _zero_breakdown())
+    )
 
 
 def test_maintainer_threshold() -> None:
-    assert any(b.slug == "maintainer" for b in compute_badges(_profile_with_external(0, 25), _zero_breakdown()))
-    assert not any(b.slug == "maintainer" for b in compute_badges(_profile_with_external(0, 24), _zero_breakdown()))
+    assert any(
+        b.slug == "maintainer"
+        for b in compute_badges(_profile_with_external(0, 25), _zero_breakdown())
+    )
+    assert not any(
+        b.slug == "maintainer"
+        for b in compute_badges(_profile_with_external(0, 24), _zero_breakdown())
+    )
 
 
 def test_pr_family_stacks() -> None:
@@ -136,7 +154,9 @@ def test_indie_hacker_blocked_by_company() -> None:
     p.blog = "https://example.com"
     p.hireable = False
     p.company = "@stripe"
-    assert not any(b.slug == "indie-hacker" for b in compute_badges(p, _breakdown_with_consistency(8)))
+    assert not any(
+        b.slug == "indie-hacker" for b in compute_badges(p, _breakdown_with_consistency(8))
+    )
 
 
 def test_indie_hacker_blocked_by_hireable_true() -> None:
@@ -144,7 +164,9 @@ def test_indie_hacker_blocked_by_hireable_true() -> None:
     p.blog = "https://example.com"
     p.hireable = True
     p.company = None
-    assert not any(b.slug == "indie-hacker" for b in compute_badges(p, _breakdown_with_consistency(8)))
+    assert not any(
+        b.slug == "indie-hacker" for b in compute_badges(p, _breakdown_with_consistency(8))
+    )
 
 
 def test_toolmaker_threshold() -> None:

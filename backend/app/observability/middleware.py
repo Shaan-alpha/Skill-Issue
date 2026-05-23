@@ -10,6 +10,7 @@ The ID is:
 Pure ASGI (no Starlette imports) so it composes cleanly under any framework
 and stays cheap on the hot path.
 """
+
 from __future__ import annotations
 
 import uuid

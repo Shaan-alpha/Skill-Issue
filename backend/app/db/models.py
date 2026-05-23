@@ -128,17 +128,13 @@ class AnalysisRun(Base):
     total_score: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     tier_name: Mapped[str] = mapped_column(Text, nullable=False)
     scores_hash: Mapped[str] = mapped_column(Text, nullable=False)
-    ingestion_started_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    ingestion_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ingestion_completed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
     ingestion_latency_ms: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    analysis: Mapped[Analysis] = relationship(
-        back_populates="runs", foreign_keys=[analysis_id]
-    )
+    analysis: Mapped[Analysis] = relationship(back_populates="runs", foreign_keys=[analysis_id])
     narratives: Mapped[list["Narrative"]] = relationship(
         back_populates="run", cascade="all, delete-orphan", passive_deletes=True
     )

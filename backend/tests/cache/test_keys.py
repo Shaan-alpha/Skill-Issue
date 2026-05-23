@@ -58,12 +58,8 @@ def test_gh_request_key_differs_for_different_urls() -> None:
 
 
 def test_gh_request_key_differs_for_post_body() -> None:
-    a = gh_request_key(
-        "POST", "https://api.github.com/graphql", None, {"query": "{ a }"}
-    )
-    b = gh_request_key(
-        "POST", "https://api.github.com/graphql", None, {"query": "{ b }"}
-    )
+    a = gh_request_key("POST", "https://api.github.com/graphql", None, {"query": "{ a }"})
+    b = gh_request_key("POST", "https://api.github.com/graphql", None, {"query": "{ b }"})
     assert a != b
 
 
@@ -98,15 +94,18 @@ def test_ttl_for_gh_endpoint_unknown_returns_none() -> None:
 
 def test_namespace_constants_are_distinct() -> None:
     """Sanity check — namespaces must not collide."""
-    assert len(
-        {
-            NAMESPACE_REPORT,
-            NAMESPACE_LOCK,
-            NAMESPACE_GH,
-            NAMESPACE_NARRATIVE,
-            NAMESPACE_BUDGET,
-        }
-    ) == 5
+    assert (
+        len(
+            {
+                NAMESPACE_REPORT,
+                NAMESPACE_LOCK,
+                NAMESPACE_GH,
+                NAMESPACE_NARRATIVE,
+                NAMESPACE_BUDGET,
+            }
+        )
+        == 5
+    )
 
 
 def test_ttl_constants_are_positive() -> None:

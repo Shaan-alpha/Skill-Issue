@@ -136,6 +136,7 @@ async def test_list_workflow_files_returns_empty_on_404() -> None:
 @respx.mock
 async def test_get_repo_readme_text_returns_decoded() -> None:
     import base64
+
     content = "# Hello\nSecond line."
     respx.get("https://api.github.com/repos/o/r/readme").mock(
         return_value=Response(
@@ -210,9 +211,7 @@ async def test_get_review_depth_returns_none_for_no_reviews() -> None:
             json={
                 "data": {
                     "user": {
-                        "contributionsCollection": {
-                            "pullRequestReviewContributions": {"nodes": []}
-                        }
+                        "contributionsCollection": {"pullRequestReviewContributions": {"nodes": []}}
                     }
                 }
             },
@@ -233,9 +232,18 @@ async def test_get_contribution_repos_filters_low_volume() -> None:
                     "user": {
                         "contributionsCollection": {
                             "commitContributionsByRepository": [
-                                {"repository": {"nameWithOwner": "alice/big"}, "contributions": {"totalCount": 50}},
-                                {"repository": {"nameWithOwner": "alice/medium"}, "contributions": {"totalCount": 15}},
-                                {"repository": {"nameWithOwner": "alice/small"}, "contributions": {"totalCount": 3}},
+                                {
+                                    "repository": {"nameWithOwner": "alice/big"},
+                                    "contributions": {"totalCount": 50},
+                                },
+                                {
+                                    "repository": {"nameWithOwner": "alice/medium"},
+                                    "contributions": {"totalCount": 15},
+                                },
+                                {
+                                    "repository": {"nameWithOwner": "alice/small"},
+                                    "contributions": {"totalCount": 3},
+                                },
                             ]
                         }
                     }

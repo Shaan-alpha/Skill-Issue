@@ -69,9 +69,7 @@ async def test_callback_happy_path_creates_user_and_session(db, monkeypatch):
     code = "abc123"
 
     respx.post("https://github.com/login/oauth/access_token").mock(
-        return_value=HTTPXResponse(
-            200, json={"access_token": "ghp_test", "token_type": "bearer"}
-        )
+        return_value=HTTPXResponse(200, json={"access_token": "ghp_test", "token_type": "bearer"})
     )
     respx.get("https://api.github.com/user").mock(
         return_value=HTTPXResponse(

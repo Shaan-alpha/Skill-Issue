@@ -51,9 +51,7 @@ def patched_live_ingest(monkeypatch, fake_cache):
     cache is returned."""
     call_count = {"n": 0}
 
-    async def fake_ingest(
-        username: str, session: Any, cache: Any
-    ) -> Report:
+    async def fake_ingest(username: str, session: Any, cache: Any) -> Report:
         call_count["n"] += 1
         return _stub_report(username)
 
@@ -61,9 +59,7 @@ def patched_live_ingest(monkeypatch, fake_cache):
 
     # Clear @lru_cache on get_cache and inject the fake.
     get_cache.cache_clear()
-    monkeypatch.setattr(
-        dep_module, "get_cache", lambda: fake_cache
-    )
+    monkeypatch.setattr(dep_module, "get_cache", lambda: fake_cache)
 
     return call_count
 

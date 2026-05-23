@@ -24,12 +24,8 @@ from app.settings import Settings
 @pytest.fixture
 def _settings_with_token(monkeypatch: pytest.MonkeyPatch) -> None:
     """Force the app to see a github_token without touching the real .env."""
-    monkeypatch.setattr(
-        app_module, "settings", Settings(github_token="ghs_test")
-    )
-    monkeypatch.setattr(
-        dep_module, "settings", Settings(github_token="ghs_test")
-    )
+    monkeypatch.setattr(app_module, "settings", Settings(github_token="ghs_test"))
+    monkeypatch.setattr(dep_module, "settings", Settings(github_token="ghs_test"))
 
 
 def _user_payload(login: str = "testuser") -> dict[str, Any]:
@@ -46,9 +42,7 @@ def _user_payload(login: str = "testuser") -> dict[str, Any]:
     }
 
 
-def _repo_payload(
-    name: str, *, language: str, days_since_push: int = 5
-) -> dict[str, Any]:
+def _repo_payload(name: str, *, language: str, days_since_push: int = 5) -> dict[str, Any]:
     pushed = (datetime.now(UTC) - timedelta(days=days_since_push)).isoformat()
     return {
         "name": name,
@@ -80,18 +74,16 @@ def _mock_github_for_testuser(
     )
     encoded = base64.b64encode(b"# Hello world").decode("ascii")
     respx.get("https://api.github.com/repos/testuser/testuser/readme").mock(
-        return_value=Response(
-            200, json={"content": encoded, "encoding": "base64"}
-        )
+        return_value=Response(200, json={"content": encoded, "encoding": "base64"})
     )
     for repo in repos:
         owner, name = str(repo["full_name"]).split("/", 1)
-        respx.get(
-            f"https://api.github.com/repos/{owner}/{name}/languages"
-        ).mock(return_value=Response(200, json={repo["language"]: 1000}))
-        respx.get(
-            url__startswith=f"https://api.github.com/repos/{owner}/{name}/commits"
-        ).mock(return_value=Response(200, json=commits_by_repo.get(name, [])))
+        respx.get(f"https://api.github.com/repos/{owner}/{name}/languages").mock(
+            return_value=Response(200, json={repo["language"]: 1000})
+        )
+        respx.get(url__startswith=f"https://api.github.com/repos/{owner}/{name}/commits").mock(
+            return_value=Response(200, json=commits_by_repo.get(name, []))
+        )
         # Root-contents enrichment: give every test repo a healthy set of signals
         # so the e2e contract test exercises the README/tests/CI/deployment paths.
         respx.get(f"https://api.github.com/repos/{owner}/{name}/contents").mock(
@@ -109,9 +101,7 @@ def _mock_github_for_testuser(
         respx.get(f"https://api.github.com/repos/{owner}/{name}/license").mock(
             return_value=Response(200, json={"license": {"spdx_id": "MIT"}})
         )
-        respx.get(
-            f"https://api.github.com/repos/{owner}/{name}/contents/.github/workflows"
-        ).mock(
+        respx.get(f"https://api.github.com/repos/{owner}/{name}/contents/.github/workflows").mock(
             return_value=Response(
                 200,
                 json=[{"name": "ci.yml", "type": "file"}],
@@ -143,9 +133,7 @@ def _mock_github_for_testuser(
                             "isDeveloperProgramMember": False,
                             "pullRequests": {"totalCount": 0, "nodes": []},
                             "contributionsCollection": {
-                                "pullRequestReviewContributions": {
-                                    "totalCount": 0
-                                }
+                                "pullRequestReviewContributions": {"totalCount": 0}
                             },
                         }
                     }
@@ -169,11 +157,7 @@ def _mock_github_for_testuser(
                 200,
                 json={
                     "data": {
-                        "user": {
-                            "contributionsCollection": {
-                                "commitContributionsByRepository": []
-                            }
-                        }
+                        "user": {"contributionsCollection": {"commitContributionsByRepository": []}}
                     }
                 },
             ),
@@ -295,12 +279,8 @@ async def test_analyze_rejects_invalid_username(
 async def test_analyze_without_token_returns_500(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        app_module, "settings", Settings(github_token=None)
-    )
-    monkeypatch.setattr(
-        dep_module, "settings", Settings(github_token=None)
-    )
+    monkeypatch.setattr(app_module, "settings", Settings(github_token=None))
+    monkeypatch.setattr(dep_module, "settings", Settings(github_token=None))
     transport = ASGITransport(app=app_module.app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.get("/analyze/anybody")
@@ -316,7 +296,10 @@ async def test_signed_in_analyze_persists_run(db, monkeypatch):
     import secrets
 
     from httpx import ASGITransport, AsyncClient
-    monkeypatch.setenv("SESSION_TOKEN_ENC_KEY", base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())
+
+    monkeypatch.setenv(
+        "SESSION_TOKEN_ENC_KEY", base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()
+    )
     monkeypatch.setenv("GITHUB_TOKEN", "project-token")
 
     from sqlalchemy import select
@@ -332,15 +315,24 @@ async def test_signed_in_analyze_persists_run(db, monkeypatch):
     await db.commit()
 
     from app import dependencies as deps
-    async def fake_ingest(username, gh): return type("P", (), {"login": username})()
+
+    async def fake_ingest(username, gh):
+        return type("P", (), {"login": username})()
+
     async def fake_run_engine(profile, gh):
         from datetime import UTC, datetime
 
         from app.models import Report, ScoreBreakdown, ScoreResult, TierInfo
+
         return Report(
             username=profile.login,
-            tier=TierInfo(name="Senior Engineer", sub_rank=50, band=[65, 80],
-                          next_tier="Staff Engineer", chip_label="50% into tier"),
+            tier=TierInfo(
+                name="Senior Engineer",
+                sub_rank=50,
+                band=[65, 80],
+                next_tier="Staff Engineer",
+                chip_label="50% into tier",
+            ),
             badges=[],
             breakdown=ScoreBreakdown(
                 repo_quality=ScoreResult(points=20, max_points=30),
@@ -353,11 +345,15 @@ async def test_signed_in_analyze_persists_run(db, monkeypatch):
             total=60,
             generated_at=datetime.now(UTC),
         )
+
     monkeypatch.setattr(deps, "ingest_profile", fake_ingest)
     monkeypatch.setattr(deps, "run_scoring_engine", fake_run_engine)
 
     from app.db.session import get_db
-    async def _o(): yield db
+
+    async def _o():
+        yield db
+
     app.dependency_overrides[get_db] = _o
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:
@@ -366,9 +362,9 @@ async def test_signed_in_analyze_persists_run(db, monkeypatch):
     app.dependency_overrides.clear()
     assert r.status_code == 200
 
-    analysis = await db.scalar(select(Analysis).where(
-        Analysis.user_id == u.id, Analysis.target_login == "octocat"
-    ))
+    analysis = await db.scalar(
+        select(Analysis).where(Analysis.user_id == u.id, Analysis.target_login == "octocat")
+    )
     assert analysis is not None
     run = await db.scalar(select(AnalysisRun).where(AnalysisRun.analysis_id == analysis.id))
     assert run is not None
@@ -388,15 +384,24 @@ async def test_anonymous_analyze_does_not_persist(db, monkeypatch):
     from app.main import app
 
     monkeypatch.setenv("GITHUB_TOKEN", "project-token")
-    async def fake_ingest(username, gh): return type("P", (), {"login": username})()
+
+    async def fake_ingest(username, gh):
+        return type("P", (), {"login": username})()
+
     async def fake_run_engine(profile, gh):
         from datetime import UTC, datetime
 
         from app.models import Report, ScoreBreakdown, ScoreResult, TierInfo
+
         return Report(
             username=profile.login,
-            tier=TierInfo(name="Hobbyist", sub_rank=10, band=[0, 30],
-                          next_tier="Student Builder", chip_label="10% into tier"),
+            tier=TierInfo(
+                name="Hobbyist",
+                sub_rank=10,
+                band=[0, 30],
+                next_tier="Student Builder",
+                chip_label="10% into tier",
+            ),
             badges=[],
             breakdown=ScoreBreakdown(
                 repo_quality=ScoreResult(points=0, max_points=30),
@@ -409,11 +414,15 @@ async def test_anonymous_analyze_does_not_persist(db, monkeypatch):
             total=0,
             generated_at=datetime.now(UTC),
         )
+
     monkeypatch.setattr(deps, "ingest_profile", fake_ingest)
     monkeypatch.setattr(deps, "run_scoring_engine", fake_run_engine)
 
     from app.db.session import get_db
-    async def _o(): yield db
+
+    async def _o():
+        yield db
+
     app.dependency_overrides[get_db] = _o
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:

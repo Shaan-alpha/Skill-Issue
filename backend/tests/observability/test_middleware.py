@@ -1,4 +1,5 @@
 """Tests for RequestIDMiddleware — header propagation + structlog binding."""
+
 from __future__ import annotations
 
 import uuid

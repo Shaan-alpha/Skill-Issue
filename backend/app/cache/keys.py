@@ -25,20 +25,20 @@ NAMESPACE_BUDGET = "budget"
 
 # --- TTLs (seconds) ---
 
-TTL_REPORT_SECONDS = 21_600        # 6 hours
-TTL_LOCK_SECONDS = 30              # singleflight lock — outlives a real ingest
-TTL_NARRATIVE_SECONDS = 86_400     # 24 hours
-TTL_BUDGET_KEY_SECONDS = 90_000    # 25 hours — outlives the UTC day rollover
+TTL_REPORT_SECONDS = 21_600  # 6 hours
+TTL_LOCK_SECONDS = 30  # singleflight lock — outlives a real ingest
+TTL_NARRATIVE_SECONDS = 86_400  # 24 hours
+TTL_BUDGET_KEY_SECONDS = 90_000  # 25 hours — outlives the UTC day rollover
 
 
 # --- Per-endpoint GitHub TTLs ---
 # Matched in order; first hit wins.
 _GH_TTL_RULES: tuple[tuple[re.Pattern[str], int], ...] = (
-    (re.compile(r"/repos/[^/]+/[^/]+/commits"), 300),       # commits — hottest
+    (re.compile(r"/repos/[^/]+/[^/]+/commits"), 300),  # commits — hottest
     (re.compile(r"/repos/[^/]+/[^/]+/languages"), 3600),
     (re.compile(r"/repos/[^/]+/[^/]+/contents"), 1800),
-    (re.compile(r"/users/[^/]+/repos$"), 900),              # repo list
-    (re.compile(r"/users/[^/]+$"), 3600),                   # user profile
+    (re.compile(r"/users/[^/]+/repos$"), 900),  # repo list
+    (re.compile(r"/users/[^/]+$"), 3600),  # user profile
     (re.compile(r"/graphql$"), 900),
 )
 

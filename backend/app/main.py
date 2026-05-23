@@ -55,9 +55,7 @@ async def _http_exc_handler(_request: Request, exc: StarletteHTTPException):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        o.strip() for o in settings.cors_allow_origins.split(",") if o.strip()
-    ],
+    allow_origins=[o.strip() for o in settings.cors_allow_origins.split(",") if o.strip()],
     allow_origin_regex=settings.cors_allow_origin_regex,
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["*"],

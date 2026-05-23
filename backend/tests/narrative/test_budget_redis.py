@@ -32,9 +32,7 @@ async def test_in_process_fallback_without_redis() -> None:
 
 
 @pytest.mark.asyncio
-async def test_redis_failure_falls_through_to_allow(
-    fake_cache: RedisCache, fake_redis
-) -> None:
+async def test_redis_failure_falls_through_to_allow(fake_cache: RedisCache, fake_redis) -> None:
     """Even with a Redis failure on the INCR, allow the call (fail-open:
     better to over-spend than block users)."""
     b = DailyBudget(limit=2, redis=fake_cache)

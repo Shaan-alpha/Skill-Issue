@@ -12,9 +12,12 @@ from app.persistence.analyses import record_run, upsert_analysis
 
 
 async def _setup_signed_in(db, monkeypatch) -> str:
-    monkeypatch.setenv("SESSION_TOKEN_ENC_KEY", base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())
+    monkeypatch.setenv(
+        "SESSION_TOKEN_ENC_KEY", base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()
+    )
     u = User(github_id=1, github_login="alice", name="A", avatar_url=None)
-    db.add(u); await db.flush()
+    db.add(u)
+    await db.flush()
     sid = await create_session(db, user_id=u.id, github_access_token="t", ttl_days=30)
     await db.commit()
     return sid
@@ -27,7 +30,10 @@ async def _client():
 async def test_me_returns_user_and_count(db, monkeypatch):
     sid = await _setup_signed_in(db, monkeypatch)
     from app.db.session import get_db
-    async def _o(): yield db
+
+    async def _o():
+        yield db
+
     app.dependency_overrides[get_db] = _o
 
     async with await _client() as ac:
@@ -52,14 +58,24 @@ async def test_me_analyses_paginated(db, monkeypatch):
     user = await db.scalar(select(User).where(User.github_login == "alice"))
     for i, target in enumerate(("a", "b", "c")):
         a = await upsert_analysis(db, user_id=user.id, target_login=target)
-        await record_run(db, analysis_id=a.id, report_json={}, total_score=10 * i,
-                         tier_name="X", scores_hash="h",
-                         started_at=datetime.now(UTC), completed_at=datetime.now(UTC),
-                         latency_ms=1)
+        await record_run(
+            db,
+            analysis_id=a.id,
+            report_json={},
+            total_score=10 * i,
+            tier_name="X",
+            scores_hash="h",
+            started_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC),
+            latency_ms=1,
+        )
     await db.commit()
 
     from app.db.session import get_db
-    async def _o(): yield db
+
+    async def _o():
+        yield db
+
     app.dependency_overrides[get_db] = _o
 
     async with await _client() as ac:

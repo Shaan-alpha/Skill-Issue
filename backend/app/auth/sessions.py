@@ -43,13 +43,9 @@ async def create_session(
     return sid
 
 
-async def get_session_with_token(
-    db: AsyncSession, session_id: str
-) -> tuple[User, str] | None:
+async def get_session_with_token(db: AsyncSession, session_id: str) -> tuple[User, str] | None:
     """Resolve a session_id to (User, decrypted_token) or None when expired/missing."""
-    row = await db.scalar(
-        select(Session).where(Session.id == session_id)
-    )
+    row = await db.scalar(select(Session).where(Session.id == session_id))
     if row is None:
         return None
     if row.expires_at <= datetime.now(UTC):
@@ -64,9 +60,7 @@ async def get_session_with_token(
 
 async def touch_session(db: AsyncSession, session_id: str) -> None:
     await db.execute(
-        update(Session)
-        .where(Session.id == session_id)
-        .values(last_used_at=datetime.now(UTC))
+        update(Session).where(Session.id == session_id).values(last_used_at=datetime.now(UTC))
     )
 
 

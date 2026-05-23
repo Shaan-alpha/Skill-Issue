@@ -1,4 +1,5 @@
 """Tests for structlog config + request_id contextvar propagation."""
+
 from __future__ import annotations
 
 import json

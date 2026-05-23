@@ -32,9 +32,7 @@ async def upsert_analysis(
     target_github_id: int | None = None,
 ) -> Analysis:
     a = await db.scalar(
-        select(Analysis).where(
-            Analysis.user_id == user_id, Analysis.target_login == target_login
-        )
+        select(Analysis).where(Analysis.user_id == user_id, Analysis.target_login == target_login)
     )
     if a is None:
         a = Analysis(
@@ -94,9 +92,7 @@ async def _owned_analysis(db: AsyncSession, analysis_id: int, owner_id: int) -> 
     return a
 
 
-async def set_share_slug(
-    db: AsyncSession, *, analysis_id: int, owner_id: int
-) -> str:
+async def set_share_slug(db: AsyncSession, *, analysis_id: int, owner_id: int) -> str:
     a = await _owned_analysis(db, analysis_id, owner_id)
     slug = _new_slug()
     a.is_public = True
@@ -106,9 +102,7 @@ async def set_share_slug(
     return slug
 
 
-async def revoke_share_slug(
-    db: AsyncSession, *, analysis_id: int, owner_id: int
-) -> None:
+async def revoke_share_slug(db: AsyncSession, *, analysis_id: int, owner_id: int) -> None:
     a = await _owned_analysis(db, analysis_id, owner_id)
     a.is_public = False
     a.share_slug = None

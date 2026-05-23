@@ -73,9 +73,7 @@ async def singleflight(
         await asyncio.sleep(poll_interval_seconds)
         waited += poll_interval_seconds
         # Try the lock once more in case the holder finished.
-        if await cache.set_nx(
-            NAMESPACE_LOCK, lock_key, holder_id, ttl_seconds=ttl_seconds
-        ):
+        if await cache.set_nx(NAMESPACE_LOCK, lock_key, holder_id, ttl_seconds=ttl_seconds):
             try:
                 yield True
             finally:

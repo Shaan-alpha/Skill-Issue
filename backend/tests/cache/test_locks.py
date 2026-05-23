@@ -95,9 +95,7 @@ async def test_lock_release_makes_next_caller_acquire(fake_cache: RedisCache) ->
 
 
 @pytest.mark.asyncio
-async def test_caller_proceeds_when_redis_fails(
-    fake_cache: RedisCache, fake_redis
-) -> None:
+async def test_caller_proceeds_when_redis_fails(fake_cache: RedisCache, fake_redis) -> None:
     """If Redis is unreachable, the lock acquisition silently falls through
     (got=False signals 'no lock held'); caller proceeds with live work."""
     fake_redis.fail_next = 100  # every redis call raises for this test

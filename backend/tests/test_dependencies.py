@@ -1,4 +1,5 @@
 """Verifies `get_report_for_user` consults the optional session for the GitHub token."""
+
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -14,8 +15,12 @@ async def test_uses_session_token_when_session_present(monkeypatch):
     class FakeClient:
         def __init__(self, token: str, *, cache=None, max_retries: int = 3):
             captured["token"] = token
-        async def __aenter__(self): return self
-        async def __aexit__(self, *_): return None
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
 
     async def fake_ingest(username, gh):
         return MagicMock(login=username)
@@ -42,8 +47,12 @@ async def test_falls_back_to_project_token_when_no_session(monkeypatch):
     class FakeClient:
         def __init__(self, token: str, *, cache=None, max_retries: int = 3):
             captured["token"] = token
-        async def __aenter__(self): return self
-        async def __aexit__(self, *_): return None
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
 
     monkeypatch.setenv("GITHUB_TOKEN", "project-token")
     # Reload settings so it sees the env var.

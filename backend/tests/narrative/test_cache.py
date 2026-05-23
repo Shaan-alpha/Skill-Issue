@@ -21,12 +21,7 @@ def _report(total: int = 65, badge_slugs: list[str] | None = None) -> Report:
     )
     # Force breakdown total to match `total`
     breakdown.repo_quality = ScoreResult(
-        points=total
-        - sum(
-            v.points
-            for k, v in breakdown.__dict__.items()
-            if k != "repo_quality"
-        ),
+        points=total - sum(v.points for k, v in breakdown.__dict__.items() if k != "repo_quality"),
         max_points=30,
     )
     return Report(

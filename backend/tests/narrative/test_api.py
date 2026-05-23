@@ -59,12 +59,8 @@ def _mock_get_service() -> NarrativeService:
 
 @pytest.fixture
 def _override_deps() -> None:
-    app_module.app.dependency_overrides[
-        dep_module.get_report_for_user
-    ] = _mock_get_report
-    app_module.app.dependency_overrides[
-        dep_module.get_narrative_service
-    ] = _mock_get_service
+    app_module.app.dependency_overrides[dep_module.get_report_for_user] = _mock_get_report
+    app_module.app.dependency_overrides[dep_module.get_narrative_service] = _mock_get_service
     yield
     app_module.app.dependency_overrides.clear()
 
@@ -123,7 +119,9 @@ async def test_signed_in_narrative_persists(db, monkeypatch):
     from httpx import ASGITransport, AsyncClient
     from sqlalchemy import select
 
-    monkeypatch.setenv("SESSION_TOKEN_ENC_KEY", base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())
+    monkeypatch.setenv(
+        "SESSION_TOKEN_ENC_KEY", base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()
+    )
     monkeypatch.setenv("GITHUB_TOKEN", "p")
 
     from app.auth.sessions import create_session
@@ -143,10 +141,16 @@ async def test_signed_in_narrative_persists(db, monkeypatch):
         from datetime import UTC, datetime
 
         from app.models import Report, ScoreBreakdown, ScoreResult, TierInfo
+
         return Report(
             username=profile.login,
-            tier=TierInfo(name="Senior Engineer", sub_rank=50, band=[65, 80],
-                          next_tier="Staff Engineer", chip_label="50% into tier"),
+            tier=TierInfo(
+                name="Senior Engineer",
+                sub_rank=50,
+                band=[65, 80],
+                next_tier="Staff Engineer",
+                chip_label="50% into tier",
+            ),
             badges=[],
             breakdown=ScoreBreakdown(
                 repo_quality=ScoreResult(points=25, max_points=30),
@@ -159,19 +163,26 @@ async def test_signed_in_narrative_persists(db, monkeypatch):
             total=78,
             generated_at=datetime.now(UTC),
         )
+
     async def fake_ingest(uname, gh):
         return type("P", (), {"login": uname})()
+
     async def fake_run_engine(profile, gh):
         return fake_score(profile)
+
     async def fake_stream(self, mode, report):
         for tok in ("Hello ", "world."):
             yield tok
+
     monkeypatch.setattr(deps, "ingest_profile", fake_ingest)
     monkeypatch.setattr(deps, "run_scoring_engine", fake_run_engine)
     monkeypatch.setattr(nsvc.NarrativeService, "stream_narrative", fake_stream)
 
     from app.db.session import get_db
-    async def _o(): yield db
+
+    async def _o():
+        yield db
+
     app.dependency_overrides[get_db] = _o
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as ac:

@@ -27,11 +27,7 @@ def _public_share_url(slug: str) -> str:
     includes the `/_/backend` service prefix and ended up pointing the share
     URL at the backend's raw JSON endpoint instead of the frontend page.
     """
-    origins = [
-        o.strip()
-        for o in settings.cors_allow_origins.split(",")
-        if o.strip()
-    ]
+    origins = [o.strip() for o in settings.cors_allow_origins.split(",") if o.strip()]
     base = origins[0] if origins else ""
     return f"{base}/share/{slug}"
 

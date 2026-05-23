@@ -7,6 +7,7 @@ The `request_id` field is bound by RequestIDMiddleware (see `middleware.py`)
 and propagates into every structlog call within the request scope via
 `structlog.contextvars`.
 """
+
 from __future__ import annotations
 
 import logging

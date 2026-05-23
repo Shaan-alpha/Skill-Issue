@@ -119,9 +119,7 @@ async def get_report_for_user(
                     ttl_seconds=settings.cache_report_ttl_seconds,
                 )
             except Exception:
-                logger.warning(
-                    "report cache set failed for %s", cache_key, exc_info=True
-                )
+                logger.warning("report cache set failed for %s", cache_key, exc_info=True)
 
             return report
 
@@ -139,9 +137,7 @@ async def _live_ingest(
     ) or settings.github_token
 
     if not access_token:
-        raise HTTPException(
-            status_code=500, detail="GITHUB_TOKEN not configured on backend"
-        )
+        raise HTTPException(status_code=500, detail="GITHUB_TOKEN not configured on backend")
 
     async with GitHubClient(token=access_token, cache=cache) as gh:
         try:

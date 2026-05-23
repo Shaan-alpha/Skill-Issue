@@ -75,13 +75,13 @@ def _mock_github_for_testuser() -> None:
     )
     for repo in repos:
         owner, name = str(repo["full_name"]).split("/", 1)
-        respx.get(
-            f"https://api.github.com/repos/{owner}/{name}/languages"
-        ).mock(return_value=Response(200, json={repo["language"]: 1000}))
+        respx.get(f"https://api.github.com/repos/{owner}/{name}/languages").mock(
+            return_value=Response(200, json={repo["language"]: 1000})
+        )
         commits = [_commit_payload(days_ago=i) for i in range(5)]
-        respx.get(
-            url__startswith=f"https://api.github.com/repos/{owner}/{name}/commits"
-        ).mock(return_value=Response(200, json=commits))
+        respx.get(url__startswith=f"https://api.github.com/repos/{owner}/{name}/commits").mock(
+            return_value=Response(200, json=commits)
+        )
         respx.get(f"https://api.github.com/repos/{owner}/{name}/contents").mock(
             return_value=Response(
                 200,
@@ -94,9 +94,9 @@ def _mock_github_for_testuser() -> None:
         respx.get(f"https://api.github.com/repos/{owner}/{name}/license").mock(
             return_value=Response(200, json={"license": {"spdx_id": "MIT"}})
         )
-        respx.get(
-            f"https://api.github.com/repos/{owner}/{name}/contents/.github/workflows"
-        ).mock(return_value=Response(200, json=[]))
+        respx.get(f"https://api.github.com/repos/{owner}/{name}/contents/.github/workflows").mock(
+            return_value=Response(200, json=[])
+        )
         respx.get(f"https://api.github.com/repos/{owner}/{name}/readme").mock(
             return_value=Response(
                 200,
@@ -142,11 +142,7 @@ def _mock_github_for_testuser() -> None:
                 200,
                 json={
                     "data": {
-                        "user": {
-                            "contributionsCollection": {
-                                "commitContributionsByRepository": []
-                            }
-                        }
+                        "user": {"contributionsCollection": {"commitContributionsByRepository": []}}
                     }
                 },
             ),

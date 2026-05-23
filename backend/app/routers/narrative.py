@@ -47,9 +47,7 @@ async def get_narrative(
             detail="Invalid narrative mode; must be 'roast' or 'mentor'",
         )
 
-    typed_mode: Literal["roast", "mentor"] = (
-        "roast" if mode == "roast" else "mentor"
-    )
+    typed_mode: Literal["roast", "mentor"] = "roast" if mode == "roast" else "mentor"
 
     async def event_generator() -> AsyncIterator[str]:
         acc: list[str] = []
@@ -83,9 +81,7 @@ async def get_narrative(
                     scores_hash=shash,
                     started_at=started_at,
                     completed_at=completed_at,
-                    latency_ms=int(
-                        (completed_at - started_at).total_seconds() * 1000
-                    ),
+                    latency_ms=int((completed_at - started_at).total_seconds() * 1000),
                 )
             await save_narrative(
                 db,

@@ -18,9 +18,17 @@ def test_required_v050_fields_loaded(monkeypatch):
 
 
 def test_session_ttl_overridable(monkeypatch):
-    for k in ("DATABASE_URL", "DATABASE_DIRECT_URL", "GITHUB_OAUTH_CLIENT_ID",
-              "GITHUB_OAUTH_CLIENT_SECRET", "OAUTH_REDIRECT_URL", "SESSION_TOKEN_ENC_KEY"):
-        monkeypatch.setenv(k, "placeholder" if "URL" not in k else "postgresql+asyncpg://u:p@h:6543/d")
+    for k in (
+        "DATABASE_URL",
+        "DATABASE_DIRECT_URL",
+        "GITHUB_OAUTH_CLIENT_ID",
+        "GITHUB_OAUTH_CLIENT_SECRET",
+        "OAUTH_REDIRECT_URL",
+        "SESSION_TOKEN_ENC_KEY",
+    ):
+        monkeypatch.setenv(
+            k, "placeholder" if "URL" not in k else "postgresql+asyncpg://u:p@h:6543/d"
+        )
     monkeypatch.setenv("SESSION_TOKEN_ENC_KEY", "A" * 44)
     monkeypatch.setenv("SESSION_TTL_DAYS", "7")
 

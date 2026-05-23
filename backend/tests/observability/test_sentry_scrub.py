@@ -1,4 +1,5 @@
 """Tests for the Sentry before_send PII scrub hook."""
+
 from __future__ import annotations
 
 import copy
@@ -53,7 +54,14 @@ def test_scrub_removes_known_pii_fields_from_extra():
     }
     scrubbed = scrub_event(copy.deepcopy(event), {})
     extra = scrubbed["extra"]
-    for k in ("access_token", "access_token_ct", "oauth_state", "oauth_code", "session_id", "email"):
+    for k in (
+        "access_token",
+        "access_token_ct",
+        "oauth_state",
+        "oauth_code",
+        "session_id",
+        "email",
+    ):
         assert k not in extra, f"{k} was not scrubbed"
     assert extra["innocent_field"] == "kept"
 

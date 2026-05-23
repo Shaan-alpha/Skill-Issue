@@ -31,9 +31,7 @@ class DailyBudget:
         return now.strftime("%Y-%m-%d")
 
     def _resets_at(self, now: datetime) -> str:
-        tomorrow = now.replace(
-            hour=0, minute=0, second=0, microsecond=0
-        ) + timedelta(days=1)
+        tomorrow = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
         return tomorrow.isoformat()
 
     # --- Sync API (in-process, preserved for backwards compat) ---
@@ -68,9 +66,7 @@ class DailyBudget:
         # First INCR of the day — set the expiry so the key cleans itself up
         # after the rollover.
         if new_count == 1:
-            await self._redis.expire(
-                NAMESPACE_BUDGET, day_key, TTL_BUDGET_KEY_SECONDS
-            )
+            await self._redis.expire(NAMESPACE_BUDGET, day_key, TTL_BUDGET_KEY_SECONDS)
 
         remaining = max(self._limit - new_count, 0)
         if new_count > self._limit:

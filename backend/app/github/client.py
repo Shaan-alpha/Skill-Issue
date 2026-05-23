@@ -85,9 +85,7 @@ class GitHubClient:
                 cached = None
                 logger.warning("cache get raised in GitHubClient", exc_info=True)
             if cached is not None:
-                return _CachedResponse(
-                    status_code=cached["status"], json_body=cached["body"]
-                )
+                return _CachedResponse(status_code=cached["status"], json_body=cached["body"])
 
         # Live request with existing retry/rate-limit logic.
         resp: httpx.Response | None = None
@@ -231,9 +229,7 @@ class GitHubClient:
             .get("pullRequestReviewContributions", {})
             .get("nodes", [])
         )
-        bodies = [
-            str(n.get("pullRequestReview", {}).get("bodyText") or "") for n in nodes
-        ]
+        bodies = [str(n.get("pullRequestReview", {}).get("bodyText") or "") for n in nodes]
         bodies = [b for b in bodies if b]
         if not bodies:
             return None
@@ -259,7 +255,9 @@ class GitHubClient:
             .get("contributionsCollection", {})
             .get("commitContributionsByRepository", [])
         )
-        return sum(1 for r in repos if r.get("contributions", {}).get("totalCount", 0) >= min_commits)
+        return sum(
+            1 for r in repos if r.get("contributions", {}).get("totalCount", 0) >= min_commits
+        )
 
     async def get_profile_readme(self, username: str) -> str | None:
         resp = await self._request("GET", f"{API_BASE}/repos/{username}/{username}/readme")

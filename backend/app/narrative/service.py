@@ -35,18 +35,12 @@ class NarrativeService:
         self._budget = budget
         self._llm = llm
 
-    async def stream_narrative(
-        self, mode: Mode, report: Report
-    ) -> AsyncIterator[str]:
+    async def stream_narrative(self, mode: Mode, report: Report) -> AsyncIterator[str]:
         # 1. Check cache
-        cache_key = self._cache.key(
-            report.username, self._cache.scores_hash(report), mode
-        )
+        cache_key = self._cache.key(report.username, self._cache.scores_hash(report), mode)
         cached = await self._cache.aget(cache_key)
         if cached is not None:
-            logger.info(
-                f"Narrative cache hit for {report.username} ({mode}, score={report.total})"
-            )
+            logger.info(f"Narrative cache hit for {report.username} ({mode}, score={report.total})")
             yield cached
             return
 

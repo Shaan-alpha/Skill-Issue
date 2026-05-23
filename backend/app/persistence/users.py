@@ -11,9 +11,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
-async def upsert_user_from_github_payload(
-    db: AsyncSession, payload: dict[str, Any]
-) -> User:
+async def upsert_user_from_github_payload(db: AsyncSession, payload: dict[str, Any]) -> User:
     """Insert or update a User row keyed by github_id. Returns the persisted row."""
     github_id = int(payload["id"])
     login = str(payload["login"])

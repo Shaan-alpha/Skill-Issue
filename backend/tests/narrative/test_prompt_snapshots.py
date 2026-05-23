@@ -26,9 +26,7 @@ def _stable_report() -> Report:
             prev_tier="Professional Developer",
             pts_above_prev=13,
         ),
-        badges=[
-            Badge(slug="oss-contributor", name="OSS", evidence="Merged PRs")
-        ],
+        badges=[Badge(slug="oss-contributor", name="OSS", evidence="Merged PRs")],
         breakdown=b,
         total=78,
         generated_at=datetime(2026, 5, 16, 12, 0, 0, tzinfo=UTC),
@@ -40,10 +38,7 @@ def test_roast_prompt_stable_snapshot() -> None:
     dumped = json.dumps(msgs, sort_keys=True, indent=2)
     digest = hashlib.sha256(dumped.encode()).hexdigest()
 
-    assert (
-        digest
-        == "4ee41afec0afeabb48cb9f0ae8418a42d3aa00b9be9296da3dbfdae71a7bc0d3"
-    )
+    assert digest == "4ee41afec0afeabb48cb9f0ae8418a42d3aa00b9be9296da3dbfdae71a7bc0d3"
 
 
 def test_mentor_prompt_stable_snapshot() -> None:
@@ -51,7 +46,4 @@ def test_mentor_prompt_stable_snapshot() -> None:
     dumped = json.dumps(msgs, sort_keys=True, indent=2)
     digest = hashlib.sha256(dumped.encode()).hexdigest()
 
-    assert (
-        digest
-        == "d69a9f846bcd520c19f10f91d407e1ac3edf5f7796f2c92edab2f1eb0b56eeaa"
-    )
+    assert digest == "d69a9f846bcd520c19f10f91d407e1ac3edf5f7796f2c92edab2f1eb0b56eeaa"

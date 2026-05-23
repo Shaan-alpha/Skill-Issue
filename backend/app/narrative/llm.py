@@ -11,9 +11,7 @@ class NarrativeLLM:
     swap providers without rewriting the streaming pipeline.
     """
 
-    def __init__(
-        self, *, api_key: str, model: str, base_url: str | None = None
-    ) -> None:
+    def __init__(self, *, api_key: str, model: str, base_url: str | None = None) -> None:
         self._client = AsyncOpenAI(api_key=api_key, base_url=base_url)
         self._model = model
 
