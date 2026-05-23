@@ -51,5 +51,13 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_format: Literal["json", "console"] = "json"  # "json" in prod, "console" in dev
 
+    # v0.8.1 — cron auth
+    # Bearer token verified by app.routers.cron.require_cron_auth.
+    # Vercel Cron injects "Authorization: Bearer ${CRON_SECRET}" automatically
+    # when this env var is set on the project. When unset, the cron route
+    # responds 503 so misconfig is visible at the first fire instead of
+    # silently no-op'ing.
+    cron_secret: str | None = None
+
 
 settings = Settings()
