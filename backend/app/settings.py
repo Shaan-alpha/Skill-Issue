@@ -59,5 +59,10 @@ class Settings(BaseSettings):
     # silently no-op'ing.
     cron_secret: str | None = None
 
+    # v0.8.2 — force-refresh rate limit
+    # Per-user cap on force-refresh actions per UTC hour. Reset on bucket
+    # rollover. Override via env FORCE_REFRESH_PER_USER_PER_HOUR.
+    force_refresh_per_user_per_hour: int = 10
+
 
 settings = Settings()
