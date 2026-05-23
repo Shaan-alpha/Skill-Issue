@@ -32,7 +32,7 @@
 | **v0.7.5** | Hotfix — Roast/Mentor toggle symmetric on mobile (flex-1 split 50/50) | ✅ shipped |
 | **v0.8.0** | Polish + observability — Sentry (FE+BE), PostHog (events + web-vitals), structured logging, axe a11y pass, on-voice 404/500, error-budget doc | ✅ shipped |
 | **v0.8.1** | Cron daily re-ingestion of saved analyses (paired with Sentry so failures aren't silent) | ✅ shipped |
-| **v0.8.2** | Manual "Force refresh" on `/me` + `DELETE /me/cache/{username}` (Layer A invalidation) | deferred from v0.8.0 |
+| **v0.8.2** | Manual "Force refresh" on `/me` + `POST /me/refresh/{username}` (synchronous re-ingest, 10/hr per-user cap) | ✅ shipped |
 | **v0.8.3** | On-demand `revalidateTag` for `/share/[slug]` ISR (closes v0.7.1's deferred share-page caching) | deferred from v0.7.1 |
 | **v0.8.4** | `vercel.json` → `vercel.ts` migration (Vercel 2026-02-27 knowledge update) | deferred from pre-v0.7.1 |
 | **v0.9.0** | Beta hardening — security review, abuse mitigation, load test, legal | pending |
@@ -363,15 +363,29 @@ Each deferred item is independent and earns its own patch release, matching the 
 
 ---
 
-## v0.8.2 — Manual "Force refresh" (deferred from v0.8.0)
+## v0.8.2 — Manual "Force refresh" (shipped 2026-05-23)
 
-**Goal:** Signed-in users can invalidate the Layer A Report cache for any of their saved analyses from `/me`.
+**Goal:** Signed-in users can synchronously re-ingest any of their saved analyses from `/me` — no waiting for tonight's cron.
 
-**Slice scope:**
-- Backend: `DELETE /me/cache/{username}` route — auth-required, deletes the `report:` key from Upstash. Logs the action.
-- Frontend: small "Force refresh" affordance on each `/me` grid item; tracked via PostHog `force_refresh_clicked`.
+**Design spec:** [`docs/superpowers/specs/2026-05-22-v0.8.2-force-refresh-design.md`](./docs/superpowers/specs/2026-05-22-v0.8.2-force-refresh-design.md).
 
-**Exit criteria:** TBD when the slice begins.
+**Slice scope (locked + shipped 2026-05-23):**
+- Backend `POST /me/refresh/{username}` — auth-required, ownership-strict (must be in caller's `analyses`), 10/hour per-user rate limit via Upstash `INCR` + `EXPIRE`. Invalidates Layer A `report:<lowercase>` key, runs the existing `get_report_for_user` pipeline cold, writes a new `analysis_runs` row, returns the fresh Report inline.
+- Frontend `<RefreshButton>` client component embedded in `<HistoryCard>` — `idle → pending → success | error | rate_limited` state machine; `e.preventDefault()` stops nested-Link navigation. PostHog `force_refresh_clicked` event tracks every settled state.
+- Generic `app/cache/rate_limit.py::try_increment_counter` reusable for v0.9.0's other limits.
+
+**Exit criteria:**
+- [x] `POST /me/refresh/{username}` without cookie → 401.
+- [x] Signed-in user requests target they never saved → 404 `no_saved_analysis`.
+- [x] 11th call in the same UTC hour returns 429 with populated `Retry-After` header.
+- [x] Happy path returns the Report JSON and writes a new `analysis_runs` row.
+- [x] Cache delete failure doesn't break the route (fail-open verified by FakeRedis `fail_next` injection).
+- [x] `/me` grid renders a Refresh button per row; click cycles through pending → success.
+- [x] PostHog `force_refresh_clicked` event fires with `{target_login, duration_ms, success}`.
+- [x] `docs/OBSERVABILITY.md` documents the new event.
+- [x] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version bumped to `0.8.2`.
+
+**Sub-plan:** [`docs/superpowers/plans/2026-05-22-v0.8.2-force-refresh.md`](./docs/superpowers/plans/2026-05-22-v0.8.2-force-refresh.md) — 10 tasks, all shipped.
 
 ---
 

@@ -96,6 +96,7 @@ we capture".
 | `share_card_copied` | `method: "url" \| "png_clipboard" \| "png_download"` | User clicks any Copy/Download action on the card preview |
 | `mode_toggled` | `from`, `to` | User switches Roast ↔ Mentor |
 | `sign_in_clicked` | _(none)_ | User clicks the sign-in pill in SiteHeader |
+| `force_refresh_clicked` | `target_login`, `duration_ms`, `success` | User clicked Refresh on a `/me` row (v0.8.2) |
 | `$pageview` | _(auto)_ | Every route navigation (PostHog auto-captures) |
 | `$web_vitals` | LCP / CLS / INP / FCP / TTFB | Per-page web vitals (PostHog auto-captures) |
 

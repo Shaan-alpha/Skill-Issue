@@ -8,6 +8,30 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
+## [0.8.2] — 2026-05-23
+
+### Added
+- **Manual Force-Refresh button** on every `/me` grid row. Click → `POST /me/refresh/{username}` → synchronous re-ingest via the existing `get_report_for_user` pipeline (cold call, ~5-10s) → new `analysis_runs` row → Layer A Redis cache write-through → fresh Report rendered inline. Complements v0.8.1's nightly cron for the impatient case.
+- **`POST /me/refresh/{username}`** route — auth-required, ownership-strict (must be in the caller's `analyses`), rate-limited at 10 per UTC-hour per user. 429 returns `{detail: "rate_limited", retry_after_seconds: N}` + `Retry-After` header. Body returned via `JSONResponse` so FastAPI doesn't wrap it.
+- **`app/cache/rate_limit.py`** — generic `try_increment_counter(cache, name, user_id, limit, hour_bucket)` returning `RateLimitResult(allowed, current, limit)`. INCR + EXPIRE-on-first-write so keys self-clean after the bucket rolls over. Reusable for v0.9.0's other limits.
+- **`NAMESPACE_RATE_LIMIT`** + `rate_limit_key(name, user_id, hour_bucket)` in `app/cache/keys.py`. Keys take the shape `si:v1:rate_limit:force_refresh:<user_id>:<YYYY-MM-DD-HH>`.
+- **`get_user_analysis_by_target(db, user_id, target_login)`** ownership helper in `app/persistence/analyses.py`. Case-insensitive match (mirrors v0.5.0's case-mismatch fix).
+- **`<RefreshButton>`** client component — `idle → pending → success | error | rate_limited` state machine, `RefreshCw` spinner during pending, `e.preventDefault()` + `e.stopPropagation()` stop nested-Link navigation. Embedded inside the existing server-rendered `<HistoryCard>` so the row's static content stays SEO-friendly.
+- **PostHog `force_refresh_clicked` event** — `target_login`, `duration_ms`, `success` properties. Fires on every settled state (success / error / rate-limited).
+- **13 new tests** — 4 backend rate-limit (`tests/cache/test_rate_limit.py`), 4 backend keys (`tests/cache/test_keys_rate_limit.py`), 5 backend refresh router (`tests/routers/test_refresh.py`), 3 frontend `<RefreshButton>`, 1 events surface row. Backend suite grows 231 → 240 non-DB-fixture pass; frontend 34 → 37 vitest.
+
+### Changed
+- `Settings.force_refresh_per_user_per_hour: int = 10` — env-overridable. Default conservative enough that no production override is expected at the 100-users/day operating ceiling.
+- Backend `pyproject.toml` + `app/settings.py::VERSION` + `frontend/package.json` synced at `0.8.2`. Frontend results-view footer literal `v0.8.1` → `v0.8.2`.
+
+### Notes
+- No new env vars, no new accounts. Reuses Upstash (v0.7.0), session auth (v0.5.0), `get_report_for_user` (v0.7.0), `record_run` (v0.5.0), PostHog (v0.8.0).
+- The rate limit is insurance against malicious spam (a single user could otherwise burn ~3000 GH calls/min through the existing 5000/hr ceiling). At the project's 100-users/day operating ceiling, normal use never hits the cap.
+- Layer A's case-insensitive `target_login` keying means user X's force-refresh of `octocat` warms the cache for user Y's saved `octocat` too — N:1 GH-call savings come for free.
+- `trackForceRefreshClicked` was folded into the same commit as `<RefreshButton>` (Task 7) because the component imports it dynamically — splitting them would have left a dangling import between commits.
+
+---
+
 ## [0.8.1] — 2026-05-22
 
 ### Added
