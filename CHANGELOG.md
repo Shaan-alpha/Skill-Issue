@@ -8,20 +8,30 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
-## [Unreleased]
+## [0.8.1] — 2026-05-22
 
-> Post-v0.8.0 housekeeping. Will roll into the `[0.8.1]` section when that slice ships, following the same convention used for pre-v0.7.1 / pre-v0.5.0 audits.
+### Added
+- **Nightly cron re-ingestion** for every saved analysis. `POST /cron/refresh-saved-analyses` fires once daily at 03:00 UTC, refreshes up to 25 oldest-stale analyses per fire (cap by 24h staleness window + 240s wall-clock deadline), and write-throughs the v0.7.0 Layer A Redis cache so concurrent reads benefit. Each refresh resolves a GitHub token via the owner's most-recently-used unexpired session (decrypted from AES-GCM at-rest); falls back to `GITHUB_TOKEN` when no usable session exists.
+- **`/cron/refresh-saved-analyses` bearer-authed route** in a new `app/routers/cron.py`. Constant-time bearer compare via `hmac.compare_digest`. Returns 503 when `CRON_SECRET` is unset on the backend (prod misconfig visible at first fire), 401 for missing/wrong bearer.
+- **`CRON_SECRET` env var** documented in `docs/DEPLOY.md`. Vercel Cron injects `Authorization: Bearer ${CRON_SECRET}` automatically.
+- **`app/cron/` package** — `RefreshOutcome` + `RefreshChunkSummary` dataclasses, `run_refresh_chunk` orchestrator with deadline guard + per-row exception isolation + rate-limit-cliff stop, `resolve_token_for_analysis` (`USER_SESSION` / `APP_FALLBACK` enum).
+- **`app/persistence/refresh.py`** with `iter_stale_analyses(db, *, limit, stale_after_hours=24)` — LEFT JOIN onto `analysis_runs` via `latest_run_id`, oldest-first, `nulls_first` so analyses with no run sort before stale-but-run ones.
+- **Cron event taxonomy** in `docs/OBSERVABILITY.md` — five named events (`cron.refresh_started`, `_succeeded`, `_skipped`, `_rate_limited`, `_chunk_complete`) with severity + Sentry treatment per row.
+- **13 new backend tests** across `tests/cron/test_tokens.py` (4), `tests/cron/test_refresh.py` (5), `tests/cron/test_cache_writethrough.py` (1), `tests/persistence/test_refresh.py` (3), `tests/routers/test_cron.py` (4). Suite grows from 221 to 231 non-DB-fixture pass.
 
 ### Security
 - **`happy-dom` `^15` → `^20`** to clear GHSA-37j7-fg3j-429f (VM Context Escape can lead to Remote Code Execution). Dev-only test environment — we never feed untrusted HTML through it, so real blast radius is nil — but AGENTS.md rule 1 ("modern tools always") + the critical severity made the bump cheap. 34/34 vitest still passes. Remaining `npm audit` is two moderate advisories inside Next 16.2.6's transitive `postcss`, cleared when Next 16.3 ships.
 
 ### Changed
-- **`ruff format` pass on 51 backend files.** `ruff check` was being enforced post-v0.8.0 but `ruff format` had silently drifted across the v0.5.0 → v0.8.0 commits. Pure whitespace/style normalization, no behavior change; the 221 non-DB-fixture tests still pass at exactly 221. `docs/TECH_STACK.md` now notes that `ruff check` and `ruff format` are independent passes.
+- **`ruff format` pass on 51 backend files.** `ruff check` was being enforced post-v0.8.0 but `ruff format` had silently drifted across the v0.5.0 → v0.8.0 commits. Pure whitespace/style normalization, no behavior change. `docs/TECH_STACK.md` now notes that `ruff check` and `ruff format` are independent passes.
 - **Backend dep refresh** (`uv lock --upgrade`, all within existing `>=` constraints): ruff 0.15.13 → 0.15.14, starlette 1.0.0 → 1.0.1, openai 2.37 → 2.38, joserfc 1.6.5 → 1.6.7, jiter 0.14 → 0.15, click 8.3.3 → 8.4.1, certifi 2026.4.22 → 2026.5.20, greenlet 3.5.0 → 3.5.1, idna 3.15 → 3.16, watchfiles 1.1.1 → 1.2.0.
 - **Frontend dep refresh** (`npm update`, within `^` ranges — `package.json` unchanged): @base-ui/react 1.4.1 → 1.5.0, framer-motion 12.38 → 12.40, shadcn 4.7 → 4.8, @types/react 19.2.14 → 19.2.15. Side effect: `qs` transitive DoS advisory cleared.
+- Backend `pyproject.toml` + `app/settings.py::VERSION` + `frontend/package.json` synced at `0.8.1`. Frontend results-view footer literal `v0.8.0` → `v0.8.1`.
 
 ### Notes
-- v0.8.1 design spec landed at [`docs/superpowers/specs/2026-05-22-v0.8.1-cron-reingest-design.md`](./docs/superpowers/specs/2026-05-22-v0.8.1-cron-reingest-design.md). Implementation gated on `CRON_SECRET` provisioning (user action — AGENTS.md rule 5).
+- `CRON_SECRET` provisioning is the gating user action — generate with `python -c "import secrets; print(secrets.token_hex(32))"` and paste into Vercel Production + Preview as Sensitive.
+- Out of scope per PLAN siblings: manual "Force refresh" button (v0.8.2), `revalidateTag` for `/share/[slug]` (v0.8.3), `vercel.json → vercel.ts` (v0.8.4).
+- Sentry alert rules + literal `event=cron.*` keys are deferred to a v0.8.x patch alongside the source-map upload work.
 
 ---
 
