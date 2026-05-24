@@ -8,6 +8,26 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
+## [0.8.3] — 2026-05-24
+
+### Fixed
+- **Analysis crashed with a generic 5xx for any GitHub profile that owned an empty repo.** Real-user report: `mohit-sharma2` (3 public repos, 2 of them `size=0`) failed analysis with a 409 surfaced through the frontend boundary. Root cause: GitHub returns `409 Conflict — "Git Repository is empty."` (not 404) on `/contents` and `/commits` endpoints when a repo has no commits yet. Our ingestion fan-out (`asyncio.gather` over all repos' commits/contents) blew up on the first 409 and never recovered.
+- **Patched five `GitHubClient` methods** to treat 409 the same as the already-handled 404 — return `[]` or `None` gracefully: `list_commits`, `list_recent_commits_sample`, `get_repo_root_contents`, `list_workflow_files`, `get_repo_readme_text`. Plus `get_license` defensively, same family.
+
+### Changed
+- **`_CACHEABLE_STATUSES`** in `app/github/client.py` adds `409` so subsequent ingest calls for the same empty repo skip the GitHub round-trip. A repo doesn't become un-empty often, and even when it does, the Layer A Report cache TTL (6h) bounds staleness.
+- Backend `pyproject.toml` + `app/settings.py::VERSION` + `frontend/package.json` synced at `0.8.3`. Frontend results-view footer + landing pill literals bumped.
+
+### Notes
+- This is a hotfix that interpolates ahead of the originally-planned v0.8.3 (`revalidateTag` ISR). PLAN.md downstream shifted: `revalidateTag` → v0.8.4, `vercel.json → vercel.ts` → v0.8.5. Matches the v0.7.x hotfix precedent (v0.7.3 org detection / v0.7.4 mobile badges / v0.7.5 mode toggle).
+- The triggering Sentry event ID was `9925df962012425d85c6e8d99ca0448d` against `release=0.8.2` — captured by the v0.8.0 observability slice working as designed.
+
+### Tests
+- 3 new respx cases: `test_get_repo_root_contents_returns_empty_for_empty_repo_409`, `test_list_recent_commits_sample_returns_empty_on_409_empty_repo`, `test_list_commits_returns_empty_on_409_empty_repo`. The existing 404 test kept as `test_get_repo_root_contents_returns_empty_for_empty_repo_404` for defence-in-depth across GitHub API shifts.
+- Suite: 240 → 243 non-DB-fixture pass.
+
+---
+
 ## [0.8.2] — 2026-05-23
 
 ### Added

@@ -19,6 +19,43 @@ Format:
 
 ---
 
+## 2026-05-24 — Claude (Opus 4.7) — v0.8.3 hotfix shipped (empty-repo 409)
+
+**Slice:** v0.8.3 — hotfix for `409 Conflict — "Git Repository is empty."` from GitHub's `/contents` and `/commits` endpoints crashing the ingestion fan-out.
+
+**Done:**
+- **User reported analyzing `mohit-sharma2` returned a 409 error.** Confirmed: profile has 3 public repos, 2 of them `size=0` (empty Git repositories). GitHub returns 409 (not 404) on `/contents` and `/commits` for empty repos; our broad-catch in `_live_ingest` translated to a 5xx with "409" leaking through the frontend boundary.
+- **Sentry alert email confirmed the failing call** was `list_commits` (the author+since variant) — Sentry ID `9925df962012425d85c6e8d99ca0448d` against `release=0.8.2`. The v0.8.0 observability slice doing exactly what it was designed for.
+- **Patched five `GitHubClient` methods** at the `/repos/{owner}/{repo}/...` family to treat 409 the same as already-handled 404 → return `[]` or `None`: `list_commits`, `list_recent_commits_sample`, `get_repo_root_contents`, `list_workflow_files`, `get_repo_readme_text`. Plus `get_license` defensively.
+- **Added 409 to `_CACHEABLE_STATUSES`** so subsequent ingest skips the GitHub round-trip for known-empty repos. A repo doesn't become un-empty often; even when it does, the Layer A Report cache TTL (6h) bounds staleness.
+- **3 new respx tests** for the 409 path; existing 404 test renamed `_404` and kept for defence-in-depth. Suite: 240 → 243 non-DB-fixture pass.
+- **Version + docs ritual:** pyproject + settings + package.json + landing pill + results footer + uv.lock + CHANGELOG `[0.8.3]` + PLAN renumber + README status + DEPLOY known-limits — all bumped to v0.8.3.
+
+**Decisions:**
+- **Tag as v0.8.3 hotfix** (matching v0.7.3/4/5 precedent for user-facing fixes that interpolate into the version timeline), shifting `revalidateTag` ISR → v0.8.4 and `vercel.ts` migration → v0.8.5. The alternative (fix-forward on main without a version bump, like v0.8.0's build hotfix `3304087`) was wrong here because this IS user-visible.
+- **Defensive 409-handling on `get_license` even though it wasn't in the trace.** Same family of endpoints, cheap to add, prevents the next variant of this bug from re-occurring.
+- **Trust the existing 404 test path** instead of replacing it. GitHub's behavior has historically shifted between 404 and 409 for empty repos on different endpoints; handling both costs nothing and survives the next shift.
+
+**Learned / surprises:**
+- **GitHub returns 409 for "Git Repository is empty.", not 404.** My pre-existing test mocked 404 — based on a guess from the old comment that said "Empty repos return 404." That comment was wrong AND the test passed (because we handled 404) but the codepath was never exercised against real empty repos until now. Worth memo-ing: docstrings that document API behavior should be re-verified against a real-world artefact at least once before being trusted.
+- **One Sentry email pinpointed the exact failing method** (`list_commits` with author+since params) — without it I'd have only patched the obvious one (`list_recent_commits_sample`) and shipped a v0.8.4 hotfix when the next 409 surfaced. The full stack trace + URL was decisive.
+- **Two of three repos in mohit-sharma2's account were empty.** Suggests the user pattern of "create a repo, plan to push later" is more common than I'd assumed. Empty-repo handling is now table stakes, not edge case.
+
+**Verified:**
+- Backend `ruff check .` + `ruff format --check .` clean. `pytest -q --no-header`: 243 pass + 59 DB-fixture errors (unchanged from baseline + 3 new are DB-independent).
+- Live `https://skill-issue-tau.vercel.app/_/backend/health` will report `version: 0.8.3` post-deploy.
+- Live `/analyze/mohit-sharma2` will succeed (user to verify after deploy).
+
+**Blocked / open:**
+- None. Hotfix is atomic and self-contained.
+
+**Next:**
+- Push main → tag `v0.8.3` → release workflow fires → Vercel auto-deploy.
+- User to verify `/analyze/mohit-sharma2` now returns a valid Report.
+- v0.8.4 begins — on-demand `revalidateTag` for `/share/[slug]` ISR (was v0.8.3).
+
+---
+
 ## 2026-05-23 — Claude (Opus 4.7) — v0.8.2 shipped (manual force refresh)
 
 **Slice:** v0.8.2 — synchronous `POST /me/refresh/{username}` + 10/hour per-user rate limit + `<RefreshButton>` client component on `/me`.

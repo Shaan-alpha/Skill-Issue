@@ -33,8 +33,9 @@
 | **v0.8.0** | Polish + observability — Sentry (FE+BE), PostHog (events + web-vitals), structured logging, axe a11y pass, on-voice 404/500, error-budget doc | ✅ shipped |
 | **v0.8.1** | Cron daily re-ingestion of saved analyses (paired with Sentry so failures aren't silent) | ✅ shipped |
 | **v0.8.2** | Manual "Force refresh" on `/me` + `POST /me/refresh/{username}` (synchronous re-ingest, 10/hr per-user cap) | ✅ shipped |
-| **v0.8.3** | On-demand `revalidateTag` for `/share/[slug]` ISR (closes v0.7.1's deferred share-page caching) | deferred from v0.7.1 |
-| **v0.8.4** | `vercel.json` → `vercel.ts` migration (Vercel 2026-02-27 knowledge update) | deferred from pre-v0.7.1 |
+| **v0.8.3** | Hotfix — empty-repo 409 from GitHub `/commits` and `/contents` no longer crashes analysis | ✅ shipped |
+| **v0.8.4** | On-demand `revalidateTag` for `/share/[slug]` ISR (closes v0.7.1's deferred share-page caching) | deferred from v0.7.1 |
+| **v0.8.5** | `vercel.json` → `vercel.ts` migration (Vercel 2026-02-27 knowledge update) | deferred from pre-v0.7.1 |
 | **v0.9.0** | Beta hardening — security review, abuse mitigation, load test, legal | pending |
 | **v1.0.0** | Public launch | pending |
 
@@ -316,8 +317,8 @@
 **Deferred to v0.8.x patches:**
 - Cron daily re-ingestion → v0.8.1
 - Manual "Force refresh" + `DELETE /me/cache/{username}` → v0.8.2
-- On-demand `revalidateTag` for `/share/[slug]` ISR → v0.8.3
-- `vercel.json` → `vercel.ts` migration → v0.8.4
+- On-demand `revalidateTag` for `/share/[slug]` ISR → v0.8.4 (was v0.8.3, shifted by the v0.8.3 empty-repo hotfix)
+- `vercel.json` → `vercel.ts` migration → v0.8.5 (was v0.8.4, shifted by the v0.8.3 empty-repo hotfix)
 - Sentry alert-rule wiring → v0.8.x once real error rates are known
 - CI integration of `@axe-core/cli` → v0.8.x
 
@@ -342,7 +343,7 @@ Each deferred item is independent and earns its own patch release, matching the 
 **Design spec:** [`docs/superpowers/specs/2026-05-22-v0.8.1-cron-reingest-design.md`](./docs/superpowers/specs/2026-05-22-v0.8.1-cron-reingest-design.md).
 
 **Slice scope (locked 2026-05-22):**
-- Vercel Cron entry in `vercel.json` (folds into v0.8.4's `vercel.ts` migration later) hitting a new bearer-authed backend route `POST /cron/refresh-saved-analyses` at 03:00 UTC.
+- Vercel Cron entry in `vercel.json` (folds into v0.8.5's `vercel.ts` migration later) hitting a new bearer-authed backend route `POST /cron/refresh-saved-analyses` at 03:00 UTC.
 - Refresh target: **all** saved analyses (every row in `analyses`), oldest-not-refreshed-in-24h first.
 - Chunk cap: N=25 per fire, 240s wall-clock budget (60s safety margin under Vercel's 300s timeout). Overflow spills to tomorrow — no self-invocation, no resume tokens (YAGNI applied).
 - Token strategy: owner's latest unexpired session token (v0.5.0 encryption boundary), falling back to `GITHUB_TOKEN`. Decrypted per request, never logged.
@@ -389,7 +390,26 @@ Each deferred item is independent and earns its own patch release, matching the 
 
 ---
 
-## v0.8.3 — On-demand `revalidateTag` for `/share/[slug]` ISR (deferred from v0.7.1)
+## v0.8.3 — Hotfix: empty-repo 409 (shipped 2026-05-24)
+
+**Goal:** Analysing GitHub users with empty repositories must not crash. Real-user `mohit-sharma2` failure surfaced via Sentry against `release=0.8.2`.
+
+**Root cause:** GitHub returns `409 Conflict — "Git Repository is empty."` (not 404) on `/contents` and `/commits` endpoints when a repo has zero commits. The ingestion fan-out blew up on the first 409.
+
+**Slice scope (shipped):**
+- Five `GitHubClient` methods patched to treat 409 as graceful empty-result, same as 404: `list_commits`, `list_recent_commits_sample`, `get_repo_root_contents`, `list_workflow_files`, `get_repo_readme_text`. Plus `get_license` defensively.
+- `_CACHEABLE_STATUSES` adds `409` so subsequent ingest skips the round-trip for known-empty repos.
+- 3 new respx tests cover the 409 path; existing 404 test kept for defence-in-depth.
+
+**Exit criteria:**
+- [x] Real-user `mohit-sharma2` analysis no longer 5xx's (verified post-deploy by re-analysis).
+- [x] All 5 client methods that hit /repos/{owner}/{repo}/contents-or-commits-or-readme treat 409 as empty.
+- [x] 409 cached alongside 404/200/422.
+- [x] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version bumped to `0.8.3`.
+
+---
+
+## v0.8.4 — On-demand `revalidateTag` for `/share/[slug]` ISR (deferred from v0.7.1)
 
 **Goal:** Public share pages can be ISR-cached safely because revocation immediately busts the tag.
 
@@ -402,13 +422,13 @@ Each deferred item is independent and earns its own patch release, matching the 
 
 ---
 
-## v0.8.4 — `vercel.json` → `vercel.ts` migration
+## v0.8.5 — `vercel.json` → `vercel.ts` migration
 
 **Goal:** Track the 2026-02-27 Vercel knowledge update by moving the project config to typed TypeScript.
 
 **Slice scope:**
 - Replace `vercel.json` with `vercel.ts` using `@vercel/config/v1`.
-- Move the `experimentalServices` declarations + any cron entries shipped in v0.8.1 to the typed config.
+- Move the `experimentalServices` declarations + any cron entries shipped in v0.8.1 + the `git.deploymentEnabled` block shipped in the post-v0.8.2 preview-disable to the typed config.
 
 **Exit criteria:** TBD when the slice begins.
 

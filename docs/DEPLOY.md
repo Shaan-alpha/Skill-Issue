@@ -89,7 +89,7 @@ After the first migration: every subsequent push that includes a new migration r
 ```bash
 # Health — should report db=up and cache=up after Upstash is provisioned
 curl https://<your-vercel-host>/_/backend/health
-# -> {"status":"ok","version":"0.8.2","db":"up","cache":"up"}
+# -> {"status":"ok","version":"0.8.3","db":"up","cache":"up"}
 
 # Anonymous analyze
 curl https://<your-vercel-host>/_/backend/analyze/octocat
@@ -127,13 +127,13 @@ time curl -s -o /dev/null https://<your-vercel-host>/_/backend/analyze/octocat
 
 Cold call: ~5-8s. Warm call (cached): ≤200ms p95 target. If the warm call isn't fast, check `/health` for `cache: "up"` and verify the env vars survived the deploy.
 
-## Known limits as of v0.8.2
+## Known limits as of v0.8.3
 
 - **No global rate limiting.** Anyone can hit `/analyze` and burn through the ingestion budget. The per-user 10/hour cap on `/me/refresh/{username}` (v0.8.2) is the only rate limit shipped today. Global IP-level limits + abuse heuristics are v0.9.0 territory (Beta hardening).
-- **`/share/[slug]` is not ISR-cached.** Each shared-page view re-renders server-side. Tolerable at current scale, but v0.8.3 ships on-demand `revalidateTag` so the route can opt in to ISR without a revocation correctness gap.
+- **`/share/[slug]` is not ISR-cached.** Each shared-page view re-renders server-side. Tolerable at current scale, but v0.8.4 ships on-demand `revalidateTag` so the route can opt in to ISR without a revocation correctness gap.
 - **Sentry source-map upload not wired.** Frontend stack traces in Sentry show minified function names — runtime capture still works, only symbolication is degraded. Lands in a v0.8.x patch once `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` / `SENTRY_PROJECT` are provisioned.
 - **Sentry alert rules not wired.** v0.8.0 ships the integration but not the thresholds; needs ~1 week of baseline data first. Patch lands when the data is in.
-- **`vercel.json` still in JSON (not `vercel.ts`).** Per Vercel's 2026-02-27 knowledge update, typed config is the recommended path. v0.8.4 migrates.
+- **`vercel.json` still in JSON (not `vercel.ts`).** Per Vercel's 2026-02-27 knowledge update, typed config is the recommended path. v0.8.5 migrates.
 - **Custom domain** — pre-v1.0.
 
 ## What's intentionally not here
