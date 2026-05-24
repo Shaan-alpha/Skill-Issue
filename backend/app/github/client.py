@@ -20,7 +20,9 @@ GRAPHQL_URL = "https://api.github.com/graphql"
 
 # Status codes whose response bodies are safe to cache. 5xx and 429 are
 # transient and should always retry against the live API.
-_CACHEABLE_STATUSES = frozenset({200, 404, 422})
+_CACHEABLE_STATUSES = frozenset({200, 404, 409, 422})
+# 409 covers the "Git Repository is empty." case GitHub returns on
+# /contents and /commits endpoints when a repo has no commits yet.
 
 
 class _CachedResponse:
@@ -143,12 +145,18 @@ class GitHubClient:
     async def list_commits(
         self, owner: str, repo: str, author: str, since: str, per_page: int = 100
     ) -> list[dict[str, Any]]:
+        """List commits on a repo filtered by author + since-date.
+
+        404 = repo or branch missing. 409 = repo is empty (no commits yet).
+        Both surface as []. (The 409 path bit a real user analysis in v0.8.2:
+        empty repos in mohit-sharma2's account broke the ingestion fan-out.)
+        """
         resp = await self._request(
             "GET",
             f"{API_BASE}/repos/{owner}/{repo}/commits",
             params={"author": author, "since": since, "per_page": per_page},
         )
-        if resp.status_code == 404:
+        if resp.status_code in (404, 409):
             return []
         resp.raise_for_status()
         return resp.json()
@@ -156,12 +164,14 @@ class GitHubClient:
     async def get_repo_root_contents(self, owner: str, repo: str) -> list[str]:
         """Return root-level file and directory names for a repo.
 
-        Empty repos return 404 ("This repository is empty.") — surface those as [].
-        If GitHub returns a single file object instead of a list (which happens when
-        the path resolves to a file), treat it as no usable directory listing.
+        Empty repos return 409 ("Git Repository is empty.") on `/contents`; older
+        GitHub responses occasionally returned 404 for the same condition. Surface
+        both as []. If GitHub returns a single file object instead of a list
+        (which happens when the path resolves to a file), treat it as no usable
+        directory listing.
         """
         resp = await self._request("GET", f"{API_BASE}/repos/{owner}/{repo}/contents")
-        if resp.status_code == 404:
+        if resp.status_code in (404, 409):
             return []
         resp.raise_for_status()
         data = resp.json()
@@ -170,9 +180,13 @@ class GitHubClient:
         return [str(entry.get("name", "")) for entry in data]
 
     async def get_license(self, owner: str, repo: str) -> str | None:
-        """Return the repo's SPDX licence id, or None if absent / NOASSERTION."""
+        """Return the repo's SPDX licence id, or None if absent / NOASSERTION.
+
+        404 = no detected license. 409 = repo is empty (no commits / no detectable
+        license). Both map to None.
+        """
         resp = await self._request("GET", f"{API_BASE}/repos/{owner}/{repo}/license")
-        if resp.status_code == 404:
+        if resp.status_code in (404, 409):
             return None
         resp.raise_for_status()
         spdx = (resp.json().get("license") or {}).get("spdx_id")
@@ -183,11 +197,13 @@ class GitHubClient:
     async def list_workflow_files(self, owner: str, repo: str) -> list[str]:
         """Return the names of files (not directories) under .github/workflows.
 
-        Returns [] when the directory doesn't exist."""
+        Returns [] when the directory doesn't exist (404) or when the whole repo
+        is empty (409 — "Git Repository is empty.").
+        """
         resp = await self._request(
             "GET", f"{API_BASE}/repos/{owner}/{repo}/contents/.github/workflows"
         )
-        if resp.status_code == 404:
+        if resp.status_code in (404, 409):
             return []
         resp.raise_for_status()
         data = resp.json()
@@ -196,9 +212,13 @@ class GitHubClient:
         return [str(e["name"]) for e in data if e.get("type") == "file"]
 
     async def get_repo_readme_text(self, owner: str, repo: str) -> str:
-        """Return decoded README text for any repo, or "" when missing."""
+        """Return decoded README text for any repo, or "" when missing.
+
+        404 = no README file. 409 = repo is empty (no commits yet) — also treated
+        as no README.
+        """
         resp = await self._request("GET", f"{API_BASE}/repos/{owner}/{repo}/readme")
-        if resp.status_code == 404:
+        if resp.status_code in (404, 409):
             return ""
         resp.raise_for_status()
         content = resp.json().get("content", "")
@@ -207,13 +227,17 @@ class GitHubClient:
     async def list_recent_commits_sample(
         self, owner: str, repo: str, *, limit: int = 100
     ) -> list[str]:
-        """Return the most-recent commit messages on the default branch (up to limit)."""
+        """Return the most-recent commit messages on the default branch (up to limit).
+
+        404 = repo or branch missing. 409 = repo is empty (no commits yet).
+        Both surface as [].
+        """
         resp = await self._request(
             "GET",
             f"{API_BASE}/repos/{owner}/{repo}/commits",
             params={"per_page": limit},
         )
-        if resp.status_code == 404:
+        if resp.status_code in (404, 409):
             return []
         resp.raise_for_status()
         return [str(c.get("commit", {}).get("message", "")) for c in resp.json()]

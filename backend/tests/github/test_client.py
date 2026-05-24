@@ -47,7 +47,8 @@ async def test_get_repo_root_contents_returns_entry_names() -> None:
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_get_repo_root_contents_returns_empty_for_empty_repo() -> None:
+async def test_get_repo_root_contents_returns_empty_for_empty_repo_404() -> None:
+    """Historic GitHub 404 path — kept for defence in depth across API shifts."""
     respx.get("https://api.github.com/repos/octocat/empty/contents").mock(
         return_value=Response(404, json={"message": "This repository is empty."})
     )
@@ -56,6 +57,53 @@ async def test_get_repo_root_contents_returns_empty_for_empty_repo() -> None:
         names = await gh.get_repo_root_contents("octocat", "empty")
 
     assert names == []
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_get_repo_root_contents_returns_empty_for_empty_repo_409() -> None:
+    """GitHub's actual response for empty repos on /contents — 409 'Git
+    Repository is empty.'. Caught from a real-world report: analyzing
+    `mohit-sharma2` failed because two of three repos had size=0.
+    """
+    respx.get("https://api.github.com/repos/owner/empty/contents").mock(
+        return_value=Response(409, json={"message": "Git Repository is empty."})
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        names = await gh.get_repo_root_contents("owner", "empty")
+
+    assert names == []
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_list_recent_commits_sample_returns_empty_on_409_empty_repo() -> None:
+    respx.get("https://api.github.com/repos/owner/empty/commits").mock(
+        return_value=Response(409, json={"message": "Git Repository is empty."})
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        msgs = await gh.list_recent_commits_sample("owner", "empty", limit=10)
+
+    assert msgs == []
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_list_commits_returns_empty_on_409_empty_repo() -> None:
+    """The author+since variant — exactly the call that blew up for
+    mohit-sharma2's `my-project` empty repo, surfaced via a v0.8.2 prod
+    Sentry capture before this fix landed.
+    """
+    respx.get("https://api.github.com/repos/owner/empty/commits").mock(
+        return_value=Response(409, json={"message": "Git Repository is empty."})
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        commits = await gh.list_commits("owner", "empty", author="someone", since="2024-01-01")
+
+    assert commits == []
 
 
 @pytest.mark.asyncio
