@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // v0.8.6: enable Next 16 Cache Components for `/share/[slug]` ISR with
+  // tag-based invalidation via the new `/api/revalidate` route.
+  cacheComponents: true,
   experimental: {
     optimizePackageImports: ["lucide-react", "@base-ui/react"],
   },
