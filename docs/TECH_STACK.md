@@ -6,9 +6,10 @@
 
 ## Frontend — `frontend/`
 
-| Tool | Pinned (as of 2026-05-22) | Why |
+| Tool | Pinned (as of 2026-05-25) | Why |
 | --- | --- | --- |
 | **Next.js** | `16.2.6` | App Router, partial prerendering, streaming, Vercel-native. v16 dropped some conventions; check `frontend/AGENTS.md` before assuming v13/v14 patterns. |
+| **Cache Components** | enabled v0.8.6 (`cacheComponents: true` in `next.config.ts`) | Powers `/share/[slug]` PPR via `'use cache'` + `cacheTag('share:<slug>')` + `cacheLife({ revalidate: 3600 })`. Incompatible with `export const dynamic = "force-dynamic"` (had to be dropped from `/me` and `/u/[username]/card`). Helpers from `next/cache`: `cacheTag`, `cacheLife`, `revalidateTag(tag, { expire: 0 })`. Stubbed in vitest setup since they throw outside the Next runtime. |
 | **React** | `19.2.6` | Server Components, Actions, the modern data flow |
 | **TypeScript** | `^5` | Sane component contracts |
 | **TailwindCSS** | `^4` | Utility-first; `@tailwindcss/postcss` is the v4 pipeline. No tailwind.config — config lives in `globals.css` via `@theme`. |
@@ -29,7 +30,7 @@
 
 ## Backend — `backend/`
 
-| Tool | Pinned (as of 2026-05-22) | Why |
+| Tool | Pinned (as of 2026-05-25) | Why |
 | --- | --- | --- |
 | **Python** | `3.12+` | Modern type system, performance, structural pattern matching |
 | **FastAPI** | `0.136` | Async-native, Pydantic-integrated, OpenAPI for free |

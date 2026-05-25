@@ -34,8 +34,8 @@ npm run build
 ```
 
 - **`npm run lint`** — ESLint via `eslint-config-next`.
-- **`npm run test:run`** — Vitest 3 + happy-dom 20 + Testing Library (added in v0.6.0; happy-dom bumped to v20 on 2026-05-22). 34 unit + snapshot tests cover the OG palette, data fetchers, OgCard, CardActions, events wiring, PostHog provider, and FramerProvider.
-- **`npm run build`** — TypeScript + Next 16 build with Turbopack.
+- **`npm run test:run`** — Vitest 3 + happy-dom 20 + Testing Library (added in v0.6.0; happy-dom bumped to v20 on 2026-05-22). 42 unit + snapshot tests cover the OG palette, data fetchers, OgCard, CardActions, events wiring, PostHog provider, FramerProvider, the `<RefreshButton>` state machine (v0.8.2), and the `/api/revalidate` route (v0.8.6).
+- **`npm run build`** — TypeScript + Next 16 build with Turbopack. **Cache Components are enabled** (`cacheComponents: true` in `next.config.ts`, v0.8.6+) — see [`AGENTS.md`](./AGENTS.md) and the Next 16 docs for `'use cache'` constraints.
 
 ## Stack
 
@@ -57,9 +57,10 @@ See [`docs/TECH_STACK.md`](../docs/TECH_STACK.md) for the canonical version pins
 | `/u/[username]/card` | Dynamic (SSR) | Card preview page with Copy PNG / Download PNG / Copy URL (v0.6.0) |
 | `/u/[username]/opengraph-image` | Dynamic | 1200×630 PNG via `next/og`; auto-wires `<meta property="og:image">` (v0.6.0) |
 | `/u/[username]/twitter-image` | Dynamic | Same PNG, auto-wires `<meta name="twitter:image">` (v0.6.0) |
-| `/share/[slug]` | Dynamic (SSR) | Public read-only view of a shared analysis (v0.5.0) |
-| `/share/[slug]/opengraph-image` / `twitter-image` | Dynamic | OG/Twitter cards for shared analyses (v0.6.0) |
-| `/me` | Dynamic (SSR) | Authenticated history grid (v0.5.0) |
+| `/share/[slug]` | Partial Prerender (◐) | Public read-only view of a shared analysis (v0.5.0). Migrated to Next 16 Cache Components in v0.8.6 — static shell + `share:<slug>`-tagged data fetch. Backend webhook to `/api/revalidate` busts the tag on every share toggle. |
+| `/share/[slug]/opengraph-image` / `twitter-image` | Dynamic | OG/Twitter cards for shared analyses (v0.6.0). Data fetch shares the `share:<slug>` cache + invalidation via `og-card-data.ts::fetchSharedPayload`. |
+| `/me` | Dynamic (SSR) | Authenticated history grid (v0.5.0). `<RefreshButton>` per row for the v0.8.2 manual force-refresh. |
+| `/api/revalidate` | Dynamic | POST-only server-to-server webhook (v0.8.6). Constant-time-compared `X-Revalidate-Secret` + `share:<slug>` tag regex. Calls `revalidateTag(tag, { expire: 0 })` for immediate invalidation. |
 | `/_not-found` | Static | Next.js default global 404 |
 
 Segment-level `loading.tsx`, `error.tsx`, and `not-found.tsx` live under `app/u/[username]/`.

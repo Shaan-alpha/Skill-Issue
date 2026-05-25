@@ -27,6 +27,8 @@ uv run uvicorn app.main:app --reload --port 8000
 | `GITHUB_OAUTH_CLIENT_ID` / `GITHUB_OAUTH_CLIENT_SECRET` / `OAUTH_REDIRECT_URL` | sign-in flow (v0.5.0+) | GitHub OAuth App credentials. |
 | `SESSION_TOKEN_ENC_KEY` | sign-in flow (v0.5.0+) | 32-byte base64 key for AES-GCM at-rest token encryption. |
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | optional (v0.7.0+) | Enables four-layer caching. Unset = in-process fallback for narrative + budget, every analyze runs cold. |
+| `CRON_SECRET` | nightly cron (v0.8.1+) | Bearer token Vercel Cron injects on `POST /cron/refresh-saved-analyses`. Unset = route 503s (visible misconfig). |
+| `FRONTEND_BASE_URL` / `REVALIDATE_SECRET` | share-ISR webhook (v0.8.6+) | URL of the frontend + shared secret for the `POST /api/revalidate` webhook that busts per-slug ISR tags. Either unset = webhook becomes a logged no-op; the frontend's 3600s `cacheLife` fallback absorbs revocations. |
 
 ## Routes
 
@@ -37,7 +39,9 @@ uv run uvicorn app.main:app --reload --port 8000
 | `GET /narrative/{username}?mode={roast\|mentor}` | SSE streaming narrative. Cache shared across instances via Upstash when configured. |
 | `GET /auth/{login,callback,logout}` | GitHub OAuth flow (v0.5.0). |
 | `GET /me`, `GET /me/analyses` | Authenticated user info + paginated history (v0.5.0). |
-| `POST/DELETE /analyses/{id}/share` | Toggle a public share slug (v0.5.0). |
+| `POST/DELETE /analyses/{id}/share` | Toggle a public share slug (v0.5.0). Since v0.8.6 both endpoints schedule a `BackgroundTasks` webhook to the frontend's `POST /api/revalidate` to bust the per-slug ISR tag. |
+| `POST /me/refresh/{username}` | Authenticated manual force-refresh (v0.8.2). Strict ownership; 10/hour per-user rate-limit via Upstash. |
+| `POST /cron/refresh-saved-analyses` | Bearer-authed Vercel Cron route (v0.8.1). Nightly refresh of saved analyses; 25/fire with a 240s wall-clock budget. |
 | `GET /share/{slug}` | Read-only public view of a shared analysis. |
 
 ```bash
@@ -70,6 +74,10 @@ Layout:
 - `tests/cache/` — `RedisCache`, `singleflight`, key helpers (v0.7.0)
 - `tests/narrative/test_*.py` — in-process LRU cache, daily budget, LLM streaming, SSE route, prompt digest locking; `test_cache_redis.py` + `test_budget_redis.py` cover the v0.7.0 Redis backends
 - `tests/auth/`, `tests/db/`, `tests/persistence/`, `tests/routers/` — v0.5.0 OAuth + SQLAlchemy + persistence
+- `tests/cron/` — v0.8.1 cron orchestrator, token resolver, write-through contract
+- `tests/share/test_webhook.py` — v0.8.6 frontend revalidation webhook (respx; unconfigured no-op, happy path, 4xx swallow, timeout swallow, tag-prefix guarantee)
+
+Suite size (v0.8.6): **261 non-DB pass + 63 DB-fixture skipped** without `TEST_DATABASE_URL` set. With a Postgres branch wired, all skipped tests run.
 
 ## Lint + format
 
@@ -82,4 +90,4 @@ Config in `ruff.toml` — py312, line length 100, `E/F/I/UP/B/SIM/TCH/RUF`.
 
 ## Deploy
 
-See [`../docs/DEPLOY.md`](../docs/DEPLOY.md) for the Vercel walkthrough. Since v0.5.0 the backend ships in the same Vercel project as the frontend (multi-service via `experimentalServices` in the root `vercel.json`); the deploy reads `backend/pyproject.toml` via `uv` — no derived `requirements.txt`.
+See [`../docs/DEPLOY.md`](../docs/DEPLOY.md) for the Vercel walkthrough. Since v0.5.0 the backend ships in the same Vercel project as the frontend (multi-service via `experimentalServices` in the root `vercel.json`); the `@vercel/python` runtime resolves through `pyproject.toml` + `uv.lock`. A committed `requirements.txt` (regenerated via `uv export --no-hashes --no-dev` in v0.8.5) mirrors the locked closure for any contributor/tool that consumes pip directly — keep it in sync with `pyproject.toml` on dep changes.

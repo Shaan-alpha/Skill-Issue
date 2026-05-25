@@ -101,14 +101,16 @@
   - `/u/[username]` — results (tier ladder, position bar, badges, score matrix)
   - `/u/[username]/card` — shareable OG card preview page with Copy/Download/Copy-URL actions (v0.6.0)
   - `/u/[username]/opengraph-image` + `/u/[username]/twitter-image` — auto-wired 1200×630 PNGs via Next 16 file conventions (v0.6.0)
-  - `/share/[slug]` — public read-only view + matching OG/Twitter image routes
-  - `/me` — authenticated history (v0.5.0+)
+  - `/share/[slug]` — public read-only view (v0.8.6: **Partial Prerender via Cache Components**, `share:<slug>` tag) + matching OG/Twitter image routes (same tag)
+  - `/me` — authenticated history (v0.5.0+) with `<RefreshButton>` per row (v0.8.2)
+  - `/api/revalidate` — server-to-server webhook (v0.8.6) that the backend's share-toggle endpoints hit to bust the per-slug ISR tag. Constant-time secret check + tag regex
+- **Caching strategy:** `cacheComponents: true` in `next.config.ts`. `/share/[slug]` uses `'use cache'` + `cacheTag('share:<slug>')` + `cacheLife({ revalidate: 3600 })` on the data fetch; the page wraps it in `<Suspense>` so the static shell prerenders cleanly. **Trade-off:** PPR static shell ships HTTP 200 even when the dynamic body calls `notFound()` — browser UX renders the not-found page correctly; programmatic clients see 200. Backend `/share/<unknown>` still returns clean 404.
 - **State:** server-driven by default; `useSyncExternalStore` for the localStorage-backed `useSession()` and mode-preference hooks (avoids React 19's `react-hooks/set-state-in-effect` rule).
-- **Tests:** Vitest 3 + happy-dom 20 + Testing Library (added in v0.6.0). 34 frontend tests cover the OG palette, data fetchers, OgCard, CardActions, events wiring, PostHog provider, and FramerProvider.
+- **Tests:** Vitest 3 + happy-dom 20 + Testing Library (added in v0.6.0). **42** frontend tests cover the OG palette, data fetchers, OgCard, CardActions, events wiring, PostHog provider, FramerProvider, the v0.8.2 `<RefreshButton>` state machine, and the v0.8.6 `/api/revalidate` route. `next/cache` (`cacheTag` / `cacheLife` / `revalidateTag`) is stubbed once in `src/test/setup.ts` since those helpers throw outside the Next runtime when `cacheComponents` is enabled.
 
 ### Backend — `backend/` (FastAPI)
 
-- **Layers:** `app/ingestion/`, `app/scoring/` (which contains `tiers.py`, `badges.py`, `depth.py`, `engine.py` + per-bucket scorers), `app/github/`, `app/narrative/` (v0.4.0), `app/db/` + `app/auth/` + `app/persistence/` (v0.5.0), `app/cache/` (v0.7.0).
+- **Layers:** `app/ingestion/`, `app/scoring/` (which contains `tiers.py`, `badges.py`, `depth.py`, `engine.py` + per-bucket scorers), `app/github/`, `app/narrative/` (v0.4.0), `app/db/` + `app/auth/` + `app/persistence/` (v0.5.0), `app/cache/` (v0.7.0), `app/cron/` (v0.8.1), `app/share/` (v0.8.6 — `webhook.py` POSTs to the frontend `/api/revalidate` on every share toggle).
 - **Concurrency:** `asyncio` end to end; `httpx.AsyncClient` for outbound; no blocking I/O in the request path.
 - **GitHub access:** REST + GraphQL via a single typed client that handles rate-limit headers, retries with jitter, and conditional requests (`If-None-Match`).
 - **Scoring contract:** every scorer is `def score(profile: Profile) -> ScoreResult` where `ScoreResult` carries `points: int`, `max_points: int`, and `evidence: list[Evidence]`. Evidence is what the UI displays under "Why this score" — never hand-waved.
