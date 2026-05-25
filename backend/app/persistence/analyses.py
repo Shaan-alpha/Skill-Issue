@@ -120,12 +120,19 @@ async def set_share_slug(db: AsyncSession, *, analysis_id: int, owner_id: int) -
     return slug
 
 
-async def revoke_share_slug(db: AsyncSession, *, analysis_id: int, owner_id: int) -> None:
+async def revoke_share_slug(db: AsyncSession, *, analysis_id: int, owner_id: int) -> str:
+    """Revoke the share slug. Returns the slug string that was removed (or "").
+
+    Callers (v0.8.6+) use the returned slug to synchronously bust the frontend
+    ISR cache tag rather than waiting for the 3600s fallback TTL.
+    """
     a = await _owned_analysis(db, analysis_id, owner_id)
+    removed = a.share_slug or ""
     a.is_public = False
     a.share_slug = None
     a.updated_at = datetime.now(UTC)
     await db.flush()
+    return removed
 
 
 async def get_analysis_by_slug(db: AsyncSession, slug: str) -> Analysis | None:

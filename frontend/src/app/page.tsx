@@ -23,7 +23,7 @@ export default function Home() {
             transition={{ delay: 0.2, duration: 0.5 }}
             className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium uppercase tracking-wider text-muted-foreground"
           >
-            Deterministic engineering reports · v0.8.5
+            Deterministic engineering reports · v0.8.6
           </m.span>
 
           <h1 className="text-4xl sm:text-5xl md:text-7xl font-bold tracking-tight text-gradient leading-tight">

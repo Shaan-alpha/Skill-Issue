@@ -9,7 +9,8 @@ interface PageProps {
   params: Promise<{ username: string }>;
 }
 
-export const dynamic = "force-dynamic";
+// `force-dynamic` is incompatible with `cacheComponents: true` (v0.8.6).
+// `params` consumption already opts this route into dynamic rendering.
 
 export async function generateMetadata({ params }: PageProps) {
   const { username } = await params;

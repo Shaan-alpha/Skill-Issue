@@ -4,7 +4,9 @@ import { redirect } from "next/navigation";
 import { HistoryCard } from "@/components/history-card";
 import type { MeAnalysesResponse } from "@/types";
 
-export const dynamic = "force-dynamic";
+// `force-dynamic` is incompatible with `cacheComponents: true` (v0.8.6).
+// This page reads `cookies()` and `searchParams`, so it's auto-dynamic
+// without the directive.
 
 async function loadAnalyses(sort: string): Promise<MeAnalysesResponse> {
   const cookieStore = await cookies();

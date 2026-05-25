@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-VERSION = "0.8.5"
+VERSION = "0.8.6"
 
 
 class Settings(BaseSettings):
@@ -63,6 +63,16 @@ class Settings(BaseSettings):
     # Per-user cap on force-refresh actions per UTC hour. Reset on bucket
     # rollover. Override via env FORCE_REFRESH_PER_USER_PER_HOUR.
     force_refresh_per_user_per_hour: int = 10
+
+    # v0.8.6 — on-demand /share/[slug] ISR revalidation
+    # FRONTEND_BASE_URL: backend posts to {FRONTEND_BASE_URL}/api/revalidate
+    # after every share toggle to bust the per-slug cache tag.
+    # REVALIDATE_SECRET: shared secret (constant-time compared on both sides)
+    # authenticating the backend → frontend invalidation webhook.
+    # When either is unset, share toggles still work but the frontend ISR
+    # cache only revalidates at its 3600s cacheLife TTL (graceful degradation).
+    frontend_base_url: str | None = None
+    revalidate_secret: str | None = None
 
 
 settings = Settings()

@@ -8,6 +8,40 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
+## [0.8.6] — 2026-05-25
+
+### Added
+- **`/share/[slug]` Partial Prerendering via Next 16 Cache Components.** Public share pages now serve from a per-slug cache tagged `share:<slug>`. Backend share-toggle endpoints (`POST /analyses/{id}/share` and `DELETE /analyses/{id}/share`) schedule a fire-and-forget webhook to a new frontend route `POST /api/revalidate`, which calls `revalidateTag(tag, { expire: 0 })` for immediate invalidation. A revoked slug 404s on the next request — no stale window. Closes v0.7.1's deferred share-page caching.
+- **Backend `app/share/webhook.py::revalidate_share_slug(slug)`** — fire-and-forget POST to `${FRONTEND_BASE_URL}/api/revalidate` with `X-Revalidate-Secret` header and `{tag: "share:<slug>"}` body. 5s timeout. All failures (4xx, timeout, network) logged + swallowed — never blocks the toggle's HTTP response. Reads through `settings_module.settings` so test reassignment is observed at call time.
+- **Backend `share_analysis` + `revoke_share` schedule the webhook via FastAPI `BackgroundTasks`** so it fires after the response is sent. Empty-removed-slug case (already-revoked) intentionally skips scheduling.
+- **`revoke_share_slug` now returns the removed slug `str`** (was `None`) so the caller can pass it to the webhook. Empty string when nothing was shared.
+- **Frontend `POST /api/revalidate` route.** Constant-time `crypto.timingSafeEqual` against `process.env.REVALIDATE_SECRET`. Tag regex `^share:[A-Za-z0-9_-]{1,64}$` prevents the endpoint from being a generic revalidation gadget even if the secret leaks. Returns 401 on missing/wrong secret, 400 on bad tag, 204 on success.
+- **`next.config.ts` enables `cacheComponents: true`** — required for `'use cache'` directive support and PPR.
+- **`og-card-data.ts::fetchSharedPayload(slug)`** — `'use cache'` + `cacheTag(\`share:${slug}\`)` + `cacheLife({ revalidate: 3600 })`. 3600s fallback bounds staleness if the webhook ever silently fails. `fetchReportForSlug` now delegates to this so the OG image route (`/share/[slug]/opengraph-image.tsx`) automatically shares the same cache + invalidation as the page.
+- **Two new env vars:** `FRONTEND_BASE_URL` (backend only) and `REVALIDATE_SECRET` (both sides; constant-time compared). Either unset → graceful degradation: the 3600s `cacheLife` absorbs the gap.
+
+### Changed
+- **`/share/[slug]/page.tsx` migrates from `force-dynamic` to PPR.** The data fetch lives in a `<Suspense>`-wrapped child component (`SharedContent`); `await params` happens inside that boundary so the page shell prerenders cleanly. Build output confirms `◐ Partial Prerender` treatment. A new `SharedSkeleton` provides the suspense fallback.
+- **`/me/page.tsx` and `/u/[username]/card/page.tsx` drop `force-dynamic`** — incompatible with `cacheComponents: true`. Both pages remain auto-dynamic via existing `cookies()` / `params` consumption; no behavior change.
+- **`tests/test/setup.ts` stubs `next/cache`** (`cacheTag` / `cacheLife` / `revalidateTag`) as no-ops in vitest — they throw outside the Next runtime when `cacheComponents` is enabled.
+
+### Tests
+- 5 backend webhook tests via respx (`tests/share/test_webhook.py`): unconfigured no-op, happy path request shape, 4xx swallow, timeout swallow, tag prefix guarantee.
+- 1 DB-fixture persistence test asserting `revoke_share_slug` returns the removed slug + `""` on double-revoke.
+- 3 DB-fixture share-router tests asserting `BackgroundTasks.add_task` scheduling for POST (new slug), DELETE (just-removed slug), and double-DELETE-doesn't-schedule.
+- 5 frontend vitest cases for `/api/revalidate`: 401 missing secret, 401 wrong secret, 400 missing tag, 400 bad-prefix tag, 204 + `revalidateTag` call shape (asserting `{ expire: 0 }`).
+- Suite: 256 → 261 non-DB backend (5 webhook). 37 → 42 frontend vitest.
+
+### Provisioning gate (before tagging)
+- Generate `REVALIDATE_SECRET` via `python -c "import secrets; print(secrets.token_hex(32))"`. Paste into Vercel as **Sensitive** on **both** `frontend` and `backend` services, Production + Preview. Same value byte-for-byte.
+- Set `FRONTEND_BASE_URL=https://skill-issue-tau.vercel.app` on the **backend** service env (no trailing slash), Production + Preview.
+
+### Notes
+- The webhook is fire-and-forget by design: failure to invalidate logs + Sentry-tags but never affects the share toggle's user-facing response. Worst case under sustained webhook failure is up to 1 hour of stale read until the `cacheLife` fallback fires.
+- 404 results are NOT cached, so a re-share with a brand-new slug works on first hit without manual cache priming.
+
+---
+
 ## [0.8.5] — 2026-05-25
 
 ### Added

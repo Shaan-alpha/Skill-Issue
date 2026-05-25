@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import require_user
@@ -14,6 +14,7 @@ from app.persistence.analyses import (
     set_share_slug,
 )
 from app.settings import settings
+from app.share.webhook import revalidate_share_slug
 
 router = APIRouter(prefix="/analyses", tags=["analyses"])
 
@@ -35,6 +36,7 @@ def _public_share_url(slug: str) -> str:
 @router.post("/{analysis_id}/share")
 async def share_analysis(
     analysis_id: int,
+    background_tasks: BackgroundTasks,
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(require_user)],
 ) -> dict[str, Any]:
@@ -42,17 +44,25 @@ async def share_analysis(
         slug = await set_share_slug(db, analysis_id=analysis_id, owner_id=user.id)
     except AnalysisNotFound as exc:
         raise HTTPException(status_code=403, detail={"error": "not_owner_or_missing"}) from exc
+    # Bust the new slug's cache tag (covers re-share with a fresh slug — the
+    # frontend cache may carry a stale 404 for this slug from a prior revoke).
+    background_tasks.add_task(revalidate_share_slug, slug)
     return {"share_slug": slug, "share_url": _public_share_url(slug)}
 
 
 @router.delete("/{analysis_id}/share", status_code=status.HTTP_204_NO_CONTENT)
 async def revoke_share(
     analysis_id: int,
+    background_tasks: BackgroundTasks,
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(require_user)],
 ) -> Response:
     try:
-        await revoke_share_slug(db, analysis_id=analysis_id, owner_id=user.id)
+        removed_slug = await revoke_share_slug(db, analysis_id=analysis_id, owner_id=user.id)
     except AnalysisNotFound as exc:
         raise HTTPException(status_code=403, detail={"error": "not_owner_or_missing"}) from exc
+    # Synchronously invalidate the frontend's cache for the removed slug so
+    # the next request 404s with no stale window.
+    if removed_slug:
+        background_tasks.add_task(revalidate_share_slug, removed_slug)
     return Response(status_code=204)
