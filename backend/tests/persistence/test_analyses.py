@@ -186,3 +186,18 @@ async def test_get_user_analysis_by_target_case_insensitive(db):
     found = await get_user_analysis_by_target(db, user_id=u.id, target_login="shaan-alpha")
     assert found is not None
     assert found.id == a.id
+
+
+async def test_revoke_share_slug_returns_removed_slug(db):
+    """v0.8.6: caller needs the just-removed slug to bust the frontend ISR
+    cache tag. Empty string when nothing was shared."""
+    u = await _user(db)
+    a = await upsert_analysis(db, user_id=u.id, target_login="t")
+    slug = await set_share_slug(db, analysis_id=a.id, owner_id=u.id)
+    await db.commit()
+
+    removed = await revoke_share_slug(db, analysis_id=a.id, owner_id=u.id)
+    assert removed == slug
+    # Second revoke (already revoked) returns "" — nothing to invalidate.
+    again = await revoke_share_slug(db, analysis_id=a.id, owner_id=u.id)
+    assert again == ""
