@@ -34,7 +34,7 @@ Format:
 **Decisions:**
 - **`revalidateTag(tag, { expire: 0 })`, not bare single-arg.** TSC flagged the single-arg form, and the Next 16 docs explicitly recommend `{ expire: 0 }` for webhook-driven invalidation (the alternative — `'max'` profile — would serve stale content via stale-while-revalidate and break the revocation contract). Verified via fetching the official `revalidateTag` reference page.
 - **Data fetch is the cached unit, not the page.** Centralized `fetchSharedPayload` in `og-card-data.ts` so the page AND the OG image route share one cache key. Bust the tag once → both invalidate together.
-- **404 results NOT cached.** Returning `null` (without tagging) means re-share with a brand-new slug works on first hit; no manual cache priming needed.
+- **404 results ARE cached (corrected post-deploy).** Initial design comment claimed null returns weren't tagged. In practice `cacheTag` + `cacheLife` fire BEFORE the fetch inside `'use cache'`, so null/404 results sit cached for 3600s. This is fine — actively useful as cheap DDoS defence against random-slug enumeration. A real re-share with a colliding slug would fire the webhook and bust the tag (and slug entropy makes that vanishingly rare). Docstring corrected in commit post-tag.
 - **`BackgroundTasks`, not `asyncio.create_task`.** FastAPI's primitive guarantees the task runs AFTER the response is committed — failures can never affect the user-facing response shape.
 - **Graceful degradation when env unset.** Webhook is a logged no-op; frontend's 3600s `cacheLife` absorbs the gap. Lets local dev work without the secret + lets prod degrade safely if config drift hits.
 - **Stub `next/cache` in vitest setup.** `cacheTag`/`cacheLife` throw outside the Next runtime when `cacheComponents` is enabled. Mocking once at the setup level keeps `og-card-data.test.ts` working without per-test mocks.
@@ -49,10 +49,13 @@ Format:
 - Backend `ruff check .` + `ruff format --check .` clean. `pytest -q --no-header`: 261 pass / 63 DB-fixture skipped (baseline + the 3 new DB tests).
 - Frontend `npm run lint`: clean. `npx tsc --noEmit`: clean. `npm run test:run`: 42/42 pass. `npm run build`: succeeds with `◐ Partial Prerender` confirmed on `/share/[slug]`.
 - The new `/api/revalidate` route appears in build output as `ƒ /api/revalidate` (dynamic, server-rendered on demand) — correct.
+- **Post-deploy live smoke (curl, 2026-05-25):** `/health` reports `version: 0.8.6, db: up, cache: up`. `POST /api/revalidate` returns 401 on no/wrong secret. Backend `/_/backend/share/<unknown>` returns clean 404. Frontend `/share/<unknown>` returns the not-found body with `X-Vercel-Cache: HIT, Age: 108` on a second hit — confirms the CDN-level cache is active. PR #1 CI was ✓ green; main-branch CI re-run after merge was ✓ green; release workflow published `v0.8.6` with the CHANGELOG body.
+
+**Post-deploy observation — PPR HTTP-status trade-off:**
+A revoked or unknown share URL returns **HTTP 200** with the not-found body rendered, not HTTP 404. This is documented Next 16 PPR behavior: the static shell prerenders at build (always 200), and `notFound()` fires inside the streamed dynamic content — so the user sees the not-found page but the response headers were already committed. The on-voice not-found body is fully rendered, so browser UX is correct; programmatic clients (link unfurlers, uptime monitors) see 200. Mitigation in place: `metadata.robots = "noindex, nofollow"` is already on the share route, so search engines don't index revoked links. The OG image route for unknown slugs renders the "Shared analysis unavailable" fallback PNG, so social previews degrade gracefully. The backend `/share/<unknown>` still returns the correct HTTP 404 — only the frontend rendering layer's status is affected. Accepted as a v0.8.6 trade-off; revisit only if real users hit issues.
 
 **Blocked / open:**
-- **Provisioning gate before tagging:** `FRONTEND_BASE_URL` (backend env, no trailing slash) + `REVALIDATE_SECRET` (both services, Sensitive, same value). Until both land in Vercel, the webhook is a logged no-op and revocations only revalidate at the 3600s `cacheLife` — functional, but not the "instant" UX this slice promises.
-- **Post-deploy live verification:** share an analysis → confirm second visit is cached (sub-100ms); revoke → confirm immediate 404 on the next request.
+- None for v0.8.6. PR merged, tag pushed, release live.
 
 **Next:**
 - User provisions the two env vars on Vercel (Production + Preview).

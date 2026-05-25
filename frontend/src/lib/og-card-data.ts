@@ -25,15 +25,19 @@ export async function fetchReportForUser(username: string): Promise<Report | nul
 // v0.8.6: cached on Next 16 Cache Components, tagged `share:<slug>`.
 // Backend `POST /analyses/{id}/share` and `DELETE` schedule a webhook to
 // `/api/revalidate` that calls `revalidateTag` with `{ expire: 0 }`, so a
-// revoked slug 404s on the next request with no stale window.
+// revoked slug returns the not-found body on the next request with no
+// stale window (PPR caveat: HTTP status is 200 from the static shell — see
+// PROGRESS_LOG 2026-05-25 v0.8.6 entry for the trade-off).
 //
 // `cacheLife({ revalidate: 3600 })` is a fallback only — the webhook is
 // the primary invalidation path. The 1-hour TTL bounds staleness if the
 // webhook ever silently fails.
 //
-// 404/non-OK is NOT cached (we return null + don't tag), so the next visit
-// retries the backend. This keeps a re-share with a brand-new slug working
-// on first hit.
+// `null` results are tagged the same as successful payloads — so an
+// unknown slug entry stays cached for 3600s (cheap DDoS defence against
+// random slug enumeration). A real re-share with that exact slug would
+// fire the webhook and bust the tag, but slug entropy (72-bit base64url)
+// makes the collision case vanishingly rare.
 export async function fetchSharedPayload(
   slug: string,
 ): Promise<SharedAnalysisPayload | null> {
