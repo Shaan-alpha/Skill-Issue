@@ -10,6 +10,13 @@ on:
     branches:
       - main
 
+# Opt into Node 24 ahead of June 2026 deadline. Without this, GHA warns on
+# every run that actions/checkout@v4, astral-sh/setup-uv@v5, and
+# actions/setup-node@v4 are still running on Node 20 (which is being
+# removed from the runner on 2026-09-16).
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 # Avoid running the workflow twice for the same PR (push + pull_request both
 # fire). Cancel in-progress runs for the same ref when a new push lands.
 concurrency:

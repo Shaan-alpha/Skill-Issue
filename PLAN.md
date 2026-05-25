@@ -459,14 +459,29 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 ## v0.8.6 — On-demand `revalidateTag` for `/share/[slug]` ISR (deferred from v0.7.1)
 
-**Goal:** Public share pages can be ISR-cached safely because revocation immediately busts the tag.
+**Goal:** Public share pages render from a per-slug Next 16 Cache Components cache; backend share-toggle endpoints synchronously bust the tag via a shared-secret webhook. A revoked slug 404s on the next request — no stale window. Closes v0.7.1's deferral.
 
-**Slice scope:**
-- `/share/[slug]` route gets `unstable_cache` (or Next 16 Cache Components equivalent) with a per-slug tag.
-- Backend share-toggle endpoints (`POST` + `DELETE`) call a small frontend webhook (`POST /api/revalidate?tag=share:<slug>`) authenticated with a shared secret.
-- Both sides covered by tests including the "revoked slug renders 404 immediately" assertion.
+**Design spec:** [`docs/superpowers/specs/2026-05-25-v0.8.6-share-isr-design.md`](./docs/superpowers/specs/2026-05-25-v0.8.6-share-isr-design.md).
 
-**Exit criteria:** TBD when the slice begins.
+**Sub-plan:** [`docs/superpowers/plans/2026-05-25-v0.8.6-share-isr.md`](./docs/superpowers/plans/2026-05-25-v0.8.6-share-isr.md) — 9 tasks, TDD-ordered.
+
+**Slice scope (locked 2026-05-25):**
+- `/share/[slug]/page.tsx` and `/share/[slug]/opengraph-image.tsx` migrate from `force-dynamic` to `'use cache'` + `cacheTag(\`share:${slug}\`)` + `cacheLife({ revalidate: 3600 })`. 3600s is a fallback only — the webhook is the primary invalidation path.
+- New `frontend/src/app/api/revalidate/route.ts` — POST with `X-Revalidate-Secret` + `{tag: "share:<slug>"}`. Constant-time secret compare, regex-validated tag (`^share:[A-Za-z0-9_-]{1,64}$`), calls `revalidateTag`, returns 204.
+- New `backend/app/share/webhook.py::revalidate_share_slug(slug)` — fire-and-forget POST scheduled via FastAPI `BackgroundTasks` after every `set_share_slug` / `revoke_share_slug`. 5 s timeout. All failures logged + swallowed (Sentry breadcrumb); the toggle's HTTP response never blocks on it.
+- `revoke_share_slug` return signature changes from `None` → `str` so the caller can pass the just-removed slug to the webhook.
+- Two new env vars: `FRONTEND_BASE_URL` (backend) and `REVALIDATE_SECRET` (both sides). Either unset = graceful degradation: cacheLife absorbs the gap. Provisioning gate before tag.
+
+**Exit criteria:**
+- [ ] `revalidate_share_slug` is a no-op + warning-log when either env var is unset.
+- [ ] `revalidate_share_slug` POSTs the expected URL / headers / body when both are set; 4xx + timeout swallowed.
+- [ ] `share_analysis` + `revoke_share` enqueue the webhook via `BackgroundTasks`; DB-fixture tests assert the task fires with the right slug.
+- [ ] `revoke_share_slug` returns the removed slug string.
+- [ ] Frontend `/api/revalidate` returns 401 on missing/wrong secret, 400 on bad tag, 204 + `revalidateTag` called on valid request.
+- [ ] `/share/[slug]/page.tsx` no longer carries `force-dynamic`; second visit to the same slug is sub-100ms; revoke → 404 on next request with no TTL window.
+- [ ] `/share/[slug]/opengraph-image.tsx` uses the same cache tag so social previews invalidate alongside the page.
+- [ ] 13 new tests pass (5 webhook + 1 persistence + 2 share-router + 5 frontend). Suite 256 → 262 backend non-DB; 37 → 42 frontend vitest.
+- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version bumped to `0.8.6`.
 
 ---
 
