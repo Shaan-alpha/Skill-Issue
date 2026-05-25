@@ -130,11 +130,22 @@ def _clear_cache_lru_between_tests():
 
 @pytest_asyncio.fixture(scope="session")
 def test_database_url() -> str:
+    """Resolve TEST_DATABASE_URL or skip the dependent test.
+
+    DB-fixture tests need a real Postgres branch (Neon dev branch or a local
+    Postgres reachable on `localhost:5432`). Locally + in the v0.8.5 CI gate
+    we run without one, so the right behaviour is to **skip** these tests
+    cleanly rather than error them. A raised RuntimeError would make pytest
+    exit non-zero and break CI even though the non-DB suite is green.
+
+    Setting `TEST_DATABASE_URL=postgresql+asyncpg://...` enables the suite
+    (e.g. a Neon branch-per-PR provisioner, planned post-v0.8.5).
+    """
     url = os.environ.get("TEST_DATABASE_URL")
     if not url:
-        raise RuntimeError(
-            "TEST_DATABASE_URL must be set. Use a Neon branch or local Postgres. "
-            "Example: postgresql+asyncpg://postgres:postgres@localhost:5432/skill_issue_test"
+        pytest.skip(
+            "TEST_DATABASE_URL unset — skipping DB-fixture tests. "
+            "Set to a Postgres URL (e.g. a Neon dev branch) to enable."
         )
     return url
 
