@@ -19,6 +19,41 @@ Format:
 
 ---
 
+## 2026-05-25 — Claude (Opus 4.7) — v0.8.5 shipped (CI pipeline + dep cleanup)
+
+**Slice:** v0.8.5 — `.github/workflows/ci.yml` + regenerated `backend/requirements.txt`.
+
+**Done:**
+- **New CI workflow** at `.github/workflows/ci.yml`. Two parallel jobs:
+  - **Backend:** `uv sync --frozen --dev` → `ruff check .` → `ruff format --check .` → `pytest -q --no-header` (non-DB-fixture; DB-fixture suite still requires `TEST_DATABASE_URL` against a Neon branch).
+  - **Frontend:** `npm ci` → `npm run lint` → `npx tsc --noEmit` → `npm run test:run` → `npm run build` (with `NEXT_PUBLIC_BACKEND_URL=http://ci-placeholder` so module-level env reads don't crash the build).
+- Runs on every PR and every push to `main`. Concurrency group cancels stale runs on the same ref so a push-on-top-of-PR doesn't burn two parallel slots.
+- Uses `astral-sh/setup-uv@v5` for uv install + dependency caching (keyed off `backend/uv.lock`); `actions/setup-node@v4` for the Node 24 LTS pin + npm caching.
+- **Regenerated `backend/requirements.txt`** via `uv export --no-hashes --no-dev`. Previous file was missing 9 of 15 direct deps (`alembic`, `asyncpg`, `authlib`, `cryptography`, `openai`, `sentry-sdk`, `sqlalchemy`, `structlog`, `upstash-redis`). Production survived only because `@vercel/python` resolves through `pyproject.toml` + `uv.lock`. New file is 138 lines (was 82) and matches the locked closure.
+- **Version + docs ritual:** `pyproject.toml`, `app/settings.py::VERSION`, `frontend/package.json`, landing-pill + results-footer literals, README status, CHANGELOG `[0.8.5]`, PLAN `v0.8.5` slice + map row.
+
+**Decisions:**
+- **Skip DB-fixture tests in the cheap CI gate.** Provisioning a Postgres service for the matrix doubles wall-clock and complicates secrets; the 256-test non-DB suite is the right pre-merge gate. DB-fixture tests stay as a separate Vercel-deploy-side check (and get a "Neon branch-per-PR" treatment in a future v0.8.x patch).
+- **`NEXT_PUBLIC_BACKEND_URL=http://ci-placeholder`** instead of conditionally-skipping the build step. The build path exercises a lot of code (Server Component bundle, Turbopack output, route discovery) — leaving a real env value out would silently mask half the regression surface this gate exists to catch.
+- **Concurrency group cancels in-progress runs** so a fast-pushing dev doesn't pile up CI runs. Default is fine — GitHub doesn't bill the canceled minutes.
+
+**Learned / surprises:**
+- **The audit caught the broken `requirements.txt`, not any tooling.** Vercel's `@vercel/python` quietly used `pyproject.toml` + `uv.lock`, so the regression never broke prod. Lesson: file-level invariants ("requirements.txt must list every direct dep") need their own check or they drift silently for months.
+
+**Verified:**
+- Local `uv run pytest -q`: 256 pass / 59 DB-fixture errors (unchanged baseline). `uv run ruff check .` + `uv run ruff format --check .` clean. `npm run lint && npm run test:run && npm run build` clean locally (CI will exercise the full chain on push).
+- `requirements.txt` head shows `alembic`, `asyncpg`, `authlib`, `cryptography`, `openai` — the missing 5 of the original 9.
+
+**Blocked / open:**
+- First CI run lands when the push goes out — the workflow's correctness only proves itself on the actual GHA runner. If `setup-uv@v5` or the Python pin behaves differently than locally, that's a quick follow-up patch.
+
+**Next:**
+- Push main → tag `v0.8.4` (the prior commit) + `v0.8.5` (this commit) → release workflow fires for both → Vercel auto-deploys.
+- v0.8.6 begins — on-demand `revalidateTag` for `/share/[slug]` ISR.
+- The v0.9.0 PLAN slice now explicitly lists the four audit-driven perf carryovers (bounded GH fan-out, `/me/analyses` N+1 fix, DB pool tune, Layer A cache schema version) so they don't get lost between releases.
+
+---
+
 ## 2026-05-25 — Claude (Opus 4.7) — v0.8.4 hotfix shipped (narrative persistence honesty)
 
 **Slice:** v0.8.4 — narrative `is_fallback` propagation + `provider` derivation + narrative-mode CHECK constraint trim + GH `User-Agent` version tracking.

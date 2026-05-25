@@ -8,6 +8,20 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
+## [0.8.5] — 2026-05-25
+
+### Added
+- **CI pipeline** — `.github/workflows/ci.yml` runs on every pull request and every push to `main`. Backend job: `uv sync --frozen --dev` → `ruff check .` → `ruff format --check .` → `pytest -q` (non-DB-fixture path; the DB-fixture suite still requires `TEST_DATABASE_URL` against a Neon branch and is left as a separate Vercel-deploy-side check). Frontend job: `npm ci` → `npm run lint` → `npx tsc --noEmit` → `npm run test:run` → `npm run build` (with `NEXT_PUBLIC_BACKEND_URL=http://ci-placeholder` so module-level env reads don't crash the build). Concurrency group cancels stale in-progress runs when a new push lands on the same ref. Pairs naturally with v0.8.3's "regression caught only post-deploy via Sentry" lesson — that loop now closes pre-merge.
+
+### Fixed
+- **`backend/requirements.txt` was missing 9 of 15 direct runtime deps** (`alembic`, `asyncpg`, `authlib`, `cryptography`, `openai`, `sentry-sdk`, `sqlalchemy`, `structlog`, `upstash-redis`). Production survived only because `@vercel/python` resolves through `pyproject.toml` + `uv.lock`; any developer/contributor / Docker build / CI matrix using `pip install -r requirements.txt` would have produced a broken environment. Regenerated via `uv export --no-hashes --no-dev` so the file matches the locked closure (138 lines, was 82).
+
+### Notes
+- The CI run takes ~3-4 minutes on a cold cache and ~90 s warm — comfortably within GitHub Actions' free-tier minutes budget for the open-source repo.
+- DB-fixture tests still skip in CI for now; adding a `services: postgres:` block + setting `TEST_DATABASE_URL` is a v0.8.x patch once Neon branch-per-PR provisioning lands (separate from CI scope here).
+
+---
+
 ## [0.8.4] — 2026-05-25
 
 ### Fixed

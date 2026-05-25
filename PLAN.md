@@ -35,6 +35,7 @@
 | **v0.8.2** | Manual "Force refresh" on `/me` + `POST /me/refresh/{username}` (synchronous re-ingest, 10/hr per-user cap) | ✅ shipped |
 | **v0.8.3** | Hotfix — empty-repo 409 from GitHub `/commits` and `/contents` no longer crashes analysis | ✅ shipped |
 | **v0.8.4** | Hotfix — narrative persistence honesty (`is_fallback` + `provider` derived correctly, narrative-mode CHECK trimmed, GH `User-Agent` tracks VERSION) | ✅ shipped |
+| **v0.8.5** | CI pipeline (`pytest` + `ruff` + `npm lint/test/build` on every PR) + `requirements.txt` regenerated (was missing 9 of 15 direct deps) | ✅ shipped |
 | **v0.8.6** | On-demand `revalidateTag` for `/share/[slug]` ISR (closes v0.7.1's deferred share-page caching) | deferred from v0.7.1 |
 | **v0.8.7** | `vercel.json` → `vercel.ts` migration (Vercel 2026-02-27 knowledge update) | deferred from pre-v0.7.1 |
 | **v0.9.0** | Beta hardening — security review, abuse mitigation, load test, legal | pending |
@@ -437,6 +438,25 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 ---
 
+## v0.8.5 — CI pipeline + dep cleanup (shipped 2026-05-25)
+
+**Goal:** Close the v0.8.3-style "ship a regression, learn about it from Sentry post-deploy" loop by exercising the whole test + lint + build stack pre-merge.
+
+**Slice scope (shipped):**
+- New `.github/workflows/ci.yml`: backend job (`uv sync --frozen --dev` → `ruff check` → `ruff format --check` → `pytest -q`) + frontend job (`npm ci` → `npm run lint` → `npx tsc --noEmit` → `npm run test:run` → `npm run build`). Runs on every PR and every push to `main`. Concurrency group cancels stale runs on the same ref.
+- `backend/requirements.txt` regenerated via `uv export --no-hashes --no-dev` so it carries all 15 direct deps + transitive closure (138 lines, was 82). Prior `requirements.txt` was missing 9 of 15 direct deps — production survived only because `@vercel/python` resolves through `pyproject.toml` + `uv.lock`.
+
+**Exit criteria:**
+- [x] CI workflow runs on PR + push-to-main; concurrency group cancels stale runs.
+- [x] Both backend and frontend jobs pass on the v0.8.5 commit.
+- [x] `requirements.txt` contains `alembic`, `asyncpg`, `authlib`, `cryptography`, `openai`, `sentry-sdk`, `sqlalchemy`, `structlog`, `upstash-redis`.
+- [x] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version bumped to `0.8.5`.
+
+**Deferred to a v0.8.x patch:**
+- DB-fixture tests in CI need a `services: postgres:` block + `TEST_DATABASE_URL`; pairs with Neon branch-per-PR provisioning (out of scope here).
+
+---
+
 ## v0.8.6 — On-demand `revalidateTag` for `/share/[slug]` ISR (deferred from v0.7.1)
 
 **Goal:** Public share pages can be ISR-cached safely because revocation immediately busts the tag.
@@ -464,19 +484,29 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 ## v0.9.0 — Beta hardening
 
-**Goal:** Public-ready security and abuse posture.
+**Goal:** Public-ready security, perf, and abuse posture.
 
 **Slice scope:**
-- Rate limiting per IP + per authenticated user
-- Abuse heuristics: reject usernames with suspicious patterns, throttle scrapers
-- Security review (manual + run `/security-review`)
-- Load test to 100 RPS sustained
-- Privacy policy + terms
+- **Security + abuse**
+  - Rate limiting per IP + per authenticated user
+  - Abuse heuristics: reject usernames with suspicious patterns, throttle scrapers
+  - Security review (manual + run `/security-review`)
+  - Load test to 100 RPS sustained
+  - Privacy policy + terms
+- **Performance + reliability (carried in from 2026-05-25 audit)**
+  - **Bounded GitHub fan-out.** `app/ingestion/profile.py` currently `asyncio.gather`s up to ~40 concurrent GH requests per analysis (root contents + languages + commits across top 20 repos × 3 endpoints). At anonymous-token sharing, ~125 analyses/hr exhaust the 5000/hr budget. Wrap the gathers with `asyncio.Semaphore(8)`.
+  - **`/me/analyses` N+1 fix.** Per-row `select(AnalysisRun)` becomes a single `joinedload`. Trivial; visible at scale.
+  - **DB pool tune.** `pool_size=5, max_overflow=5` is small for Fluid Compute multiplexing. Raise to `pool_size=10, max_overflow=20` after RUM confirms the symptom in PostHog/Sentry.
+  - **Layer A cache schema version.** Suffix the Report cache key with a `REPORT_SCHEMA_VERSION` constant; bump on `Report` shape changes. Avoids 6 h of validation-warning spam on every schema bump.
 
 **Exit criteria:**
 - [ ] No high or critical issues from `/security-review`
 - [ ] Load test passes target without errors
 - [ ] Legal docs live and linked from footer
+- [ ] Ingestion fan-out bounded; verified by integration test against a 50-repo profile
+- [ ] `/me/analyses` issues at most 2 queries per page (list + `joinedload` of runs)
+- [ ] DB pool changes guarded by a measured baseline before/after in PostHog
+- [ ] Cache schema version constant in place; bumping it busts the namespace
 - [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.9.0`
 
 ---
