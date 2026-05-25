@@ -68,6 +68,8 @@ In Vercel → **Settings** → **Environment Variables**, add (Production + Prev
 | `UPSTASH_REDIS_REST_URL` | from step 2 (Upstash) | ✅ |
 | `UPSTASH_REDIS_REST_TOKEN` | from step 2 (Upstash) | ✅ |
 | `CRON_SECRET` | 32+ byte random hex string. Vercel Cron injects `Authorization: Bearer ${CRON_SECRET}` on every fire; the backend's `require_cron_auth` constant-time-compares it. Unset = `POST /cron/refresh-saved-analyses` returns 503. Generate: `python -c "import secrets; print(secrets.token_hex(32))"`. (v0.8.1+) | ✅ |
+| `FRONTEND_BASE_URL` | `https://<your-vercel-host>` (no trailing slash). **Backend env only.** Where the share-revalidate webhook POSTs to. Unset = webhook is a logged no-op; the 3600s `cacheLife` fallback absorbs revocations. (v0.8.6+) | — |
+| `REVALIDATE_SECRET` | 32+ byte random hex string. **Both `frontend` and `backend` services**, same value byte-for-byte. Authenticates the backend → frontend webhook that busts `/share/[slug]` cache tags on every share toggle. Unset = webhook disabled; revocations only revalidate at the 3600s fallback. Generate: `python -c "import secrets; print(secrets.token_hex(32))"`. (v0.8.6+) | ✅ |
 
 ### 5. Run the initial Alembic migration
 

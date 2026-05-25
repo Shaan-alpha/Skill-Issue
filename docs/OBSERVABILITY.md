@@ -117,6 +117,16 @@ breadcrumbs/events.
 | `cron.refresh_rate_limited` | error | **capture** | First 403 with `X-RateLimit-Remaining: 0`. Chunk halts. |
 | `cron.refresh_chunk_complete` | info | breadcrumb | After commit, with `processed`, `succeeded`, `skipped`, `rate_limited`, `deadline_reached` |
 
+### Share-revalidation webhook taxonomy (v0.8.6)
+
+Backend → frontend webhook for busting `/share/[slug]` cache tags after a share toggle. Fire-and-forget via FastAPI `BackgroundTasks`; failure never affects the toggle's HTTP response.
+
+| Event | Level | Sentry | Fired when |
+| --- | --- | --- | --- |
+| `share.revalidate_skipped` | warn | breadcrumb | `FRONTEND_BASE_URL` or `REVALIDATE_SECRET` unset — fallback is the 3600s `cacheLife` |
+| `share.revalidate_succeeded` | info | breadcrumb | Frontend returned 2xx within the 5s timeout |
+| `share.revalidate_failed` | warn | breadcrumb | 4xx response, network error, or timeout. Includes status/body excerpt for 4xx |
+
 ## PII contract
 
 These fields must never reach Sentry or PostHog. Code that handles them is

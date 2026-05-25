@@ -36,7 +36,7 @@
 | **v0.8.3** | Hotfix — empty-repo 409 from GitHub `/commits` and `/contents` no longer crashes analysis | ✅ shipped |
 | **v0.8.4** | Hotfix — narrative persistence honesty (`is_fallback` + `provider` derived correctly, narrative-mode CHECK trimmed, GH `User-Agent` tracks VERSION) | ✅ shipped |
 | **v0.8.5** | CI pipeline (`pytest` + `ruff` + `npm lint/test/build` on every PR) + `requirements.txt` regenerated (was missing 9 of 15 direct deps) | ✅ shipped |
-| **v0.8.6** | On-demand `revalidateTag` for `/share/[slug]` ISR (closes v0.7.1's deferred share-page caching) | deferred from v0.7.1 |
+| **v0.8.6** | On-demand `revalidateTag` for `/share/[slug]` ISR (closes v0.7.1's deferred share-page caching) | ✅ shipped |
 | **v0.8.7** | `vercel.json` → `vercel.ts` migration (Vercel 2026-02-27 knowledge update) | deferred from pre-v0.7.1 |
 | **v0.9.0** | Beta hardening — security review, abuse mitigation, load test, legal | pending |
 | **v1.0.0** | Public launch | pending |
@@ -473,15 +473,15 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 - Two new env vars: `FRONTEND_BASE_URL` (backend) and `REVALIDATE_SECRET` (both sides). Either unset = graceful degradation: cacheLife absorbs the gap. Provisioning gate before tag.
 
 **Exit criteria:**
-- [ ] `revalidate_share_slug` is a no-op + warning-log when either env var is unset.
-- [ ] `revalidate_share_slug` POSTs the expected URL / headers / body when both are set; 4xx + timeout swallowed.
-- [ ] `share_analysis` + `revoke_share` enqueue the webhook via `BackgroundTasks`; DB-fixture tests assert the task fires with the right slug.
-- [ ] `revoke_share_slug` returns the removed slug string.
-- [ ] Frontend `/api/revalidate` returns 401 on missing/wrong secret, 400 on bad tag, 204 + `revalidateTag` called on valid request.
-- [ ] `/share/[slug]/page.tsx` no longer carries `force-dynamic`; second visit to the same slug is sub-100ms; revoke → 404 on next request with no TTL window.
-- [ ] `/share/[slug]/opengraph-image.tsx` uses the same cache tag so social previews invalidate alongside the page.
-- [ ] 13 new tests pass (5 webhook + 1 persistence + 2 share-router + 5 frontend). Suite 256 → 262 backend non-DB; 37 → 42 frontend vitest.
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version bumped to `0.8.6`.
+- [x] `revalidate_share_slug` is a no-op + warning-log when either env var is unset.
+- [x] `revalidate_share_slug` POSTs the expected URL / headers / body when both are set; 4xx + timeout swallowed.
+- [x] `share_analysis` + `revoke_share` enqueue the webhook via `BackgroundTasks`; DB-fixture tests assert the task fires with the right slug.
+- [x] `revoke_share_slug` returns the removed slug string.
+- [x] Frontend `/api/revalidate` returns 401 on missing/wrong secret, 400 on bad tag, 204 + `revalidateTag` called on valid request.
+- [x] `/share/[slug]/page.tsx` no longer carries `force-dynamic`; build output confirms `◐ Partial Prerender` treatment. Live revoke → 404 verification post-deploy.
+- [x] `/share/[slug]/opengraph-image.tsx` uses the same cache tag (transitively via `fetchReportForSlug` → `fetchSharedPayload`) so social previews invalidate alongside the page.
+- [x] 14 new tests pass (5 webhook + 1 persistence + 3 share-router + 5 frontend). Suite 256 → 261 backend non-DB; 37 → 42 frontend vitest.
+- [x] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version bumped to `0.8.6`.
 
 ---
 

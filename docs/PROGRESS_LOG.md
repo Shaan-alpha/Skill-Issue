@@ -19,6 +19,48 @@ Format:
 
 ---
 
+## 2026-05-25 — Claude (Opus 4.7) — v0.8.6 shipped (`/share/[slug]` PPR + revalidateTag webhook)
+
+**Slice:** v0.8.6 — Next 16 Cache Components on `/share/[slug]` + shared-secret backend→frontend webhook for instant tag invalidation. Closes v0.7.1's deferred share-page caching.
+
+**Done:**
+- All 9 tasks from [`docs/superpowers/plans/2026-05-25-v0.8.6-share-isr.md`](./superpowers/plans/2026-05-25-v0.8.6-share-isr.md). Inline TDD execution with two course-corrections (see Learned).
+- **Backend:** new `app/share/webhook.py::revalidate_share_slug` (fire-and-forget httpx POST to `${FRONTEND_BASE_URL}/api/revalidate`, 5s timeout, all errors logged + swallowed). New `Settings.frontend_base_url` + `Settings.revalidate_secret` (both `None` → graceful no-op). `revoke_share_slug` return signature changed `None` → `str` so the caller has the just-removed slug to invalidate. `share_analysis` and `revoke_share` schedule the webhook via FastAPI `BackgroundTasks`.
+- **Frontend:** new `POST /api/revalidate` route — `crypto.timingSafeEqual` against `process.env.REVALIDATE_SECRET`, tag regex `^share:[A-Za-z0-9_-]{1,64}$`, calls `revalidateTag(tag, { expire: 0 })` for immediate invalidation. `og-card-data.ts::fetchSharedPayload` is the new `'use cache'` data fetcher with `cacheTag(share:<slug>)` + `cacheLife({ revalidate: 3600 })`; `fetchReportForSlug` delegates to it so OG image route shares the cache. `/share/[slug]/page.tsx` migrated to PPR: data fetch inside a `<Suspense>`-wrapped `SharedContent`, await params inside the boundary, build output confirms `◐ Partial Prerender`.
+- **`next.config.ts` cacheComponents: true.** Required `force-dynamic` removal from `/me/page.tsx` and `/u/[username]/card/page.tsx` (incompatible); both keep auto-dynamic semantics via existing `cookies()`/`params` consumption.
+- **Tests:** 5 backend webhook (`tests/share/test_webhook.py`) + 1 DB-fixture persistence + 3 DB-fixture share-router + 5 frontend vitest (`/api/revalidate/__tests__/route.test.ts`). Non-DB backend suite: 256 → 261. Frontend vitest: 37 → 42.
+- **Docs:** `docs/DEPLOY.md` rows for `FRONTEND_BASE_URL` + `REVALIDATE_SECRET`. `docs/OBSERVABILITY.md` `share.revalidate_*` taxonomy (skipped / succeeded / failed). `CHANGELOG.md` `[0.8.6]` section. `PLAN.md` v0.8.6 marked ✅ shipped, all exit-criteria boxes flipped. README status pill + `/health` curl example bumped. Landing pill + results-view footer literals bumped.
+
+**Decisions:**
+- **`revalidateTag(tag, { expire: 0 })`, not bare single-arg.** TSC flagged the single-arg form, and the Next 16 docs explicitly recommend `{ expire: 0 }` for webhook-driven invalidation (the alternative — `'max'` profile — would serve stale content via stale-while-revalidate and break the revocation contract). Verified via fetching the official `revalidateTag` reference page.
+- **Data fetch is the cached unit, not the page.** Centralized `fetchSharedPayload` in `og-card-data.ts` so the page AND the OG image route share one cache key. Bust the tag once → both invalidate together.
+- **404 results NOT cached.** Returning `null` (without tagging) means re-share with a brand-new slug works on first hit; no manual cache priming needed.
+- **`BackgroundTasks`, not `asyncio.create_task`.** FastAPI's primitive guarantees the task runs AFTER the response is committed — failures can never affect the user-facing response shape.
+- **Graceful degradation when env unset.** Webhook is a logged no-op; frontend's 3600s `cacheLife` absorbs the gap. Lets local dev work without the secret + lets prod degrade safely if config drift hits.
+- **Stub `next/cache` in vitest setup.** `cacheTag`/`cacheLife` throw outside the Next runtime when `cacheComponents` is enabled. Mocking once at the setup level keeps `og-card-data.test.ts` working without per-test mocks.
+
+**Learned / surprises:**
+- **TypeScript caught the `revalidateTag` arity mismatch.** The Vercel `next-cache-components` skill example showed `revalidateTag('posts')` (single arg) but the actual installed `next@16.2.6` types require `(tag, profile)`. The official docs confirm two-arg is now required; the skill example is from a slightly older API. **Memo:** when a skill's code example contradicts TSC against the installed package version, trust TSC + fetch the live docs — skills can drift relative to point-release type definitions.
+- **`cacheComponents: true` is incompatible with `force-dynamic`.** Two pages outside the v0.8.6 scope (`/me`, `/u/[username]/card`) carried the directive; the build refused to start until they were removed. Both pages remain dynamic via `cookies()` / `params` consumption, so no behavior change — just had to drop the explicit declaration. Worth flagging in any future Cache Components migration: a grep for `force-dynamic` is part of pre-work.
+- **`await params` outside `<Suspense>` is a PPR build failure.** First Suspense placement (around `<SharedContent slug={slug}>`) still failed because `await params` happened in the page function itself. Fix: pass `params` (the Promise) through to the child and `await` it inside the Suspense boundary. The page function is no longer `async`. **Memo:** with Cache Components, ALL request-time access — including param resolution — must sit inside a Suspense.
+- **`next build --debug-prerender` was decisive.** Original prerender error stack pointed at `framer-provider.tsx` line 5 (the function signature) — totally misleading. Debug mode gave `at SharePage (...:2842:22)` which pinpointed the actual culprit. Worth memo-ing for future PPR debugging.
+
+**Verified:**
+- Backend `ruff check .` + `ruff format --check .` clean. `pytest -q --no-header`: 261 pass / 63 DB-fixture skipped (baseline + the 3 new DB tests).
+- Frontend `npm run lint`: clean. `npx tsc --noEmit`: clean. `npm run test:run`: 42/42 pass. `npm run build`: succeeds with `◐ Partial Prerender` confirmed on `/share/[slug]`.
+- The new `/api/revalidate` route appears in build output as `ƒ /api/revalidate` (dynamic, server-rendered on demand) — correct.
+
+**Blocked / open:**
+- **Provisioning gate before tagging:** `FRONTEND_BASE_URL` (backend env, no trailing slash) + `REVALIDATE_SECRET` (both services, Sensitive, same value). Until both land in Vercel, the webhook is a logged no-op and revocations only revalidate at the 3600s `cacheLife` — functional, but not the "instant" UX this slice promises.
+- **Post-deploy live verification:** share an analysis → confirm second visit is cached (sub-100ms); revoke → confirm immediate 404 on the next request.
+
+**Next:**
+- User provisions the two env vars on Vercel (Production + Preview).
+- Open PR for `feat/v0.8.6-share-isr` → merge to `main` → tag `v0.8.6` → release.
+- v0.8.7 begins — `vercel.json` → `vercel.ts` migration.
+
+---
+
 ## 2026-05-25 — Claude (Opus 4.7) — v0.8.5 shipped (CI pipeline + dep cleanup)
 
 **Slice:** v0.8.5 — `.github/workflows/ci.yml` + regenerated `backend/requirements.txt`.
