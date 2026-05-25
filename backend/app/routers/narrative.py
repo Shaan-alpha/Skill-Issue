@@ -4,6 +4,7 @@ import hashlib
 import json
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Annotated, Literal
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -13,10 +14,11 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
 from app.auth.dependencies import optional_session
+from app.db.models import AnalysisRun
 from app.db.session import get_db
 from app.dependencies import get_narrative_service, get_report_for_user
 from app.models import Report
-from app.narrative.service import NarrativeService
+from app.narrative.service import NarrativeService, NarrativeStreamMeta
 from app.persistence.analyses import record_run, upsert_analysis
 from app.persistence.narratives import save_narrative
 from app.settings import settings
@@ -28,6 +30,30 @@ def _scores_hash(report: Report) -> str:
     return hashlib.sha256(
         json.dumps(report.model_dump(mode="json"), sort_keys=True).encode("utf-8")
     ).hexdigest()
+
+
+def _resolve_provider(base_url: str | None) -> str:
+    """Map `NARRATIVE_BASE_URL` to a stable provider tag for analytics.
+
+    Default (None / OpenAI's own host) → "openai". Recognised OpenAI-compatible
+    hosts get their own tag. Everything else is "openai-compatible" so we never
+    silently mislabel an unknown provider.
+    """
+    if not base_url:
+        return "openai"
+    try:
+        host = (urlparse(base_url).hostname or "").lower()
+    except ValueError:
+        return "openai-compatible"
+    if host.endswith("openai.com"):
+        return "openai"
+    if host.endswith("groq.com"):
+        return "groq"
+    if host.endswith("openrouter.ai"):
+        return "openrouter"
+    if host.endswith("cerebras.ai"):
+        return "cerebras"
+    return "openai-compatible"
 
 
 @router.get("/narrative/{username}")
@@ -51,9 +77,9 @@ async def get_narrative(
 
     async def event_generator() -> AsyncIterator[str]:
         acc: list[str] = []
-        is_fallback = False
+        meta = NarrativeStreamMeta()
         started_at = datetime.now(UTC)
-        async for chunk in service.stream_narrative(typed_mode, report):
+        async for chunk in service.stream_narrative(typed_mode, report, meta=meta):
             acc.append(chunk)
             payload = json.dumps({"chunk": chunk})
             yield f"data: {payload}\n\n"
@@ -66,8 +92,6 @@ async def get_narrative(
             shash = _scores_hash(report)
             latest_run = None
             if analysis.latest_run_id is not None:
-                from app.db.models import AnalysisRun
-
                 cand = await db.get(AnalysisRun, analysis.latest_run_id)
                 if cand is not None and cand.scores_hash == shash:
                     latest_run = cand
@@ -88,9 +112,9 @@ async def get_narrative(
                 analysis_run_id=latest_run.id,
                 mode=typed_mode,
                 text="".join(acc),
-                provider="openai",
-                model_name=settings.narrative_model if not is_fallback else None,
-                is_fallback=is_fallback,
+                provider=_resolve_provider(settings.narrative_base_url),
+                model_name=None if meta.is_fallback else settings.narrative_model,
+                is_fallback=meta.is_fallback,
             )
             await db.commit()
 

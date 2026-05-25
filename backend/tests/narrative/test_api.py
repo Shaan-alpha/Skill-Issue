@@ -196,5 +196,8 @@ async def test_signed_in_narrative_persists(db, monkeypatch):
     n = await db.scalar(select(Narrative).where(Narrative.mode == "roast"))
     assert n is not None
     assert "Hello" in n.text
+    # Provider derives from settings.narrative_base_url. Test env has it unset,
+    # so the OpenAI default applies; v0.8.4 fix prevents prod (Groq) from
+    # being silently mislabeled as openai.
     assert n.provider == "openai"
     assert n.is_fallback is False

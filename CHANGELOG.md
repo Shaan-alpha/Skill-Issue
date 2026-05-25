@@ -8,6 +8,31 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
+## [0.8.4] — 2026-05-25
+
+### Fixed
+- **Persisted narratives were silently mislabelled.** The SSE persistence path in `app/routers/narrative.py` always wrote `provider="openai"` and `is_fallback=False`, regardless of whether the live LLM produced the text or the deterministic fallback did. In production that meant every Groq narrative was tagged "openai" and no row ever reflected a budget-exhaust or upstream-error fallback. Both columns are now derived honestly:
+  - `is_fallback` is propagated through a new `NarrativeStreamMeta` dataclass that `NarrativeService.stream_narrative` writes to and the route reads after the stream finishes. Per-request state, no service-singleton race.
+  - `provider` is derived from `settings.narrative_base_url` via a new `_resolve_provider` helper: `groq` for `*.groq.com`, `openrouter` for `*.openrouter.ai`, `cerebras` for `*.cerebras.ai`, `openai` for `*.openai.com` and the default, `openai-compatible` for anything else (so unknown providers are never silently mislabeled).
+  - `model_name` is now `NULL` on fallback rows (matched the column's design intent — it only applies to real LLM rows).
+- **Stale narrative mode CHECK constraint.** The original v0.5.0 schema allowed `mode IN ('roast','mentor','recruiter','cto','career')` but the latter three were dropped in v0.6.0 (2026-05-19). New Alembic migration `20260525_0002_trim_narrative_mode_check.py` tightens the constraint to `('roast','mentor')` and reverses cleanly via `downgrade()`. Model in `app/db/models.py` mirrors the new constraint.
+- **GitHub `User-Agent` was frozen at `skill-issue/0.1.0`** (the v0.1.0 ingestion-MVP slice) despite seven minor releases shipping since. Now derived from `app.settings.VERSION` so traffic to api.github.com is attributed honestly to whatever version is actually deployed.
+
+### Changed
+- `app/narrative/service.py::stream_narrative` accepts an optional `meta: NarrativeStreamMeta` kwarg. Calls without `meta` (every existing test, every existing internal caller) work unchanged — the iterator still yields `str`, the SSE serializer stays the same.
+- `app/routers/narrative.py` lifts the `from app.db.models import AnalysisRun` import out of `event_generator` into module scope.
+
+### Tests
+- 4 new unit tests in `tests/narrative/test_service.py` covering `meta.is_fallback` / `meta.fallback_reason` / `meta.cache_hit` propagation across all four paths (cache hit, budget exhaust, live stream, error fallback).
+- 9 new parametrized cases in `tests/narrative/test_provider_resolution.py` covering the URL → provider mapping including the unknown-host `openai-compatible` fallback.
+- Suite: 243 → 256 non-DB-fixture pass.
+
+### Notes
+- This is a hotfix that interpolates ahead of the originally-planned v0.8.4 (`revalidateTag` ISR). PLAN.md downstream shifted: `revalidateTag` → v0.8.6, `vercel.json → vercel.ts` → v0.8.7. Matches the v0.7.x and v0.8.3 hotfix precedent.
+- Existing rows in `narratives` carrying the misattribution are not retroactively fixed by this release. A separate backfill (if anyone ever queries this column historically) would be SQL-only; not worth a migration since the data is dev/staging-only at this point.
+
+---
+
 ## [0.8.3] — 2026-05-24
 
 ### Fixed

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Self
 import httpx
 
 from app.cache.keys import NAMESPACE_GH, gh_request_key, ttl_for_gh_endpoint
-from app.settings import settings
+from app.settings import VERSION, settings
 
 if TYPE_CHECKING:
     from app.cache.client import RedisCache
@@ -57,7 +57,7 @@ class GitHubClient:
         headers: dict[str, str] = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": "skill-issue/0.1.0",
+            "User-Agent": f"skill-issue/{VERSION}",
         }
         if token:
             headers["Authorization"] = f"Bearer {token}"

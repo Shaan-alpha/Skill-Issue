@@ -1,5 +1,6 @@
 import logging
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from typing import Literal
 
 from app.models import Report
@@ -20,6 +21,19 @@ _TEMPERATURE_BY_MODE: dict[Mode, float] = {
 }
 
 
+@dataclass
+class NarrativeStreamMeta:
+    """Per-stream metadata the caller owns and the service writes through.
+
+    Lets the persistence layer record `is_fallback` honestly without breaking
+    the iterator's `str` yield contract (SSE serializer stays unchanged).
+    """
+
+    is_fallback: bool = False
+    fallback_reason: Literal["budget", "error"] | None = None
+    cache_hit: bool = False
+
+
 class NarrativeService:
     """Orchestrates caching, daily budgeting, prompt construction, and LLM
     streaming."""
@@ -35,12 +49,20 @@ class NarrativeService:
         self._budget = budget
         self._llm = llm
 
-    async def stream_narrative(self, mode: Mode, report: Report) -> AsyncIterator[str]:
+    async def stream_narrative(
+        self,
+        mode: Mode,
+        report: Report,
+        *,
+        meta: NarrativeStreamMeta | None = None,
+    ) -> AsyncIterator[str]:
         # 1. Check cache
         cache_key = self._cache.key(report.username, self._cache.scores_hash(report), mode)
         cached = await self._cache.aget(cache_key)
         if cached is not None:
             logger.info(f"Narrative cache hit for {report.username} ({mode}, score={report.total})")
+            if meta is not None:
+                meta.cache_hit = True
             yield cached
             return
 
@@ -50,6 +72,9 @@ class NarrativeService:
             logger.warning(
                 f"Daily OpenAI budget exhausted. Using fallback narrative for {report.username} ({mode})"
             )
+            if meta is not None:
+                meta.is_fallback = True
+                meta.fallback_reason = "budget"
             yield fallback_narrative(mode, report, reason="budget")
             return
 
@@ -67,6 +92,9 @@ class NarrativeService:
                 f"LLM streaming failed for {report.username} ({mode}): {e}. Activating fallback narrative.",
                 exc_info=True,
             )
+            if meta is not None:
+                meta.is_fallback = True
+                meta.fallback_reason = "error"
             yield fallback_narrative(mode, report, reason="error")
             return
 

@@ -165,7 +165,7 @@ class Narrative(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "mode IN ('roast','mentor','recruiter','cto','career')",
+            "mode IN ('roast','mentor')",
             name="ck_narratives_mode",
         ),
         UniqueConstraint("analysis_run_id", "mode", name="uq_narratives_run_mode"),

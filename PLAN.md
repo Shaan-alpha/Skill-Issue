@@ -34,8 +34,9 @@
 | **v0.8.1** | Cron daily re-ingestion of saved analyses (paired with Sentry so failures aren't silent) | ✅ shipped |
 | **v0.8.2** | Manual "Force refresh" on `/me` + `POST /me/refresh/{username}` (synchronous re-ingest, 10/hr per-user cap) | ✅ shipped |
 | **v0.8.3** | Hotfix — empty-repo 409 from GitHub `/commits` and `/contents` no longer crashes analysis | ✅ shipped |
-| **v0.8.4** | On-demand `revalidateTag` for `/share/[slug]` ISR (closes v0.7.1's deferred share-page caching) | deferred from v0.7.1 |
-| **v0.8.5** | `vercel.json` → `vercel.ts` migration (Vercel 2026-02-27 knowledge update) | deferred from pre-v0.7.1 |
+| **v0.8.4** | Hotfix — narrative persistence honesty (`is_fallback` + `provider` derived correctly, narrative-mode CHECK trimmed, GH `User-Agent` tracks VERSION) | ✅ shipped |
+| **v0.8.6** | On-demand `revalidateTag` for `/share/[slug]` ISR (closes v0.7.1's deferred share-page caching) | deferred from v0.7.1 |
+| **v0.8.7** | `vercel.json` → `vercel.ts` migration (Vercel 2026-02-27 knowledge update) | deferred from pre-v0.7.1 |
 | **v0.9.0** | Beta hardening — security review, abuse mitigation, load test, legal | pending |
 | **v1.0.0** | Public launch | pending |
 
@@ -409,7 +410,34 @@ Each deferred item is independent and earns its own patch release, matching the 
 
 ---
 
-## v0.8.4 — On-demand `revalidateTag` for `/share/[slug]` ISR (deferred from v0.7.1)
+## v0.8.4 — Hotfix: narrative persistence honesty (shipped 2026-05-25)
+
+**Goal:** Persisted narratives must record the right provider and the right `is_fallback`. Real-user analytics need to be able to ask "what % of narratives served last week came from the deterministic fallback?" and "how much of our traffic actually went to Groq vs OpenAI?" — both queries returned wrong answers before this slice.
+
+**Root cause:** Two stale values in `app/routers/narrative.py`'s SSE persistence path:
+1. `provider="openai"` was hardcoded despite Groq being the production default since v0.5.0 (2026-05-18).
+2. `is_fallback = False` was declared locally and never re-assigned, even when `NarrativeService.stream_narrative` switched to the deterministic fallback. The flag was always written `False`.
+
+The narrative-mode CHECK constraint was a third drift in the same family — the v0.5.0 schema allowed `'recruiter','cto','career'` modes that were product-dropped in v0.6.0 (2026-05-19). No follow-up migration trimmed them.
+
+**Slice scope (shipped):**
+- `app/narrative/service.py`: new `NarrativeStreamMeta` dataclass. `stream_narrative` accepts an optional `meta: NarrativeStreamMeta` kwarg and writes `is_fallback` / `fallback_reason` / `cache_hit` through it. Per-request state, no race against the `@lru_cache`-singleton `NarrativeService`.
+- `app/routers/narrative.py`: instantiates `NarrativeStreamMeta` per request, passes it through, reads it after the stream finishes. `provider` derived via new `_resolve_provider(base_url)` helper (groq / openai / openrouter / cerebras / openai-compatible). `model_name` set to `NULL` on fallback rows.
+- New Alembic migration `20260525_0002_trim_narrative_mode_check.py` — drop + recreate `ck_narratives_mode` with `('roast','mentor')` only. Reversible.
+- Model `app/db/models.py::Narrative` mirrors the new constraint.
+- `app/github/client.py` `User-Agent` derives from `app.settings.VERSION` (was frozen at `0.1.0`).
+
+**Exit criteria:**
+- [x] `NarrativeService.stream_narrative(..., meta=meta)` writes `meta.is_fallback=True` on both budget-exhaust and LLM-error paths; `False` on cache-hit and successful live stream.
+- [x] `_resolve_provider(None)` → `"openai"`; `_resolve_provider("https://api.groq.com/openai/v1")` → `"groq"`; unknown host → `"openai-compatible"`.
+- [x] Alembic `upgrade head` then `downgrade base` round-trips cleanly on a fresh Neon branch.
+- [x] `GET /health` reports `version: 0.8.4` after deploy; outbound GH calls send `User-Agent: skill-issue/0.8.4`.
+- [x] 13 new tests pass (4 service meta + 9 provider parametrized). Suite 243 → 256 non-DB-fixture.
+- [x] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version bumped to `0.8.4`.
+
+---
+
+## v0.8.6 — On-demand `revalidateTag` for `/share/[slug]` ISR (deferred from v0.7.1)
 
 **Goal:** Public share pages can be ISR-cached safely because revocation immediately busts the tag.
 
@@ -422,7 +450,7 @@ Each deferred item is independent and earns its own patch release, matching the 
 
 ---
 
-## v0.8.5 — `vercel.json` → `vercel.ts` migration
+## v0.8.7 — `vercel.json` → `vercel.ts` migration
 
 **Goal:** Track the 2026-02-27 Vercel knowledge update by moving the project config to typed TypeScript.
 

@@ -19,6 +19,42 @@ Format:
 
 ---
 
+## 2026-05-25 — Claude (Opus 4.7) — v0.8.4 hotfix shipped (narrative persistence honesty)
+
+**Slice:** v0.8.4 — narrative `is_fallback` propagation + `provider` derivation + narrative-mode CHECK constraint trim + GH `User-Agent` version tracking.
+
+**Done:**
+- **Full deep audit of the project up through v0.8.3.** Findings split across P0 (data-corruption bugs) / P1 (deploy & CI gaps) / P2 (optimization) / P3 (polish). This slice closes the P0 bucket; v0.8.5 closes P1; the P2 items fold into v0.9.0 hardening.
+- **P0 #1 — `is_fallback` was dead code.** `app/routers/narrative.py::event_generator` declared `is_fallback = False` and never re-assigned it, so every persisted narrative row was tagged non-fallback even when `NarrativeService.stream_narrative` switched to the deterministic fallback. Fixed by adding a `NarrativeStreamMeta` dataclass to `app/narrative/service.py`. The service writes `is_fallback` / `fallback_reason` / `cache_hit` through the caller-owned meta object; the route reads them after the stream finishes. Per-request state, no race against the `@lru_cache`-singleton `NarrativeService`.
+- **P0 #2 — `provider="openai"` was hardcoded** despite Groq being production default since v0.5.0 (2026-05-18). New `_resolve_provider(base_url)` helper maps `NARRATIVE_BASE_URL` to a stable tag: `groq` for `*.groq.com`, `openai` for `*.openai.com` and the default, `openrouter`, `cerebras`, `openai-compatible` for anything else (so unknown providers are never silently mislabeled). 9 parametrized tests cover the URL → provider mapping.
+- **P0 #3 — Stale narrative-mode CHECK constraint.** Original v0.5.0 schema allowed `'recruiter','cto','career'` modes that were product-dropped in v0.6.0. New Alembic migration `20260525_0002_trim_narrative_mode_check.py` drops + recreates `ck_narratives_mode` with `('roast','mentor')` only. Reverses cleanly via `downgrade()`. Model in `app/db/models.py` mirrors.
+- **P2 #8 — GH `User-Agent` was frozen at `skill-issue/0.1.0`** since the v0.1.0 ingestion-MVP slice. Now derives from `app.settings.VERSION` so api.github.com sees the live version.
+- **P3 — Moved `from app.db.models import AnalysisRun` out of `event_generator` into module scope.**
+- **Tests:** 4 new in `tests/narrative/test_service.py` (meta propagation across all four paths), 9 new parametrized cases in `tests/narrative/test_provider_resolution.py`. Suite 243 → 256 non-DB-fixture pass.
+- **Version + docs ritual:** `pyproject.toml`, `app/settings.py::VERSION`, `frontend/package.json`, landing-pill + results-footer literals, README status, CHANGELOG `[0.8.4]`, PLAN renumber (was-v0.8.4 ISR → v0.8.6, was-v0.8.5 vercel.ts → v0.8.7).
+
+**Decisions:**
+- **Per-request meta object over service-instance attribute.** `NarrativeService` is a `@lru_cache` singleton across the whole process; multiple concurrent SSE streams would race on `self.last_was_fallback`. Caller-owned `NarrativeStreamMeta` instance avoids that entirely without breaking the iterator's `str` yield contract (SSE serializer untouched).
+- **`provider="openai-compatible"` rather than guessing** for unknown hosts. Silently labeling a vLLM/Ollama deployment as "openai" is the v0.8.4 bug all over again — give it a recognisable wrong-on-purpose tag instead.
+- **Tag as v0.8.4 hotfix** following v0.7.3/4/5 + v0.8.3 precedent. Shifts the originally-planned v0.8.4 (ISR) → v0.8.6 and v0.8.5 (vercel.ts) → v0.8.7.
+- **No data backfill for existing misattributed rows.** They're dev/staging-only at this point and the v0.6.0 mode drop already invalidated most of them by happy accident. A SQL one-liner could fix them if anyone ever cares; not worth a migration.
+
+**Learned / surprises:**
+- **Three closely-related data-honesty bugs all rooted at the v0.5.0 schema/route boundary.** The `is_fallback` dead code, the hardcoded `provider`, and the stale CHECK constraint all landed together in the v0.5.0 commit that wired narrative persistence. If one bug-shaped commit ships in a hurry, three matching peers usually live next to it — worth grep-checking the same module on review.
+- **`@lru_cache`-singleton services are footguns for per-request state.** It's easy to reach for `self.last_was_X` when refactoring, then forget that the instance is shared across concurrent requests. Caller-owned dataclass instances are the cleanest workaround.
+
+**Verified:**
+- Backend `ruff check .` + `ruff format --check .` clean. `pytest -q`: 256 pass, 59 DB-fixture errors (unchanged baseline; no `TEST_DATABASE_URL` set locally).
+- Frontend `npm run test:run`: 37/37 unchanged.
+
+**Blocked / open:**
+- None for v0.8.4. v0.8.5 (CI pipeline) starts immediately to close the P1 bucket — that's the slice that prevents this whole class of "silent-bug-shipped-then-found-via-audit" thing.
+
+**Next:**
+- v0.8.5 — add `.github/workflows/ci.yml` running `pytest` + `ruff` + `npm lint/test/build` on every PR. Regenerate or delete `backend/requirements.txt` (currently missing 9 of 15 direct deps; survives only because Vercel uses `uv.lock`).
+
+---
+
 ## 2026-05-24 — Claude (Opus 4.7) — v0.8.3 hotfix shipped (empty-repo 409)
 
 **Slice:** v0.8.3 — hotfix for `409 Conflict — "Git Repository is empty."` from GitHub's `/contents` and `/commits` endpoints crashing the ingestion fan-out.

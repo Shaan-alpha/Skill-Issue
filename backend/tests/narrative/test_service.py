@@ -6,7 +6,7 @@ from app.models import Report, ScoreBreakdown, ScoreResult, TierInfo
 from app.narrative.budget import DailyBudget
 from app.narrative.cache import NarrativeCache
 from app.narrative.llm import FakeNarrativeLLM
-from app.narrative.service import NarrativeService
+from app.narrative.service import NarrativeService, NarrativeStreamMeta
 
 
 class _BoomLLM(FakeNarrativeLLM):
@@ -119,3 +119,71 @@ async def test_service_uses_error_fallback_when_llm_raises() -> None:
     # Failed runs must not poison the cache.
     key = cache.key(rep.username, cache.scores_hash(rep), "roast")
     assert cache.get(key) is None
+
+
+@pytest.mark.asyncio
+async def test_stream_meta_flags_budget_fallback() -> None:
+    """meta.is_fallback must fire when budget is exhausted."""
+    cache = NarrativeCache()
+    budget = DailyBudget(limit=0)
+    llm = FakeNarrativeLLM(tokens=["never"])
+    svc = NarrativeService(cache=cache, budget=budget, llm=llm)
+    meta = NarrativeStreamMeta()
+
+    async for _ in svc.stream_narrative("roast", _report("octo", 50), meta=meta):
+        pass
+
+    assert meta.is_fallback is True
+    assert meta.fallback_reason == "budget"
+    assert meta.cache_hit is False
+
+
+@pytest.mark.asyncio
+async def test_stream_meta_flags_error_fallback() -> None:
+    """meta.is_fallback must fire when the upstream LLM raises."""
+    cache = NarrativeCache()
+    budget = DailyBudget(limit=10)
+    svc = NarrativeService(cache=cache, budget=budget, llm=_BoomLLM())
+    meta = NarrativeStreamMeta()
+
+    async for _ in svc.stream_narrative("roast", _report("octo", 50), meta=meta):
+        pass
+
+    assert meta.is_fallback is True
+    assert meta.fallback_reason == "error"
+
+
+@pytest.mark.asyncio
+async def test_stream_meta_clean_on_live_stream() -> None:
+    """A successful live stream must NOT flag fallback."""
+    cache = NarrativeCache()
+    budget = DailyBudget(limit=10)
+    llm = FakeNarrativeLLM(tokens=["live", " text"])
+    svc = NarrativeService(cache=cache, budget=budget, llm=llm)
+    meta = NarrativeStreamMeta()
+
+    async for _ in svc.stream_narrative("roast", _report("octo", 50), meta=meta):
+        pass
+
+    assert meta.is_fallback is False
+    assert meta.fallback_reason is None
+    assert meta.cache_hit is False
+
+
+@pytest.mark.asyncio
+async def test_stream_meta_flags_cache_hit() -> None:
+    """meta.cache_hit must fire when the narrative comes from cache."""
+    cache = NarrativeCache()
+    rep = _report("octo", 50)
+    cache.put(cache.key(rep.username, cache.scores_hash(rep), "roast"), "cached body")
+    budget = DailyBudget(limit=10)
+    llm = FakeNarrativeLLM(tokens=["never"])
+    svc = NarrativeService(cache=cache, budget=budget, llm=llm)
+    meta = NarrativeStreamMeta()
+
+    async for _ in svc.stream_narrative("roast", rep, meta=meta):
+        pass
+
+    assert meta.cache_hit is True
+    assert meta.is_fallback is False
+    assert llm.calls == 0
