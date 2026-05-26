@@ -8,6 +8,22 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
+## [0.9.0] — 2026-05-26
+
+### Added
+- **Bounded GitHub fan-out in `ingest_profile`.** A new per-call `asyncio.Semaphore(settings.gh_ingest_concurrency)` (default 8) wraps both `asyncio.gather` blocks — the up-to-20 root-contents enrichment and the up-to-10 commit-history fetch. A single analysis can no longer burst past GitHub's secondary rate-limit threshold, and anonymous-token sharing scales to more analyses/hr before the 5000/hr ceiling bites. Sequential `list_languages` loop is intentionally untouched (already bounded by construction; parallelizing it would *increase* peak concurrent for the same cost). Opens the v0.9.x Beta hardening family.
+- **`GH_INGEST_CONCURRENCY` env var** (optional, default `8`). Tune in prod without redeploy: raise if Layer A cache hit-rate is high and you want lower analysis latency; lower if you're hitting 403s. Backend env only.
+
+### Tests
+- 2 new in `tests/test_ingestion.py` against a `FakeGitHubClient` that records max in-flight calls across a 50-repo synthetic profile. Default-cap test asserts `max_in_flight ≤ 8`; override-cap test (`Settings(gh_ingest_concurrency=2)` via monkeypatch) asserts `max_in_flight ≤ 2`. Suite: 261 → 263 non-DB-fixture pass.
+
+### Notes
+- This is the first slice of the v0.9.x Beta hardening family. Decomposed 2026-05-26 into: bounded fan-out (this) → `/me/analyses` N+1 + Layer A cache schema version → DB pool tune → rate limiting + abuse heuristics → security review + load test → legal docs. Each slice is shippable in isolation.
+- Tail latency on heavy profiles increases by ~500ms on a cold cache (3 batches of 8 instead of 1 batch of 20). Layer A's 6h Report cache absorbs this cost — first hit per user pays it once, subsequent hits are sub-200ms. RUM via PostHog (v0.8.0) will surface real-user impact post-deploy.
+- `_gated` uses Python 3.12 PEP 695 generic syntax (`async def _gated[T](sem, coro)`) instead of legacy `TypeVar` — eliminates one import + satisfies ruff `UP047`.
+
+---
+
 ## [0.8.7] — 2026-05-26
 
 ### Changed

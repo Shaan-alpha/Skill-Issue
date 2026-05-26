@@ -38,7 +38,12 @@
 | **v0.8.5** | CI pipeline (`pytest` + `ruff` + `npm lint/test/build` on every PR) + `requirements.txt` regenerated (was missing 9 of 15 direct deps) | ✅ shipped |
 | **v0.8.6** | On-demand `revalidateTag` for `/share/[slug]` ISR (closes v0.7.1's deferred share-page caching) | ✅ shipped |
 | **v0.8.7** | `vercel.json` → `vercel.ts` migration (Vercel 2026-02-27 knowledge update) | ✅ shipped |
-| **v0.9.0** | Beta hardening — security review, abuse mitigation, load test, legal | pending |
+| **v0.9.0** | Bounded GH fan-out (asyncio.Semaphore around ingest_profile gathers) | ✅ shipped |
+| **v0.9.1** | `/me/analyses` N+1 fix + Layer A cache schema version | pending |
+| **v0.9.2** | DB pool tune (5→10, 5→20) after PostHog baseline | pending |
+| **v0.9.3** | Rate limiting (IP + user) + abuse heuristics | pending |
+| **v0.9.4** | `/security-review` pass + load test to 100 RPS | pending |
+| **v0.9.5** | Privacy policy + terms (legal docs) | pending |
 | **v1.0.0** | Public launch | pending |
 
 ---
@@ -512,32 +517,71 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 ---
 
-## v0.9.0 — Beta hardening
+## v0.9.0 — Bounded GH fan-out (shipped 2026-05-26)
 
-**Goal:** Public-ready security, perf, and abuse posture.
+**Goal:** Cap concurrent GitHub API calls inside `ingest_profile` to `settings.gh_ingest_concurrency` (default 8) so a single analysis can't burst past GitHub's secondary rate-limit threshold. Opens the v0.9.x Beta hardening family.
 
-**Slice scope:**
-- **Security + abuse**
-  - Rate limiting per IP + per authenticated user
-  - Abuse heuristics: reject usernames with suspicious patterns, throttle scrapers
-  - Security review (manual + run `/security-review`)
-  - Load test to 100 RPS sustained
-  - Privacy policy + terms
-- **Performance + reliability (carried in from 2026-05-25 audit)**
-  - **Bounded GitHub fan-out.** `app/ingestion/profile.py` currently `asyncio.gather`s up to ~40 concurrent GH requests per analysis (root contents + languages + commits across top 20 repos × 3 endpoints). At anonymous-token sharing, ~125 analyses/hr exhaust the 5000/hr budget. Wrap the gathers with `asyncio.Semaphore(8)`.
-  - **`/me/analyses` N+1 fix.** Per-row `select(AnalysisRun)` becomes a single `joinedload`. Trivial; visible at scale.
-  - **DB pool tune.** `pool_size=5, max_overflow=5` is small for Fluid Compute multiplexing. Raise to `pool_size=10, max_overflow=20` after RUM confirms the symptom in PostHog/Sentry.
-  - **Layer A cache schema version.** Suffix the Report cache key with a `REPORT_SCHEMA_VERSION` constant; bump on `Report` shape changes. Avoids 6 h of validation-warning spam on every schema bump.
+**Design spec:** [`docs/superpowers/specs/2026-05-26-v0.9.0-bounded-fanout-design.md`](./docs/superpowers/specs/2026-05-26-v0.9.0-bounded-fanout-design.md).
+**Sub-plan:** [`docs/superpowers/plans/2026-05-26-v0.9.0-bounded-fanout.md`](./docs/superpowers/plans/2026-05-26-v0.9.0-bounded-fanout.md) — 4 tasks, TDD-ordered.
+
+**Slice scope (shipped):**
+- New `Settings.gh_ingest_concurrency: int = 8` field (env override `GH_INGEST_CONCURRENCY`).
+- New file-local `_gated(sem, coro)` helper in `app/ingestion/profile.py` (Python 3.12 PEP 695 generic syntax).
+- Both `asyncio.gather` blocks in `ingest_profile` wrapped via `_gated`. One semaphore per call, reused across both blocks (block 1 fully drains before block 2 starts).
+- Sequential `list_languages` loop intentionally untouched (already bounded by construction).
+- 2 new tests against a `FakeGitHubClient` instrument the in-flight count across a 50-repo synthetic profile.
 
 **Exit criteria:**
-- [ ] No high or critical issues from `/security-review`
-- [ ] Load test passes target without errors
-- [ ] Legal docs live and linked from footer
-- [ ] Ingestion fan-out bounded; verified by integration test against a 50-repo profile
-- [ ] `/me/analyses` issues at most 2 queries per page (list + `joinedload` of runs)
-- [ ] DB pool changes guarded by a measured baseline before/after in PostHog
-- [ ] Cache schema version constant in place; bumping it busts the namespace
-- [ ] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` updated; version `0.9.0`
+- [x] `Settings.gh_ingest_concurrency` field exists with default 8.
+- [x] `_gated` helper added; both gather blocks use it.
+- [x] `test_bounded_fanout_default_cap` passes (max in-flight ≤ 8).
+- [x] `test_bounded_fanout_overridable_via_settings` passes (max in-flight ≤ 2 with override).
+- [x] Backend `pytest -q` non-DB suite: 263 passed.
+- [x] `ruff check .` + `ruff format --check .` clean.
+- [x] CI green on PR.
+- [ ] Post-merge prod `/health` reports `version: 0.9.0`; one live `/analyze/octocat` returns a valid Report.
+- [x] `CHANGELOG.md` `[0.9.0]` + `docs/PROGRESS_LOG.md` entry + PLAN row flipped ✅.
+- [ ] Tag `v0.9.0` pushed; release workflow published the GitHub Release.
+
+---
+
+## v0.9.1 — `/me/analyses` N+1 fix + Layer A cache schema version (deferred)
+
+**Goal:** Two tiny perf patches batched. Per-row `select(AnalysisRun)` becomes a single `joinedload`; Layer A Report cache key gets a `REPORT_SCHEMA_VERSION` suffix.
+
+**Exit criteria:** TBD when the slice begins.
+
+---
+
+## v0.9.2 — DB pool tune (deferred)
+
+**Goal:** Raise `pool_size=5, max_overflow=5` to `pool_size=10, max_overflow=20` once PostHog/Sentry baseline confirms the symptom in v0.8.0-shipped RUM data.
+
+**Exit criteria:** TBD when the slice begins.
+
+---
+
+## v0.9.3 — Rate limiting + abuse heuristics (deferred)
+
+**Goal:** Per-IP + per-user rate limiting via Upstash. Suspicious-username regex throttle. Reuses v0.8.2's `try_increment_counter`.
+
+**Exit criteria:** TBD when the slice begins.
+
+---
+
+## v0.9.4 — `/security-review` pass + load test (deferred)
+
+**Goal:** Run `/security-review` against the codebase; resolve any high/critical findings. Load-test to 100 RPS sustained, verify error budget holds.
+
+**Exit criteria:** TBD when the slice begins.
+
+---
+
+## v0.9.5 — Legal docs (deferred)
+
+**Goal:** Privacy policy + terms in `docs/legal/`. Link from frontend footer.
+
+**Exit criteria:** TBD when the slice begins.
 
 ---
 
