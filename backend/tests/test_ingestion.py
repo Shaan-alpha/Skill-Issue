@@ -423,9 +423,7 @@ async def test_bounded_fanout_default_cap() -> None:
     """At default cap 8, a 50-repo profile must never burst >8 in-flight."""
     fake = FakeGitHubClient(repo_count=50)
     await ingest_profile("octocat", fake)
-    assert fake.max_in_flight <= 8, (
-        f"expected ≤8 in-flight, observed {fake.max_in_flight}"
-    )
+    assert fake.max_in_flight <= 8, f"expected ≤8 in-flight, observed {fake.max_in_flight}"
     # Sanity: the test actually drove enough load to be meaningful.
     assert fake.total_calls >= 50
 
