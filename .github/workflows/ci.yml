@@ -92,3 +92,21 @@ jobs:
         env:
           NEXT_PUBLIC_BACKEND_URL: http://ci-placeholder
         run: npm run build
+
+  config:
+    name: Config (vercel.ts typecheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install root devDeps
+        run: npm ci
+
+      - name: TypeScript (vercel.ts)
+        run: npx tsc --noEmit -p .
