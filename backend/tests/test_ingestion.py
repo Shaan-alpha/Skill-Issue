@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import copy
 import json
@@ -300,3 +301,144 @@ async def test_ingest_profile_rejects_organizations() -> None:
     assert "apache" in msg
     assert "organization" in msg.lower()
     assert "username instead" in msg.lower() or "individual" in msg.lower()
+
+
+# ─── v0.9.0: bounded GH fan-out ──────────────────────────────────────
+
+
+class FakeGitHubClient:
+    """Minimal GitHubClient stand-in for the bounded-fanout tests.
+
+    Instruments every GH-touching method with a current/max in-flight
+    counter. A tiny `asyncio.sleep` forces real concurrency — without
+    it, fast coros could resolve sequentially and the cap assertion
+    would pass vacuously.
+    """
+
+    def __init__(self, *, repo_count: int) -> None:
+        self.repo_count = repo_count
+        self.current_in_flight = 0
+        self.max_in_flight = 0
+        self.total_calls = 0
+
+    async def _enter(self) -> None:
+        self.total_calls += 1
+        self.current_in_flight += 1
+        self.max_in_flight = max(self.max_in_flight, self.current_in_flight)
+        # Force genuine concurrency by yielding to the event loop.
+        await asyncio.sleep(0.005)
+
+    def _exit(self) -> None:
+        self.current_in_flight -= 1
+
+    async def get_user(self, login: str) -> dict[str, object]:
+        await self._enter()
+        try:
+            return {
+                "login": login,
+                "type": "User",
+                "bio": None,
+                "followers": 0,
+                "public_repos": self.repo_count,
+                "created_at": "2020-01-01T00:00:00Z",
+                "company": None,
+                "blog": None,
+                "hireable": False,
+            }
+        finally:
+            self._exit()
+
+    async def list_repos(self, login: str) -> list[dict[str, object]]:
+        await self._enter()
+        try:
+            return [
+                {
+                    "name": f"repo-{i}",
+                    "full_name": f"{login}/repo-{i}",
+                    "language": "Python",
+                    "stargazers_count": 0,
+                    "forks_count": 0,
+                    "fork": False,
+                    "size": 100,
+                    "pushed_at": "2026-01-01T00:00:00Z",
+                    "created_at": "2024-01-01T00:00:00Z",
+                    "owner": {"login": login},
+                }
+                for i in range(self.repo_count)
+            ]
+        finally:
+            self._exit()
+
+    async def graphql(self, query: str, variables: dict[str, object]) -> dict[str, object]:
+        await self._enter()
+        try:
+            return {
+                "user": {
+                    "pinnedItems": {"nodes": []},
+                    "hasSponsorsListing": False,
+                    "isGitHubStar": False,
+                    "isDeveloperProgramMember": False,
+                    "pullRequests": {"totalCount": 0, "nodes": []},
+                    "contributionsCollection": {
+                        "pullRequestReviewContributions": {"totalCount": 0}
+                    },
+                }
+            }
+        finally:
+            self._exit()
+
+    async def get_profile_readme(self, login: str) -> str | None:
+        await self._enter()
+        try:
+            return None
+        finally:
+            self._exit()
+
+    async def get_repo_root_contents(self, owner: str, name: str) -> list[str]:
+        await self._enter()
+        try:
+            return []
+        finally:
+            self._exit()
+
+    async def list_languages(self, owner: str, name: str) -> dict[str, int]:
+        await self._enter()
+        try:
+            return {}
+        finally:
+            self._exit()
+
+    async def list_commits(
+        self, owner: str, name: str, author: str, since: str
+    ) -> list[dict[str, object]]:
+        await self._enter()
+        try:
+            return []
+        finally:
+            self._exit()
+
+
+@pytest.mark.asyncio
+async def test_bounded_fanout_default_cap() -> None:
+    """At default cap 8, a 50-repo profile must never burst >8 in-flight."""
+    fake = FakeGitHubClient(repo_count=50)
+    await ingest_profile("octocat", fake)
+    assert fake.max_in_flight <= 8, (
+        f"expected ≤8 in-flight, observed {fake.max_in_flight}"
+    )
+    # Sanity: the test actually drove enough load to be meaningful.
+    assert fake.total_calls >= 50
+
+
+@pytest.mark.asyncio
+async def test_bounded_fanout_overridable_via_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Overriding settings.gh_ingest_concurrency=2 must cap in-flight at 2."""
+    from app import settings as settings_module
+    from app.settings import Settings
+
+    monkeypatch.setattr(settings_module, "settings", Settings(gh_ingest_concurrency=2))
+    fake = FakeGitHubClient(repo_count=50)
+    await ingest_profile("octocat", fake)
+    assert fake.max_in_flight <= 2, (
+        f"expected ≤2 in-flight at override, observed {fake.max_in_flight}"
+    )
