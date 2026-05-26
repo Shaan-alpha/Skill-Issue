@@ -8,6 +8,25 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
+## [0.8.7] — 2026-05-26
+
+### Changed
+- **Root project configuration migrated from `vercel.json` to typed `vercel.ts`.** Uses `@vercel/config/v1`'s `VercelConfig` type so a typo in `experimentalServices`, `crons`, or `git.deploymentEnabled` is caught at typecheck time instead of at deploy time. No behavioral change — same two services (`frontend` Next.js, `backend` FastAPI), same nightly cron at `03:00 UTC`, same branch-deploy filter blocking `feat/*`, `fix/*`, `chore/*`, `docs/*`, `ops/*`, `style/*`, `refactor/*`, `test/*` from auto-deploying. Tracks Vercel's 2026-02-27 recommended config form.
+
+### Added
+- **Root `package.json`** (`private: true`) holding `@vercel/config` and `typescript` as devDeps. Lets Vercel resolve the typed config at build time and lets local/CI `tsc` typecheck `vercel.ts` standalone.
+- **Root `tsconfig.json`** scoped to `vercel.ts` only — no JSX, no DOM lib, no project references. Independent of the frontend's tsconfig.
+- **CI job** `Config (vercel.ts typecheck)` in `.github/workflows/ci.yml` runs `npm ci` + `npx tsc --noEmit -p .` so config regressions fail pre-merge.
+
+### Removed
+- **Root `vercel.json`.** Replaced by `vercel.ts`. (`backend/vercel.json` is unchanged — per-function static config has no logic to type.)
+
+### Notes
+- `@vercel/config@0.5.0` already types `experimentalServices` on `VercelConfig` — the spec's planned file-local intersection-type fallback was not needed. Migration shipped as a clean `export const config: VercelConfig = { … }` literal.
+- `npm audit` reports three high-severity advisories in `@vercel/config`'s transitive `path-to-regexp` via `@vercel/routing-utils`. Runtime blast radius is zero — `@vercel/config` is a devDep that only executes inside Vercel's build pipeline parsing our static config; `npm audit --omit=dev` reports clean. `npm audit fix --force` would downgrade to `0.0.32` (two minors back) — accepting the advisory until Vercel publishes a patched upstream.
+
+---
+
 ## [0.8.6] — 2026-05-25
 
 ### Added
