@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-VERSION = "0.8.7"
+VERSION = "0.9.0"
 
 
 class Settings(BaseSettings):
@@ -63,6 +63,14 @@ class Settings(BaseSettings):
     # Per-user cap on force-refresh actions per UTC hour. Reset on bucket
     # rollover. Override via env FORCE_REFRESH_PER_USER_PER_HOUR.
     force_refresh_per_user_per_hour: int = 10
+
+    # v0.9.0 — ingestion fan-out cap
+    # Per-call asyncio.Semaphore limit applied to GH API requests inside
+    # ingest_profile. Caps the burst from `_enrich_repo_signals` (≤20 root
+    # contents) and `list_commits` (≤10 commits). Default 8 keeps a single
+    # analysis well inside GitHub's secondary rate-limit threshold. Override
+    # via env GH_INGEST_CONCURRENCY without a redeploy.
+    gh_ingest_concurrency: int = 8
 
     # v0.8.6 — on-demand /share/[slug] ISR revalidation
     # FRONTEND_BASE_URL: backend posts to {FRONTEND_BASE_URL}/api/revalidate

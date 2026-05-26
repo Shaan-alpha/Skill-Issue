@@ -6,11 +6,20 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 
+from app import settings as settings_module
 from app.github.queries import EXTERNAL_PRS, PINNED_REPOS
 from app.models import Profile, Repo
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable
+
     from app.github.client import GitHubClient
+
+
+async def _gated[T](sem: asyncio.Semaphore, coro: Awaitable[T]) -> T:
+    """Run `coro` while holding `sem`. Releases on exit, even on exception."""
+    async with sem:
+        return await coro
 
 
 class NotAnIndividualError(Exception):
@@ -140,7 +149,12 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
 
     # Enrich README / tests / CI / deployment signals from each repo's root tree.
     # Capped at ROOT_CONTENT_LIMIT to stay polite to GitHub on heavy profiles.
-    await asyncio.gather(*(_enrich_repo_signals(r, gh) for r in repos[:ROOT_CONTENT_LIMIT]))
+    # v0.9.0: bound concurrent in-flight calls via settings.gh_ingest_concurrency
+    # so a single analysis can't burst past GitHub's secondary rate-limit threshold.
+    sem = asyncio.Semaphore(settings_module.settings.gh_ingest_concurrency)
+    await asyncio.gather(
+        *(_gated(sem, _enrich_repo_signals(r, gh)) for r in repos[:ROOT_CONTENT_LIMIT])
+    )
 
     languages: dict[str, int] = {}
     for repo in repos[:ROOT_CONTENT_LIMIT]:
@@ -174,7 +188,8 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
 
     commit_dates_set: set[datetime] = set()
     commit_tasks = [
-        gh.list_commits(r["owner"]["login"], r["name"], username, two_years_ago) for r in top_repos
+        _gated(sem, gh.list_commits(r["owner"]["login"], r["name"], username, two_years_ago))
+        for r in top_repos
     ]
     all_repo_commits = await asyncio.gather(*commit_tasks)
 

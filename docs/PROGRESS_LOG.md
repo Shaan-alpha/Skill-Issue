@@ -19,6 +19,47 @@ Format:
 
 ---
 
+## 2026-05-26 — Claude (Opus 4.7) — v0.9.0 shipped (bounded GH fan-out)
+
+**Slice:** v0.9.0 — `ingest_profile` now caps concurrent GH API calls at `settings.gh_ingest_concurrency` (default 8) via a per-call `asyncio.Semaphore`. Opens the v0.9.x Beta hardening family.
+
+**Done:**
+- All 4 tasks from [`docs/superpowers/plans/2026-05-26-v0.9.0-bounded-fanout.md`](./superpowers/plans/2026-05-26-v0.9.0-bounded-fanout.md). Inline TDD execution; ~25 min wall-clock.
+- **New** `Settings.gh_ingest_concurrency: int = 8` field (env: `GH_INGEST_CONCURRENCY`). Tunable in prod without redeploy.
+- **New** `_gated[T](sem, coro)` helper in `app/ingestion/profile.py` (Python 3.12 PEP 695 generic syntax — no `TypeVar` import needed). Both `asyncio.gather` blocks (root-contents × ≤20 and list_commits × ≤10) now wrap their coros via `_gated`. One semaphore per `ingest_profile` invocation, reused across both blocks (they're sequential).
+- **Sequential `list_languages` loop intentionally untouched.** Already bounded; parallelizing it would *increase* peak concurrent for the same total cost.
+- **2 new tests** against a `FakeGitHubClient` that records `current_in_flight` / `max_in_flight` across a 50-repo synthetic profile. Default-cap test asserts ≤8; override-cap test (`Settings(gh_ingest_concurrency=2)` via monkeypatch) asserts ≤2. Suite: 261 → 263 non-DB pass.
+- **Decomposed v0.9.0 → v0.9.5.** The original v0.9.0 PLAN slice was 9 mostly-independent items (rate limiting, abuse heuristics, security review, load test, legal, plus 4 audit-driven perf items). Fine-grained decomposition into 6 slices locked 2026-05-26 — each slice is shippable in isolation; matches the post-v0.8.0 cadence.
+- Version + docs ritual: backend `pyproject.toml` + `settings.py::VERSION`, frontend `package.json`, landing pill + results-footer literals, README status + curl example, `docs/DEPLOY.md` (new `GH_INGEST_CONCURRENCY` row), `.env.example` v0.9.0 block, CHANGELOG `[0.9.0]`, PLAN family decomposition (6 rows + 6 sections), `uv.lock` re-sync.
+
+**Decisions:**
+- **Per-call semaphore (Approach A) over client-level semaphore (Approach B).** Constraining `GitHubClient` itself would over-cap the cron path, narrative path, and refresh path — all of which are out of v0.9.0's scope. Per-call keeps the blast radius at exactly the ingestion gather points.
+- **Read settings via module reference (`settings_module.settings.gh_ingest_concurrency`).** Not `from app.settings import settings`. Test monkeypatching of `app.settings.settings` only propagates through the module reference (PROGRESS_LOG 2026-05-22 v0.8.1 lesson — local name bindings at import time miss the patch). The override-cap test exercises this directly.
+- **One semaphore reused across both gather blocks.** They run sequentially (block 1 fully drains before block 2 starts), so there's no cross-block contention but the cap still applies block-by-block. Constructing two separate semaphores would be wasted state.
+- **PEP 695 generic syntax for `_gated`.** `async def _gated[T](sem, coro)` eliminates the `TypeVar` import AND lets `Awaitable` move to `TYPE_CHECKING`. Caught by ruff `UP047` after the initial implementation used the legacy form; preferring the modern syntax is consistent with the "Modern tools and modern design" rule.
+- **TDD discipline preserved despite the test being newer than the production code.** Tests written first as a red-gate commit (5cf1ca6, observed `max_in_flight=20` against expected ≤2/≤8), semaphore added second as the green-gate commit (bf48433). The intermediate red commit documents the regression scope a reverter would face.
+
+**Verified:**
+- Backend `ruff check .` + `ruff format --check .` clean.
+- Backend `pytest -q --no-header`: **263 passed, 63 skipped**. Same baseline plus the 2 new bounded-fanout tests.
+- Both new tests timed at ~2s combined (1s each — the `asyncio.sleep(0.005)` × ~30 calls × 50% concurrency dominates).
+- CI green on PR (will verify after push).
+- Post-merge prod smoke: *[to fill in after merge]*.
+
+**Learned / surprises:**
+- **The `asyncio.sleep(0.005)` was exactly enough.** Initial red-gate run showed `max_in_flight=20` (the 20-repo enrich block) on both tests. With shorter sleeps or no sleep at all, coros could resolve before fan-out and the test would pass vacuously even without a semaphore. 5ms gave us reliable concurrency without making the test slow.
+- **Ruff caught two modernizations on the first commit attempt.** `TC003` (move `Awaitable` into `TYPE_CHECKING` block since under `from __future__ import annotations` it's never runtime-resolved) and `UP047` (use PEP 695 `def _gated[T](...)` instead of legacy `TypeVar`). Both fixes are net-cleaner than the original. Worth memo-ing: when introducing a new generic helper in this project, lead with the PEP 695 syntax — saves a round-trip.
+- **The `FakeGitHubClient` was 100 lines of well-spent test boilerplate.** Each method follows the same `_enter()` → return → `_exit()` shape with `try/finally`, which makes the test pattern trivially extensible if v0.9.x adds a new GH endpoint. Worth duplicating the pattern when a future slice needs to assert other concurrency contracts.
+
+**Blocked / open:**
+- Post-merge prod smoke + tag still pending (Task 4 Steps 12–14 remaining).
+
+**Next:**
+- Push branch → CI → merge PR → prod auto-deploy → curl `/health` to confirm `version: 0.9.0` → tag `v0.9.0` → release workflow publishes.
+- After v0.9.0 ships: v0.9.1 — `/me/analyses` N+1 fix + Layer A cache schema version.
+
+---
+
 ## 2026-05-26 — Claude (Opus 4.7) — v0.8.7 shipped (`vercel.json` → `vercel.ts`)
 
 **Slice:** v0.8.7 — root project config migrated from JSON to typed TypeScript via `@vercel/config/v1`. Tracks the Vercel 2026-02-27 knowledge update naming `vercel.ts` as the recommended config form.
