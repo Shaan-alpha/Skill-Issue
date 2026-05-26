@@ -4,7 +4,7 @@
 
 ## Current layout
 
-**One Vercel project** hosts both services via `experimentalServices` in the root `vercel.json`. Locked 2026-05-18.
+**One Vercel project** hosts both services via `experimentalServices` in the root `vercel.ts` (typed config; migrated from `vercel.json` in v0.8.7). Locked 2026-05-18.
 
 | URL prefix | Service | What it is |
 | --- | --- | --- |
@@ -20,9 +20,9 @@ You only do this once. After it, every git push deploys a preview automatically;
 ### 1. Create the Vercel project
 
 1. <https://vercel.com/new> → **Import Git Repository** → pick `Shaan-alpha/Skill-Issue`.
-2. **Root Directory:** repo root (the `vercel.json` at the root declares both services).
-3. **Framework Preset:** Other (services declared in `vercel.json`).
-4. **Deploy.** Vercel reads `vercel.json` → builds `frontend/` as Next.js, builds `backend/` as a Python function.
+2. **Root Directory:** repo root (the `vercel.ts` at the root declares both services).
+3. **Framework Preset:** Other (services declared in `vercel.ts`).
+4. **Deploy.** Vercel reads `vercel.ts` → builds `frontend/` as Next.js, builds `backend/` as a Python function.
 
 ### 2. Provision the integrations
 
@@ -135,7 +135,6 @@ Cold call: ~5-8s. Warm call (cached): ≤200ms p95 target. If the warm call isn'
 - **`/share/[slug]` is not ISR-cached.** Each shared-page view re-renders server-side. Tolerable at current scale, but v0.8.4 ships on-demand `revalidateTag` so the route can opt in to ISR without a revocation correctness gap.
 - **Sentry source-map upload not wired.** Frontend stack traces in Sentry show minified function names — runtime capture still works, only symbolication is degraded. Lands in a v0.8.x patch once `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` / `SENTRY_PROJECT` are provisioned.
 - **Sentry alert rules not wired.** v0.8.0 ships the integration but not the thresholds; needs ~1 week of baseline data first. Patch lands when the data is in.
-- **`vercel.json` still in JSON (not `vercel.ts`).** Per Vercel's 2026-02-27 knowledge update, typed config is the recommended path. v0.8.5 migrates.
 - **Custom domain** — pre-v1.0.
 
 ## What's intentionally not here

@@ -19,6 +19,44 @@ Format:
 
 ---
 
+## 2026-05-26 — Claude (Opus 4.7) — v0.8.7 shipped (`vercel.json` → `vercel.ts`)
+
+**Slice:** v0.8.7 — root project config migrated from JSON to typed TypeScript via `@vercel/config/v1`. Tracks the Vercel 2026-02-27 knowledge update naming `vercel.ts` as the recommended config form.
+
+**Done:**
+- All 6 tasks from [`docs/superpowers/plans/2026-05-26-v0.8.7-vercel-ts.md`](./superpowers/plans/2026-05-26-v0.8.7-vercel-ts.md). Inline execution; ~30 min wall-clock.
+- **New** `vercel.ts` at repo root mirrors the previous `vercel.json` literal (`experimentalServices` + `crons` + `git.deploymentEnabled`), typed as `VercelConfig` from `@vercel/config/v1`. **Old** root `vercel.json` deleted; `backend/vercel.json` untouched.
+- **New** root `package.json` (private, `@vercel/config` + `typescript` as devDeps, `engines.node: ">=24"`) and `tsconfig.json` (minimal, scoped to `vercel.ts`). `package-lock.json` committed.
+- **New** CI job `Config (vercel.ts typecheck)` in [`.github/workflows/ci.yml`](./../.github/workflows/ci.yml) runs `npm ci` + `npx tsc --noEmit -p .` at repo root on every PR. Closes the gap where a typo in `vercel.ts` would only surface at deploy time.
+- Version + docs ritual: backend `pyproject.toml` + `settings.py::VERSION`, frontend `package.json`, landing pill + results-footer literals, README status + curl example, `docs/DEPLOY.md` (vercel.json → vercel.ts mentions + known-limitations line removed), `docs/TECH_STACK.md`, `ARCHITECTURE.md`, `backend/README.md`, CHANGELOG `[0.8.7]`, PLAN row flipped + section populated.
+
+**Decisions:**
+- **Plain `VercelConfig` worked first try.** `@vercel/config@0.5.0` already types `experimentalServices` — Approach A's intersection-type fallback was scoped just-in-case but never fired. File ships as a clean `export const config: VercelConfig = { … }`.
+- **Locked `@vercel/config@^0.5.0`** after `^1` failed to resolve. Vercel's docs page (the one Context7 surfaces) writes the import as `'@vercel/config/v1'` — the `/v1` is the subpath export, not the semver range. The package itself is still pre-1.0 (latest = 0.5.0). Worth memo-ing: when a vendor doc shows `import … from 'pkg/v1'`, that's a subpath export and tells you nothing about the npm semver — always cross-check via `npm view <pkg> version`.
+- **Accepted the 3 high-severity `npm audit` advisories.** All in `@vercel/config`'s transitive `path-to-regexp` via `@vercel/routing-utils`. `@vercel/config` is a devDep that only executes inside Vercel's build pipeline parsing our static config — runtime blast radius is zero, and `npm audit --omit=dev` reports clean. `npm audit fix --force` would downgrade to `0.0.32` (two minors back). Documented in CHANGELOG `[0.8.7]` Notes.
+- **Root `package.json` over relying on `frontend/`.** Vercel resolves `@vercel/config` from project root; sideways `node_modules` resolution from `frontend/` doesn't work in Node.
+- **`backend/vercel.json` untouched.** Per-function static config (`maxDuration`, `memory`, one rewrite) with no logic to type. Migrating it would add surface area without value.
+- **CI as the binding type-gate.** Local `vercel build` isn't available (CLI not installed in the dev environment); CI typecheck + post-merge prod smoke are the gates that actually fire.
+
+**Verified:**
+- Local `npx tsc --noEmit -p .` clean before commit.
+- Branch push of `feat/v0.8.7-vercel-ts` produced no Vercel Preview deployment notification — confirms `git.deploymentEnabled` survived migration. (Verified via `gh pr view --json statusCheckRollup,comments` — zero Vercel-bot comments, zero "Vercel" status checks.)
+- CI green on PR #2: Backend (lint + tests, 39s), Frontend (lint + tsc + 42 vitest + build, 53s), Config (vercel.ts typecheck, **10s** — the new job worked end-to-end), GitGuardian (1s).
+- Post-merge prod smoke: *[fill in after Task 6 completes]*.
+
+**Learned / surprises:**
+- **`@vercel/config@0.5.0` already types `experimentalServices`.** The plan budgeted for an intersection-type fallback based on Context7 docs that didn't show `experimentalServices` in any `vercel.ts` example. Reality: the type exists and the migration was a clean one-line `: VercelConfig` annotation. Lesson: when a doc gap is "absence of example" vs "explicit deprecation/exclusion", check the actual `.d.ts` before assuming the type isn't there.
+- **`@vercel/config` is pre-1.0** despite the `/v1` subpath import making it look like a stable v1.x release. The Vercel docs example `import { ... } from '@vercel/config/v1'` is a path, not a version. The first `npm install` failed with `ETARGET No matching version found for @vercel/config@^1.` — caught at toolchain-stand-up time, fixed inline before any Git commits.
+
+**Blocked / open:**
+- Post-merge prod smoke + tag still pending (Task 6).
+
+**Next:**
+- Merge PR #2 → prod auto-deploy → curl `/health` to confirm `version: 0.8.7` → tag `v0.8.7` → release workflow publishes from the `[0.8.7]` CHANGELOG section.
+- After v0.8.7 ships: v0.9.0 — Beta hardening (security review, abuse mitigation, load test, legal). Carries in the 2026-05-25 audit's four perf/reliability items: bounded GH fan-out, `/me/analyses` N+1 fix, DB pool tune, Layer A cache schema version.
+
+---
+
 ## 2026-05-25 — Claude (Opus 4.7) — v0.8.6 shipped (`/share/[slug]` PPR + revalidateTag webhook)
 
 **Slice:** v0.8.6 — Next 16 Cache Components on `/share/[slug]` + shared-secret backend→frontend webhook for instant tag invalidation. Closes v0.7.1's deferred share-page caching.

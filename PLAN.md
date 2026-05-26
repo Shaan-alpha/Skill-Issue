@@ -37,7 +37,7 @@
 | **v0.8.4** | Hotfix — narrative persistence honesty (`is_fallback` + `provider` derived correctly, narrative-mode CHECK trimmed, GH `User-Agent` tracks VERSION) | ✅ shipped |
 | **v0.8.5** | CI pipeline (`pytest` + `ruff` + `npm lint/test/build` on every PR) + `requirements.txt` regenerated (was missing 9 of 15 direct deps) | ✅ shipped |
 | **v0.8.6** | On-demand `revalidateTag` for `/share/[slug]` ISR (closes v0.7.1's deferred share-page caching) | ✅ shipped |
-| **v0.8.7** | `vercel.json` → `vercel.ts` migration (Vercel 2026-02-27 knowledge update) | deferred from pre-v0.7.1 |
+| **v0.8.7** | `vercel.json` → `vercel.ts` migration (Vercel 2026-02-27 knowledge update) | ✅ shipped |
 | **v0.9.0** | Beta hardening — security review, abuse mitigation, load test, legal | pending |
 | **v1.0.0** | Public launch | pending |
 
@@ -485,15 +485,30 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 ---
 
-## v0.8.7 — `vercel.json` → `vercel.ts` migration
+## v0.8.7 — `vercel.json` → `vercel.ts` migration (shipped 2026-05-26)
 
 **Goal:** Track the 2026-02-27 Vercel knowledge update by moving the project config to typed TypeScript.
 
-**Slice scope:**
-- Replace `vercel.json` with `vercel.ts` using `@vercel/config/v1`.
-- Move the `experimentalServices` declarations + any cron entries shipped in v0.8.1 + the `git.deploymentEnabled` block shipped in the post-v0.8.2 preview-disable to the typed config.
+**Design spec:** [`docs/superpowers/specs/2026-05-26-v0.8.7-vercel-ts-design.md`](./docs/superpowers/specs/2026-05-26-v0.8.7-vercel-ts-design.md).
+**Sub-plan:** [`docs/superpowers/plans/2026-05-26-v0.8.7-vercel-ts.md`](./docs/superpowers/plans/2026-05-26-v0.8.7-vercel-ts.md) — 6 tasks, config-only (no runtime tests).
 
-**Exit criteria:** TBD when the slice begins.
+**Slice scope (shipped):**
+- Root `vercel.json` ported to `vercel.ts` using `@vercel/config/v1`. All three keys (`experimentalServices`, `crons`, `git.deploymentEnabled`) preserved literally. `@vercel/config@0.5.0` already types `experimentalServices` — no intersection-type fallback was needed.
+- New root `package.json` declares `@vercel/config` + `typescript` as devDeps. New root `tsconfig.json` scoped to `vercel.ts`.
+- New CI job `Config (vercel.ts typecheck)` runs `tsc --noEmit -p .` at repo root on every PR.
+- `backend/vercel.json` untouched.
+
+**Exit criteria:**
+- [x] Root `vercel.ts` exists; TSC clean (`npx tsc --noEmit -p .`).
+- [x] Root `package.json` declares `@vercel/config` as a devDep; `npm ci` resolves cleanly.
+- [x] Root `package-lock.json` committed.
+- [x] Root `tsconfig.json` minimal, scoped to `vercel.ts`.
+- [x] Root `vercel.json` deleted; `backend/vercel.json` untouched.
+- [x] CI's new `config` job green on the PR.
+- [x] `feat/v0.8.7-vercel-ts` did NOT auto-deploy a Preview — confirms `git.deploymentEnabled` filter survived.
+- [ ] Post-merge prod deploy: `/health` reports `version: 0.8.7`; sign-in, `/u/octocat`, `/share/<slug>` all verified.
+- [x] `CHANGELOG.md` `[0.8.7]` written user-facing; `docs/PROGRESS_LOG.md` entry committed; `PLAN.md` row flipped ✅.
+- [ ] Tag `v0.8.7` pushed; release workflow published the GitHub Release.
 
 ---
 

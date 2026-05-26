@@ -91,7 +91,7 @@
 
 | Surface | Host | Notes |
 | --- | --- | --- |
-| Frontend + Backend | **Vercel multi-service project** | One Vercel project hosts both via `experimentalServices` in the root `vercel.json` (frontend at `/`, backend mounted at `/_/backend/*`). Locked 2026-05-15. |
+| Frontend + Backend | **Vercel multi-service project** | One Vercel project hosts both via `experimentalServices` in the root `vercel.ts` (frontend at `/`, backend mounted at `/_/backend/*`). Typed via `@vercel/config/v1` since v0.8.7. Locked 2026-05-15. |
 | Compute | **Vercel Functions (Fluid Compute)** | Function instances reused across concurrent requests, ~300s default timeout. Native marketplace integration with Neon. |
 | DB | **Neon** | Vercel Marketplace integration. Auto-injects `DATABASE_URL` + variants. |
 | Cache | **Upstash Redis** | User-provisioned account (not Marketplace). `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` pasted into Vercel env manually. |

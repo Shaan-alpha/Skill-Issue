@@ -1,0 +1,33 @@
+import type { VercelConfig } from '@vercel/config/v1';
+
+export const config: VercelConfig = {
+  experimentalServices: {
+    frontend: {
+      entrypoint: 'frontend',
+      routePrefix: '/',
+      framework: 'nextjs',
+    },
+    backend: {
+      entrypoint: 'backend',
+      routePrefix: '/_/backend',
+    },
+  },
+  crons: [
+    {
+      path: '/_/backend/cron/refresh-saved-analyses',
+      schedule: '0 3 * * *',
+    },
+  ],
+  git: {
+    deploymentEnabled: {
+      'feat/*': false,
+      'fix/*': false,
+      'chore/*': false,
+      'docs/*': false,
+      'ops/*': false,
+      'style/*': false,
+      'refactor/*': false,
+      'test/*': false,
+    },
+  },
+};

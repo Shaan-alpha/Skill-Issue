@@ -189,7 +189,7 @@ These are **development-time accelerators**, not runtime dependencies. None of t
 
 ## Deployment topology (current)
 
-- **Single Vercel project** hosts both frontend and backend via `experimentalServices` in the root `vercel.json` (locked 2026-05-18). Frontend serves at `/`; backend mounted at `/_/backend/*`.
+- **Single Vercel project** hosts both frontend and backend via `experimentalServices` in the root `vercel.ts` (locked 2026-05-18; migrated from `vercel.json` to typed config in v0.8.7). Frontend serves at `/`; backend mounted at `/_/backend/*`.
 - **Compute:** Vercel Functions (Fluid Compute) — function instances reused across concurrent requests, ~300s default timeout, OIDC env handoff.
 - **DB:** Neon Postgres via the Vercel Marketplace integration (auto-injects `DATABASE_URL` + variants). URL normaliser in `app/db/engine.py` strips libpq-only query params (`sslmode`, `channel_binding`, etc.) asyncpg doesn't accept.
 - **Cache:** Upstash Redis (user-provisioned, **not** Marketplace). Two Sensitive env vars pasted into Vercel manually: `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`.

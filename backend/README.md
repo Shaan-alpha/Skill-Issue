@@ -90,4 +90,4 @@ Config in `ruff.toml` — py312, line length 100, `E/F/I/UP/B/SIM/TCH/RUF`.
 
 ## Deploy
 
-See [`../docs/DEPLOY.md`](../docs/DEPLOY.md) for the Vercel walkthrough. Since v0.5.0 the backend ships in the same Vercel project as the frontend (multi-service via `experimentalServices` in the root `vercel.json`); the `@vercel/python` runtime resolves through `pyproject.toml` + `uv.lock`. A committed `requirements.txt` (regenerated via `uv export --no-hashes --no-dev` in v0.8.5) mirrors the locked closure for any contributor/tool that consumes pip directly — keep it in sync with `pyproject.toml` on dep changes.
+See [`../docs/DEPLOY.md`](../docs/DEPLOY.md) for the Vercel walkthrough. Since v0.5.0 the backend ships in the same Vercel project as the frontend (multi-service via `experimentalServices` in the root `vercel.ts` since v0.8.7; was `vercel.json` before that); the `@vercel/python` runtime resolves through `pyproject.toml` + `uv.lock`. A committed `requirements.txt` (regenerated via `uv export --no-hashes --no-dev` in v0.8.5) mirrors the locked closure for any contributor/tool that consumes pip directly — keep it in sync with `pyproject.toml` on dep changes.

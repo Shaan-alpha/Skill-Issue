@@ -1,0 +1,12 @@
+{
+  "name": "skill-issue-root",
+  "private": true,
+  "description": "Repo-root tooling manifest. Holds @vercel/config so Vercel can resolve vercel.ts. No application code lives here — frontend and backend each have their own manifests.",
+  "engines": {
+    "node": ">=24"
+  },
+  "devDependencies": {
+    "@vercel/config": "^0.5.0",
+    "typescript": "^5"
+  }
+}
