@@ -19,6 +19,33 @@ Format:
 
 ---
 
+## 2026-05-27 — Claude (Opus 4.7) — v0.9.3 scoped (spec + plan written, implementation paused)
+
+**Slice:** v0.9.3 — deletable `/me` history (with undo) + back-nav loading-spinner fix + golden creator flair for `shaan-alpha`. Brainstormed → spec → TDD plan, then **paused before implementation at the user's request.**
+
+**Done:**
+- Brainstormed the three changes; locked decisions: delete = **undo toast** (client-deferred commit, no soft-delete column), gold scope = **results page + shareable card**, creator tag = **"CREATOR · SKILL ISSUE"**.
+- Wrote + committed the spec [`docs/superpowers/specs/2026-05-27-v0.9.3-history-delete-and-creator-flair-design.md`](./superpowers/specs/2026-05-27-v0.9.3-history-delete-and-creator-flair-design.md) and the 8-task TDD plan [`docs/superpowers/plans/2026-05-27-v0.9.3-history-delete-and-creator-flair.md`](./superpowers/plans/2026-05-27-v0.9.3-history-delete-and-creator-flair.md).
+- **Renumbered the v0.9.x map:** v0.9.3 is now the UX slice (📝 planned); DB pool tune → v0.9.4, security-review/load-test → v0.9.5, legal → v0.9.6. (v0.9.2 had briefly numbered pool tune as v0.9.3; this supersedes it.)
+- Reconciled `PLAN.md` (version map + sections) + this log to the current state, and pushed `main` to `origin` (v0.9.2 implementation + this planning) per the user's request.
+
+**Decisions:**
+- **Cascade verified for delete:** `analysis_runs.analysis_id` + `narratives.analysis_run_id` are both `ondelete="CASCADE"` and `Analysis.runs` is `passive_deletes=True`, so `db.delete(analysis)` is sufficient — the spec's conditional "manual child delete" branch is unnecessary. Recorded in the plan.
+- **Back-nav spinner root cause:** `search-bar.tsx` sets `isLoading=true` then navigates; the **bfcache** restores the page with `isLoading` still true (stuck spinner + disabled input). Fix is a `pageshow` reset. No backend involvement.
+- **Creator gilding is mostly free:** the results look is driven by one `--accent` var, so a `creator-theme` override gilds the ring/chips/badges without per-element edits; the OG card (satori) needs an explicit `creator` prop (static gold — satori has no CSS animation).
+
+**Verified:**
+- Backend `ruff` + `pytest` and frontend `lint`/`tsc`/`test:run`/`build` re-run after the doc reconciliation — green (no code changed in this session beyond docs).
+
+**Blocked / open:**
+- v0.9.3 **implementation not started.** Resume by executing the sub-plan on a fresh `feat/v0.9.3-*` branch.
+- Release tags `v0.9.2` (and later `v0.9.3`) still pending; `INTERNAL_PROXY_SECRET` provisioning (v0.9.2) still a user action.
+
+**Next:**
+- When ready, execute the v0.9.3 plan (8 tasks) → merge → push → tag.
+
+---
+
 ## 2026-05-27 — Claude (Opus 4.7) — v0.9.2 shipped (rate limiting: IP + user)
 
 **Slice:** v0.9.2 — per-IP (anonymous) + per-user (signed-in) hourly rate limits on `/analyze` and `/narrative`. Renumbered ahead of the data-gated DB pool tune (now v0.9.3) so the v0.9.x release timeline stays gapless.
