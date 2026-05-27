@@ -8,6 +8,20 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
+## [0.9.1] — 2026-05-27
+
+### Fixed
+- **`/me/analyses` N+1 query.** The list endpoint was issuing one `SELECT AnalysisRun` per row inside the serializer loop (21 round-trips per 20-row page). `list_user_analyses` already JOINed `AnalysisRun` via `latest_run_id` but was discarding the join result; it now returns `tuple[list[tuple[Analysis, AnalysisRun | None]], int]` so the route consumes the joined row directly. Net: 1 query per page instead of 1+N. No JSON contract change.
+
+### Added
+- **`REPORT_SCHEMA_VERSION` constant** in `app/cache/keys.py`. Layer A Report cache keys now carry a per-namespace version prefix: composed key shape is `si:v1:report:v1:<lowercased-username>`. Bumping `REPORT_SCHEMA_VERSION` on future `Report`-shape changes invalidates only the report namespace — no more silent ~6h of cross-namespace Pydantic validation warnings on every schema bump, and no need to bump global `KEY_PREFIX` (which would nuke GH/narrative/lock/budget caches too).
+
+### Notes
+- Existing `si:v1:report:<username>` keys orphan in Upstash until their 6h TTL expires. No manual cache purge needed; the new keys win on first request, and old keys GC at TTL with bounded memory cost.
+- The `Analysis` model is unchanged. The N+1 fix is purely at the persistence/router layer; no new relationship, no new query path.
+
+---
+
 ## [0.9.0] — 2026-05-26
 
 ### Added
