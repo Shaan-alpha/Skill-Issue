@@ -12,7 +12,7 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ### Added
 - **Delete saved analyses.** Each card on your history page (`/me`) now has a ✕ to remove an analysis, with a brief **Undo** in case you change your mind.
-- **Creator flair.** The project creator's profile (`shaan-alpha`) gets a golden scorecard (gold ring, chips, and badges) and a "CREATOR · SKILL ISSUE" tag — on the report page and the shareable card.
+- **Creator flair.** The project's creator account gets a distinguished golden scorecard (gold ring, chips, and badges) and a "CREATOR · SKILL ISSUE" tag — on the report page and the shareable card, so the person who built Skill Issue is recognizable on their own report.
 
 ### Fixed
 - **Stuck search spinner.** After analyzing a profile and pressing the browser Back button, the landing-page search button could stay stuck spinning (and the input disabled). It now resets correctly when the page is restored.

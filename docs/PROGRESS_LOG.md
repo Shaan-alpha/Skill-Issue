@@ -71,7 +71,7 @@ Format:
 - Frontend `lint` + `tsc --noEmit` clean; `test:run` 51/51; `build` clean.
 
 **Blocked / open:**
-- Creator gold + glitter on `/u/shaan-alpha` is visually verified by the user (not unit-tested — see decision above).
+- The creator account's gold treatment is visually verified by the user (not unit-tested — see decision above).
 - Release tag `v0.9.3` + the standing `INTERNAL_PROXY_SECRET` provisioning (v0.9.2) are user follow-ups.
 
 **Next:**
@@ -82,7 +82,7 @@ Format:
 
 ## 2026-05-27 — Claude (Opus 4.7) — v0.9.3 scoped (spec + plan written, implementation paused)
 
-**Slice:** v0.9.3 — deletable `/me` history (with undo) + back-nav loading-spinner fix + golden creator flair for `shaan-alpha`. Brainstormed → spec → TDD plan, then **paused before implementation at the user's request.**
+**Slice:** v0.9.3 — deletable `/me` history (with undo) + back-nav loading-spinner fix + golden creator flair for the project's creator account. Brainstormed → spec → TDD plan, then **paused before implementation at the user's request.**
 
 **Done:**
 - Brainstormed the three changes; locked decisions: delete = **undo toast** (client-deferred commit, no soft-delete column), gold scope = **results page + shareable card**, creator tag = **"CREATOR · SKILL ISSUE"**.

@@ -606,7 +606,7 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 ## v0.9.3 — Deletable history + back-nav fix + creator flair (shipped 2026-05-28)
 
-**Goal:** Three UX changes — delete a saved analysis from `/me` (with undo), fix the landing search spinner stuck after browser back-navigation, and give the creator's profile (`shaan-alpha`) a golden treatment on the results page + shareable card.
+**Goal:** Three UX changes — delete a saved analysis from `/me` (with undo), fix the landing search spinner stuck after browser back-navigation, and give the project's **creator account** a golden treatment on the results page + shareable card (a generic "creator" distinction so whoever built the project is recognizable on their own report — not tied to any one person).
 
 **Design spec:** [`docs/superpowers/specs/2026-05-27-v0.9.3-history-delete-and-creator-flair-design.md`](./docs/superpowers/specs/2026-05-27-v0.9.3-history-delete-and-creator-flair-design.md).
 **Sub-plan:** [`docs/superpowers/plans/2026-05-27-v0.9.3-history-delete-and-creator-flair.md`](./docs/superpowers/plans/2026-05-27-v0.9.3-history-delete-and-creator-flair.md) — 8 tasks, TDD-ordered.
@@ -615,14 +615,14 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 - Backend `DELETE /analyses/{id}` (ownership-checked; DB cascade removes runs+narratives; busts the share cache when the analysis was public).
 - `/me` grid → client `HistoryGrid` with optimistic remove + a single undo toast that defers the real delete ~5s.
 - `search-bar.tsx` resets its loading flag on the `pageshow` (bfcache) event — fixes the stuck spinner after browser Back.
-- A `creator-theme` class overrides `--accent` to gold for `shaan-alpha` (gilds the score ring, chips, badges), plus a glitter shimmer + a "CREATOR · SKILL ISSUE" badge; the satori OG card gains a `creator` prop (static gold — no animation in satori).
+- A `creator-theme` class overrides `--accent` to gold for the creator account (gilds the score ring, chips, badges) + a "CREATOR · SKILL ISSUE" badge; the satori OG card gains a `creator` prop (static gold). The creator account is a single configurable login (`CREATOR_LOGIN`), not hard-wired to a person in the product copy. *(The glow/shimmer that originally shipped was removed same-day — it revealed the square panel bounds behind the ring and conflicts with the "no neon glow" design rule; see PROGRESS_LOG.)*
 
 **Exit criteria:**
 - [x] `DELETE /analyses/{id}` → 204 (owner), 403 (not owner); deleting a public analysis busts its share-page cache; runs + narratives cascade.
 - [x] `/me` shows a ✕ per card; click removes + shows undo toast; Undo restores + issues no DELETE; timeout issues the DELETE.
 - [x] Landing search button no longer stuck spinning after browser Back (bfcache `pageshow` reset); vitest covers it.
-- [x] `/u/shaan-alpha` renders gold accent + glitter + "CREATOR · SKILL ISSUE" badge; a normal user's page unchanged.
-- [x] `shaan-alpha`'s shareable card + OG PNG render the gold palette + creator label.
+- [x] The creator account's report renders the gold accent + "CREATOR · SKILL ISSUE" badge; a normal user's page unchanged.
+- [x] The creator account's shareable card + OG PNG render the gold palette + creator label.
 - [x] Backend `ruff` + `pytest` clean; frontend `lint` + `tsc` + `test:run` + `build` clean.
 - [x] `CHANGELOG.md` + `PLAN.md` + `docs/PROGRESS_LOG.md` updated; version bumped to `0.9.3`; pushed to `main`.
 
