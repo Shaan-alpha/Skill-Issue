@@ -1,3 +1,5 @@
+import pytest
+
 from app.cache.keys import (
     NAMESPACE_BUDGET,
     NAMESPACE_GH,
@@ -19,7 +21,23 @@ from app.cache.keys import (
 def test_report_key_is_lowercased() -> None:
     """GitHub logins are case-insensitive in URLs — a key for Shaan-alpha and
     shaan-alpha must hit the same cache entry."""
-    assert report_key("Shaan-alpha") == report_key("shaan-alpha") == "shaan-alpha"
+    assert report_key("Shaan-alpha") == report_key("shaan-alpha") == "v1:shaan-alpha"
+
+
+def test_report_key_includes_schema_version() -> None:
+    """v0.9.1: Report cache keys carry a REPORT_SCHEMA_VERSION prefix so a
+    future Report-shape change can invalidate the report namespace cleanly
+    without nuking GH/narrative/lock/budget keys via a global KEY_PREFIX bump."""
+    assert report_key("Octocat") == "v1:octocat"
+
+
+def test_report_key_bump_rewrites_namespace(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Bumping REPORT_SCHEMA_VERSION must change every report_key output for
+    the same username — that's the whole point of the constant."""
+    from app.cache import keys as keys_module
+
+    monkeypatch.setattr(keys_module, "REPORT_SCHEMA_VERSION", 7)
+    assert report_key("octocat") == "v7:octocat"
 
 
 def test_narrative_key_includes_mode_and_hash() -> None:

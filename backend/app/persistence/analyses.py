@@ -148,8 +148,13 @@ async def list_user_analyses(
     sort: Sort = "recent",
     page: int = 1,
     page_size: int = 20,
-) -> tuple[list[Analysis], int]:
-    """Return (rows, total). 1-indexed pages."""
+) -> tuple[list[tuple[Analysis, AnalysisRun | None]], int]:
+    """Return (rows, total). 1-indexed pages.
+
+    Each row is `(analysis, latest_run)` — the join is computed once at the
+    DB level so the caller doesn't need to round-trip per row (v0.9.1: closes
+    the /me/analyses N+1).
+    """
     latest = aliased(AnalysisRun)
     base = (
         select(Analysis, latest)
@@ -168,5 +173,5 @@ async def list_user_analyses(
     )
 
     offset = max(0, (page - 1) * page_size)
-    rows = (await db.execute(base.offset(offset).limit(page_size))).all()
-    return [r.Analysis for r in rows], int(total or 0)
+    result = (await db.execute(base.offset(offset).limit(page_size))).all()
+    return [(row[0], row[1]) for row in result], int(total or 0)

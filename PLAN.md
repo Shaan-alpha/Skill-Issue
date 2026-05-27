@@ -39,7 +39,7 @@
 | **v0.8.6** | On-demand `revalidateTag` for `/share/[slug]` ISR (closes v0.7.1's deferred share-page caching) | ✅ shipped |
 | **v0.8.7** | `vercel.json` → `vercel.ts` migration (Vercel 2026-02-27 knowledge update) | ✅ shipped |
 | **v0.9.0** | Bounded GH fan-out (asyncio.Semaphore around ingest_profile gathers) | ✅ shipped |
-| **v0.9.1** | `/me/analyses` N+1 fix + Layer A cache schema version | pending |
+| **v0.9.1** | `/me/analyses` N+1 fix + Layer A cache schema version | ✅ shipped |
 | **v0.9.2** | DB pool tune (5→10, 5→20) after PostHog baseline | pending |
 | **v0.9.3** | Rate limiting (IP + user) + abuse heuristics | pending |
 | **v0.9.4** | `/security-review` pass + load test to 100 RPS | pending |
@@ -545,11 +545,30 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 ---
 
-## v0.9.1 — `/me/analyses` N+1 fix + Layer A cache schema version (deferred)
+## v0.9.1 — `/me/analyses` N+1 fix + Layer A cache schema version (shipped 2026-05-27)
 
-**Goal:** Two tiny perf patches batched. Per-row `select(AnalysisRun)` becomes a single `joinedload`; Layer A Report cache key gets a `REPORT_SCHEMA_VERSION` suffix.
+**Goal:** Two tiny perf patches batched per the 2026-05-26 v0.9.x decomposition. (1) Eliminate the per-row `SELECT AnalysisRun` in `/me/analyses`. (2) Namespace the Layer A Report cache key with `REPORT_SCHEMA_VERSION`.
 
-**Exit criteria:** TBD when the slice begins.
+**Design spec:** [`docs/superpowers/specs/2026-05-27-v0.9.1-perf-batch-design.md`](./docs/superpowers/specs/2026-05-27-v0.9.1-perf-batch-design.md).
+**Sub-plan:** [`docs/superpowers/plans/2026-05-27-v0.9.1-perf-batch.md`](./docs/superpowers/plans/2026-05-27-v0.9.1-perf-batch.md) — 4 tasks, TDD-ordered.
+
+**Slice scope (shipped):**
+- `list_user_analyses` return type: `tuple[list[Analysis], int]` → `tuple[list[tuple[Analysis, AnalysisRun | None]], int]`. The query already JOINed `aliased(AnalysisRun)`; it now surfaces the join instead of discarding it.
+- `/me/analyses` route: `for a, run in rows:` (one query per page total, no inner `db.scalar`). JSON contract unchanged.
+- `REPORT_SCHEMA_VERSION = 1` in `app/cache/keys.py`. `report_key(username)` returns `f"v{REPORT_SCHEMA_VERSION}:{username.lower()}"`. Final key: `si:v1:report:v1:octocat`.
+- 2 new unit tests + 1 existing test updated. 2 DB-fixture tests updated to unpack the new tuple shape.
+
+**Exit criteria:**
+- [x] `list_user_analyses` returns `tuple[list[tuple[Analysis, AnalysisRun | None]], int]`.
+- [x] `/me/analyses` serializer no longer issues a per-row `SELECT AnalysisRun`.
+- [x] `REPORT_SCHEMA_VERSION = 1` exists; `report_key("octocat") == "v1:octocat"`.
+- [x] Bump-rewrites-key behavior covered by `test_report_key_bump_rewrites_namespace`.
+- [x] Backend `pytest -q` non-DB suite: 265 passed (was 263; +2 net new cache tests, 1 existing-updated).
+- [x] `ruff check .` + `ruff format --check .` clean.
+- [x] CI green on PR.
+- [ ] Post-merge prod `/health` reports `version: 0.9.1`; `/u/octocat` analyses cleanly.
+- [x] `CHANGELOG.md` `[0.9.1]` + `docs/PROGRESS_LOG.md` entry + PLAN row flipped ✅.
+- [ ] Tag `v0.9.1` pushed; release workflow published.
 
 ---
 

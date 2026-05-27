@@ -24,6 +24,12 @@ NAMESPACE_NARRATIVE = "narrative"
 NAMESPACE_BUDGET = "budget"
 NAMESPACE_RATE_LIMIT = "rate_limit"
 
+# --- Per-namespace schema versions ---
+# Bump on Report-shape changes (e.g. new tier band, badge schema rev, etc.).
+# Only the report namespace gets versioned today — GH responses are GitHub's
+# contract, narrative/lock/budget/rate_limit are scalars or opaque text.
+REPORT_SCHEMA_VERSION = 1
+
 # --- TTLs (seconds) ---
 
 TTL_REPORT_SECONDS = 21_600  # 6 hours
@@ -59,7 +65,12 @@ def ttl_for_gh_endpoint(url: str) -> int | None:
 
 
 def report_key(username: str) -> str:
-    return username.lower()
+    """Layer A Report cache key, namespaced by REPORT_SCHEMA_VERSION so a
+    future Report-shape change can invalidate the report namespace cleanly.
+    Composed final key under RedisCache._build_key:
+        si:v1:report:v{REPORT_SCHEMA_VERSION}:<lowercased-username>
+    """
+    return f"v{REPORT_SCHEMA_VERSION}:{username.lower()}"
 
 
 def rate_limit_key(name: str, *, user_id: int, hour_bucket: str) -> str:

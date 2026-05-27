@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import require_user
-from app.db.models import Analysis, AnalysisRun, User
+from app.db.models import Analysis, User
 from app.db.session import get_db
 from app.persistence.analyses import list_user_analyses
 
@@ -42,12 +42,7 @@ async def my_analyses(
 ) -> dict[str, Any]:
     rows, total = await list_user_analyses(db, user_id=user.id, sort=sort, page=page, page_size=20)
     serialised: list[dict[str, Any]] = []
-    for a in rows:
-        run: AnalysisRun | None = (
-            await db.scalar(select(AnalysisRun).where(AnalysisRun.id == a.latest_run_id))
-            if a.latest_run_id
-            else None
-        )
+    for a, run in rows:
         serialised.append(
             {
                 "id": a.id,

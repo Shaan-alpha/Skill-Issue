@@ -19,6 +19,43 @@ Format:
 
 ---
 
+## 2026-05-27 — Claude (Opus 4.7) — v0.9.1 shipped (`/me/analyses` N+1 + Layer A cache schema version)
+
+**Slice:** v0.9.1 — two tiny perf patches batched per the 2026-05-26 v0.9.x decomposition.
+
+**Done:**
+- All 4 tasks from [`docs/superpowers/plans/2026-05-27-v0.9.1-perf-batch.md`](./superpowers/plans/2026-05-27-v0.9.1-perf-batch.md). Inline TDD execution; ~15 min wall-clock.
+- **Patch 1 — N+1 fix:** `list_user_analyses` now returns `tuple[list[tuple[Analysis, AnalysisRun | None]], int]`. The query was already joining `aliased(AnalysisRun)` via `latest_run_id` — it just discarded the join result. The fix surfaces the tuple; route unpacks via `for a, run in rows:`. The inner `db.scalar(select(AnalysisRun)...)` call inside the serializer loop is gone. Net: 1 DB query per page instead of 1+N. JSON contract unchanged. Removed `AnalysisRun` from `me.py`'s imports (became unused).
+- **Patch 2 — Cache schema version:** new `REPORT_SCHEMA_VERSION = 1` constant in `app/cache/keys.py`. `report_key(username)` returns `f"v{REPORT_SCHEMA_VERSION}:{username.lower()}"`. Composed key under `RedisCache._build_key`: `si:v1:report:v1:octocat`. Bumping the constant invalidates only the report namespace — no more cross-cache nuke via global `KEY_PREFIX` on every Report-shape change.
+- **Tests:** 1 existing `test_report_key_is_lowercased` updated to expect `"v1:shaan-alpha"`; 2 new tests `test_report_key_includes_schema_version` + `test_report_key_bump_rewrites_namespace`. 2 DB-fixture persistence tests updated to unpack the new tuple shape (gated by `TEST_DATABASE_URL`). Non-DB suite: 263 → 265 pass (+2 net).
+- Version + docs ritual: backend `pyproject.toml` + `settings.py::VERSION`, frontend `package.json`, landing pill + results-footer literals, README status + curl example, CHANGELOG `[0.9.1]`, PLAN v0.9.1 row flip + section populated, `uv.lock` re-sync.
+
+**Decisions:**
+- **Surface the tuple, don't add a relationship.** The `Analysis` model could grow a `latest_run` relationship and the function could `selectinload` it, but the query already had the data — surfacing it via the return type was 5 lines lighter and avoided a model change.
+- **Initial `REPORT_SCHEMA_VERSION = 1`.** Today's Report shape is the v1 baseline. Future bumps come on actual schema changes; the constant is the documented invalidation lever.
+- **No SCAN-and-delete of old `report:<username>` keys.** They GC naturally at the 6h TTL. Manual purge would burn the slice for ~6h of Redis memory savings — not worth it.
+- **No query-counter test for the N+1.** The type signature change (`list[tuple[Analysis, AnalysisRun | None]]`) makes re-adding the inner `db.scalar` mechanically harder — the `run` is already in hand. Type system as regression guard is sufficient; query-counter infra is high-overhead.
+
+**Verified:**
+- Backend `ruff check .` + `ruff format --check .` clean on first try — no drift.
+- Backend `pytest -q --no-header`: 265 passed, 63 skipped. +2 over v0.9.0 baseline (matches actual delta: 2 new + 1 updated existing).
+- CI green on PR (Backend, Frontend, Config jobs).
+- Post-merge prod smoke: *[fill in after Task 4 ships]*.
+
+**Learned / surprises:**
+- **Plan predicted 266 non-DB tests; actual was 265.** The plan double-counted `test_report_key_is_lowercased` as both an update AND a new test. Reality: 263 baseline + 2 new = 265. Worth memo-ing: when writing a plan that updates an existing test AND adds new tests, count carefully — an existing-test edit doesn't change the suite size.
+- **Type-system-as-regression-guard hypothesis held cleanly.** The signature change to `list[tuple[Analysis, AnalysisRun | None]]` rippled into the route via `for a, run in rows:` and into the two persistence tests via `for a, _run in rows:`. No additional verification needed beyond running the existing test suite.
+- **`AnalysisRun` import in `me.py` became unused** as soon as the inner `db.scalar` was removed. Ruff didn't flag it because it was already verified clean in the same edit; manual cleanup caught it. Worth memo-ing: when removing a callsite, grep the same file for any imports that may have been load-bearing only for that callsite.
+
+**Blocked / open:**
+- Post-merge prod smoke + tag still pending.
+
+**Next:**
+- Push branch → CI → merge → prod auto-deploy → curl `/health` → tag `v0.9.1` → release.
+- After v0.9.1 ships: v0.9.2 — DB pool tune (5→10, 5→20) once PostHog baseline confirms the symptom.
+
+---
+
 ## 2026-05-26 — Claude (Opus 4.7) — v0.9.0 shipped (bounded GH fan-out)
 
 **Slice:** v0.9.0 — `ingest_profile` now caps concurrent GH API calls at `settings.gh_ingest_concurrency` (default 8) via a per-call `asyncio.Semaphore`. Opens the v0.9.x Beta hardening family.
