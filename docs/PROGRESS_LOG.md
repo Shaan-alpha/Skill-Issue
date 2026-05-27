@@ -19,6 +19,34 @@ Format:
 
 ---
 
+## 2026-05-28 — Claude (Opus 4.7) — post-v0.9.3 fix-forward (creator glow removed; deploy unblocked)
+
+**Slice:** post-v0.9.3, no version bump (fix-forward on `main`, matching the v0.8.0 next.config precedent).
+
+**Done:**
+- **Removed the creator glow/shimmer.** The `creator-glow` box-shadow (on the rounded-rect score panel) + the `creator-ring` `drop-shadow` shimmer (clipped to the square SVG viewport) made a rectangular halo visible behind the circular score ring (user screenshot). Dropped both classes + `@keyframes creator-shimmer`. The gold stays — `--accent` override still gilds the ring/chips/badges, the text-gradient is still gold, and the "CREATOR · SKILL ISSUE" badge remains. Also aligns with the AGENTS "no neon glow" design rule (the glow shouldn't have shipped). CHANGELOG `[0.9.3]` line softened "glittering" → "golden."
+- **Unblocked the deploy.** The dashboard "Redeploy" the user clicked to apply `INTERNAL_PROXY_SECRET` had **failed** (`dpl_BByg…`, ERROR) — for this `experimentalServices` project the Redeploy path looks for Next.js in the root `package.json` (which only has `@vercel/config`) and errors with "No Next.js version detected." Prod kept serving the prior good build (so the secret wasn't applied). Fixed by pushing an empty commit (`e17d193`) → fresh **git-push** deploy (`dpl_FWPK…`) reached READY with zero downtime and the secret applied.
+
+**Decisions:**
+- **Remove rather than re-engineer the glow.** A contained gold halo (separate absolutely-positioned radial element) was possible but needs visual iteration I can't do headlessly; removing is definitive, artifact-free, and design-rule-compliant. The user offered "fix it or remove the shining."
+- **Fix-forward, no version bump** — same-session visual polish on a just-shipped slice; matches the v0.8.0 build-hotfix precedent.
+
+**Learned / surprises:**
+- **Vercel dashboard "Redeploy" ≠ git-push deploy for `experimentalServices` projects.** Redeploy mis-detects the framework at the repo root and fails; git-push reads `vercel.ts` and builds the services. **Always apply env-var changes via a commit to `main`** (even empty), not the Redeploy button. Worth adding to `docs/DEPLOY.md` next touch.
+- **SVG clips `drop-shadow` filter glow to its (square) viewport** unless `overflow: visible`. A circular drop-shadow that overflows the element's square box reads as a square halo. Memo for any future SVG glow.
+
+**Verified:**
+- Frontend `lint` + `tsc --noEmit` clean; `test:run` 51/51; `build` clean.
+- New prod deploy `dpl_FWPK8pbHVX2ycTQW17duTU4Uw1Mk` (commit e17d193) state READY; `/health` 200 `version: 0.9.3` throughout the swap.
+
+**Blocked / open:**
+- This glow-removal commit deploys via git-push on `main` (this session).
+
+**Next:**
+- v0.9.4 — DB pool tune, once RUM confirms the symptom.
+
+---
+
 ## 2026-05-28 — Claude (Opus 4.7) — v0.9.3 shipped (deletable history + back-nav fix + creator flair)
 
 **Slice:** v0.9.3 — the three UX changes scoped on 2026-05-27, now implemented. Executed the 8-task plan inline on `feat/v0.9.3-impl`.

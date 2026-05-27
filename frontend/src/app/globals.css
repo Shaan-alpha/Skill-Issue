@@ -163,7 +163,11 @@
     background: radial-gradient(circle at center, rgba(59, 130, 246, 0.05) 0%, transparent 70%);
   }
 
-  /* v0.9.3 — golden creator treatment (scoped; affects only .creator-theme). */
+  /* v0.9.3 — golden creator treatment (scoped; affects only .creator-theme).
+     Gold via the --accent override gilds the score ring, chips, and badges;
+     the text-gradient goes gold too. No glow/shimmer — a box-shadow/drop-shadow
+     halo revealed the panel's rectangular bounds behind the circular ring, and
+     neon glow is against the project's design rules anyway. */
   .creator-theme {
     --accent: #fbbf24; /* amber-400 gold */
     --accent-foreground: #1a1400;
@@ -172,20 +176,5 @@
     background: linear-gradient(to bottom right, #fde68a, #f59e0b);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-  }
-  .creator-theme .creator-glow {
-    box-shadow: 0 0 60px -10px rgba(251, 191, 36, 0.35);
-  }
-  .creator-theme .creator-ring {
-    animation: creator-shimmer 2.5s ease-in-out infinite;
-  }
-  @keyframes creator-shimmer {
-    0%,
-    100% {
-      filter: drop-shadow(0 0 2px rgba(251, 191, 36, 0.45));
-    }
-    50% {
-      filter: drop-shadow(0 0 10px rgba(251, 191, 36, 0.95));
-    }
   }
 }

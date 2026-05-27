@@ -230,7 +230,7 @@ export function ResultsView({
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.4 }}
-            className={`glass flex flex-col items-center justify-center space-y-4 rounded-3xl p-6 text-center sm:p-8 lg:col-span-1${creator ? " creator-glow" : ""}`}
+            className="glass flex flex-col items-center justify-center space-y-4 rounded-3xl p-6 text-center sm:p-8 lg:col-span-1"
           >
             <span className="text-sm font-medium uppercase tracking-widest text-muted-foreground">
               Aggregate Score
@@ -261,7 +261,7 @@ export function ResultsView({
                   initial={{ strokeDashoffset: 552.92 }}
                   animate={{ strokeDashoffset: 552.92 * (1 - report.total / 100) }}
                   transition={{ duration: 1.2, ease: "easeOut", delay: 0.1 }}
-                  className={creator ? "text-accent creator-ring" : "text-accent"}
+                  className="text-accent"
                   strokeLinecap="round"
                 />
               </svg>
