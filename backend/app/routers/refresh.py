@@ -46,7 +46,7 @@ async def force_refresh(
         result = await try_increment_counter(
             cache,
             name="force_refresh",
-            user_id=session.user.id,
+            subject=f"user:{session.user.id}",
             limit=settings.force_refresh_per_user_per_hour,
             hour_bucket=_hour_bucket(now),
         )

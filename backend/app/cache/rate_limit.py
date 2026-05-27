@@ -20,14 +20,15 @@ async def try_increment_counter(
     cache: RedisCache,
     *,
     name: str,
-    user_id: int,
+    subject: str,
     limit: int,
     hour_bucket: str,
     ttl_seconds: int = 3700,
 ) -> RateLimitResult:
-    """Atomically increment a per-user-per-bucket counter and return whether
+    """Atomically increment a per-subject-per-bucket counter and return whether
     the caller is under the limit.
 
+    `subject` is the caller-scoped identity (`user:<id>` or `ip:<addr>`).
     `hour_bucket` is whatever the caller wants to scope by — typically the
     current UTC hour, formatted as 'YYYY-MM-DD-HH'. We set EXPIRE on first
     observation so the key cleans up after the bucket rolls over.
@@ -35,7 +36,7 @@ async def try_increment_counter(
     Fail-open: if Redis errors, INCR returns 0 (per RedisCache), which we
     treat as `allowed=True, current=0`. A flaky Redis shouldn't block users.
     """
-    key = rate_limit_key(name, user_id=user_id, hour_bucket=hour_bucket)
+    key = rate_limit_key(name, subject=subject, hour_bucket=hour_bucket)
     current = await cache.incr(NAMESPACE_RATE_LIMIT, key)
     if current == 1:
         # First write into this bucket — pin a TTL so we don't leak keys.
