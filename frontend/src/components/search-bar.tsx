@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,15 @@ export function SearchBar() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+
+  // After navigating to /u/<user> the browser may restore THIS page from the
+  // bfcache on back-navigation, with isLoading still true (stuck spinner +
+  // disabled input). Reset it whenever the page is shown again.
+  useEffect(() => {
+    const reset = () => setIsLoading(false);
+    window.addEventListener("pageshow", reset);
+    return () => window.removeEventListener("pageshow", reset);
+  }, []);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
