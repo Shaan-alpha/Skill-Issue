@@ -2,6 +2,7 @@ import type { Report } from "@/types";
 import {
   OG_BG_DARK,
   OG_BG_DARK_TOP,
+  OG_CREATOR_ACCENT,
   OG_FG,
   OG_FG_MUTED,
   tierAccent,
@@ -11,6 +12,8 @@ interface Props {
   report: Report;
   /** Optional avatar URL — passed by route handlers when known. */
   avatarUrl?: string | null;
+  /** Golden creator treatment for the project creator's own card. */
+  creator?: boolean;
 }
 
 /**
@@ -19,8 +22,8 @@ interface Props {
  * exclusively because satori implements flex but not grid, and is strict:
  * EVERY div needs explicit `display: flex` (or `block`, `contents`, `none`).
  */
-export function OgCard({ report, avatarUrl }: Props) {
-  const accent = tierAccent(report.tier.name);
+export function OgCard({ report, avatarUrl, creator = false }: Props) {
+  const accent = creator ? OG_CREATOR_ACCENT : tierAccent(report.tier.name);
   const topBadges = report.badges.slice(0, 3);
 
   return (
@@ -73,6 +76,24 @@ export function OgCard({ report, avatarUrl }: Props) {
           <div style={{ display: "flex", fontSize: 16, color: "#666", marginTop: 4 }}>
             skill-issue-tau.vercel.app
           </div>
+          {creator ? (
+            <div
+              style={{
+                display: "flex",
+                marginTop: 10,
+                padding: "6px 14px",
+                borderRadius: 999,
+                background: `${OG_CREATOR_ACCENT}1a`,
+                border: `1px solid ${OG_CREATOR_ACCENT}66`,
+                color: OG_CREATOR_ACCENT,
+                fontSize: 16,
+                fontWeight: 700,
+                letterSpacing: 1,
+              }}
+            >
+              CREATOR · SKILL ISSUE
+            </div>
+          ) : null}
         </div>
       </div>
 

@@ -20,3 +20,4 @@ export const OG_BG_DARK = "#0a0a0a";
 export const OG_BG_DARK_TOP = "#111111";
 export const OG_FG = "#fafafa";
 export const OG_FG_MUTED = "#888888";
+export const OG_CREATOR_ACCENT = "#fbbf24"; // gold (amber-400) — creator card

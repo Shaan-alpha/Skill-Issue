@@ -135,6 +135,20 @@ async def revoke_share_slug(db: AsyncSession, *, analysis_id: int, owner_id: int
     return removed
 
 
+async def delete_analysis(db: AsyncSession, *, analysis_id: int, owner_id: int) -> str | None:
+    """Delete an owned analysis and its runs/narratives (DB cascade).
+
+    Returns the share_slug that was removed (so the caller can bust the
+    frontend share cache) or None if the analysis was private. Raises
+    AnalysisNotFound if the id doesn't exist or isn't owned by owner_id.
+    """
+    a = await _owned_analysis(db, analysis_id, owner_id)
+    removed = a.share_slug
+    await db.delete(a)
+    await db.flush()
+    return removed
+
+
 async def get_analysis_by_slug(db: AsyncSession, slug: str) -> Analysis | None:
     return await db.scalar(
         select(Analysis).where(Analysis.share_slug == slug, Analysis.is_public.is_(True))

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { HistoryCard } from "@/components/history-card";
+import { HistoryGrid } from "@/components/history-grid";
 import type { MeAnalysesResponse } from "@/types";
 
 // `force-dynamic` is incompatible with `cacheComponents: true` (v0.8.6).
@@ -73,11 +73,7 @@ export default async function MePage({
           ))}
         </nav>
       </header>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {data.analyses.map((a) => (
-          <HistoryCard key={a.id} analysis={a} />
-        ))}
-      </div>
+      <HistoryGrid analyses={data.analyses} />
     </main>
   );
 }

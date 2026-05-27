@@ -21,6 +21,7 @@ import { Report, ScoreResult, TierInfo } from "@/types";
 import { PositionBar } from "@/components/position-bar";
 import { BadgeRow } from "@/components/badge-row";
 import { SaveShareControls } from "@/components/save-share-controls";
+import { isCreator } from "@/lib/creator";
 import { trackAnalyzeSubmitted } from "@/observability/events";
 
 // NarrativeCard pulls a heavy SSE-streaming client that only matters
@@ -136,6 +137,7 @@ export function ResultsView({
   }, [report]);
 
   const canonicalUsername = report.username;
+  const creator = isCreator(report.username);
   const { breakdown } = report;
   const items = [
     {
@@ -177,7 +179,7 @@ export function ResultsView({
   ];
 
   return (
-    <div className="min-h-screen bg-background px-4 py-6 sm:px-6 sm:py-12">
+    <div className={`min-h-screen bg-background px-4 py-6 sm:px-6 sm:py-12${creator ? " creator-theme" : ""}`}>
       <main className="mx-auto max-w-6xl space-y-8 sm:space-y-12">
         <h1 className="sr-only">Engineering report for {report.username}</h1>
         <header className="flex flex-wrap items-center justify-between gap-3">
@@ -189,6 +191,11 @@ export function ResultsView({
             Back to search
           </Link>
           <div className="flex items-center gap-3">
+            {creator && (
+              <Badge className="border-accent/40 bg-accent/10 font-mono text-xs text-accent">
+                CREATOR · SKILL ISSUE
+              </Badge>
+            )}
             <Badge
               variant="outline"
               className="max-w-[60vw] truncate border-white/10 bg-white/5 font-mono text-xs"
@@ -223,7 +230,7 @@ export function ResultsView({
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.4 }}
-            className="glass flex flex-col items-center justify-center space-y-4 rounded-3xl p-6 text-center sm:p-8 lg:col-span-1"
+            className={`glass flex flex-col items-center justify-center space-y-4 rounded-3xl p-6 text-center sm:p-8 lg:col-span-1${creator ? " creator-glow" : ""}`}
           >
             <span className="text-sm font-medium uppercase tracking-widest text-muted-foreground">
               Aggregate Score
@@ -254,7 +261,7 @@ export function ResultsView({
                   initial={{ strokeDashoffset: 552.92 }}
                   animate={{ strokeDashoffset: 552.92 * (1 - report.total / 100) }}
                   transition={{ duration: 1.2, ease: "easeOut", delay: 0.1 }}
-                  className="text-accent"
+                  className={creator ? "text-accent creator-ring" : "text-accent"}
                   strokeLinecap="round"
                 />
               </svg>
@@ -345,7 +352,7 @@ export function ResultsView({
         </section>
 
         <footer className="space-y-2 pt-8 text-center text-xs uppercase tracking-widest text-muted-foreground sm:pt-12">
-          <p>Skill Issue — GitHub Reputation Protocol v0.9.2</p>
+          <p>Skill Issue — GitHub Reputation Protocol v0.9.3</p>
         </footer>
       </main>
 

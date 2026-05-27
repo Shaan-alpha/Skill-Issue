@@ -10,6 +10,7 @@ from app.db.models import User
 from app.db.session import get_db
 from app.persistence.analyses import (
     AnalysisNotFound,
+    delete_analysis,
     revoke_share_slug,
     set_share_slug,
 )
@@ -64,5 +65,22 @@ async def revoke_share(
     # Synchronously invalidate the frontend's cache for the removed slug so
     # the next request 404s with no stale window.
     if removed_slug:
+        background_tasks.add_task(revalidate_share_slug, removed_slug)
+    return Response(status_code=204)
+
+
+@router.delete("/{analysis_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_analysis_route(
+    analysis_id: int,
+    background_tasks: BackgroundTasks,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(require_user)],
+) -> Response:
+    try:
+        removed_slug = await delete_analysis(db, analysis_id=analysis_id, owner_id=user.id)
+    except AnalysisNotFound as exc:
+        raise HTTPException(status_code=403, detail={"error": "not_owner_or_missing"}) from exc
+    if removed_slug:
+        # The analysis was public — bust the share page so the slug 404s.
         background_tasks.add_task(revalidate_share_slug, removed_slug)
     return Response(status_code=204)
