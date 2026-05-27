@@ -162,4 +162,30 @@
   .hero-gradient {
     background: radial-gradient(circle at center, rgba(59, 130, 246, 0.05) 0%, transparent 70%);
   }
+
+  /* v0.9.3 — golden creator treatment (scoped; affects only .creator-theme). */
+  .creator-theme {
+    --accent: #fbbf24; /* amber-400 gold */
+    --accent-foreground: #1a1400;
+  }
+  .creator-theme .text-gradient {
+    background: linear-gradient(to bottom right, #fde68a, #f59e0b);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .creator-theme .creator-glow {
+    box-shadow: 0 0 60px -10px rgba(251, 191, 36, 0.35);
+  }
+  .creator-theme .creator-ring {
+    animation: creator-shimmer 2.5s ease-in-out infinite;
+  }
+  @keyframes creator-shimmer {
+    0%,
+    100% {
+      filter: drop-shadow(0 0 2px rgba(251, 191, 36, 0.45));
+    }
+    50% {
+      filter: drop-shadow(0 0 10px rgba(251, 191, 36, 0.95));
+    }
+  }
 }
