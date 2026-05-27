@@ -8,6 +8,20 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
+## [0.9.2] — 2026-05-27
+
+### Added
+- **Rate limiting on analysis and narrative requests.** Anonymous visitors are limited per IP; signed-in users get a higher per-account limit (they analyze with their own GitHub token). Exceeding a limit returns a clear, on-voice "slow down" page with a retry hint instead of a generic error. Defaults: 20 analyses / 30 narratives per hour for anonymous visitors, 60 / 90 for signed-in users — all tunable via env vars without a redeploy.
+
+### Changed
+- The internal rate-limit counter is now keyed by a generic subject (`user:<id>` or `ip:<addr>`), shared across the force-refresh, analyze, and narrative limits.
+
+### Notes
+- New env var `INTERNAL_PROXY_SECRET` (set the same value on the frontend and backend) lets the site attribute analysis requests to the real visitor IP rather than the server's. Until it's set, anonymous analysis is **not** IP-limited — so real visitors are never throttled by mistake — while narrative and signed-in limits stay active.
+- All cache layers remain fail-open: if Redis is unavailable, requests are allowed rather than blocked.
+
+---
+
 ## [0.9.1] — 2026-05-27
 
 ### Fixed
