@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { OgCard } from "@/components/og-card";
+import { isCreator } from "@/lib/creator";
 import { fetchReportForUser } from "@/lib/og-card-data";
 
 export const alt = "Skill Issue engineering scorecard";
@@ -27,6 +28,7 @@ export default async function Image({
       <OgCard
         report={report}
         avatarUrl={`https://github.com/${report.username}.png?size=96`}
+        creator={isCreator(report.username)}
       />
     ) : (
       <div

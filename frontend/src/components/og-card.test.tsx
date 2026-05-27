@@ -89,4 +89,14 @@ describe("OgCard", () => {
     render(<OgCard report={fixture()} />);
     expect(screen.getByText("Skill Issue")).toBeInTheDocument();
   });
+
+  it("renders the CREATOR label when creator", () => {
+    render(<OgCard report={fixture()} creator />);
+    expect(screen.getByText(/CREATOR · SKILL ISSUE/i)).toBeInTheDocument();
+  });
+
+  it("omits the CREATOR label by default", () => {
+    render(<OgCard report={fixture()} />);
+    expect(screen.queryByText(/CREATOR · SKILL ISSUE/i)).not.toBeInTheDocument();
+  });
 });
