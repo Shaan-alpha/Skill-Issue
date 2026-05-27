@@ -123,7 +123,8 @@ async def test_list_user_analyses_sorts_by_latest_run_desc(db):
     )
     rows, total = await list_user_analyses(db, user_id=u.id, sort="recent", page=1, page_size=20)
     assert total == 2
-    assert [r.target_login for r in rows] == ["later", "early"]
+    # v0.9.1: list_user_analyses now returns (Analysis, AnalysisRun | None) tuples.
+    assert [a.target_login for a, _run in rows] == ["later", "early"]
 
 
 async def test_list_user_analyses_sort_score_desc(db):
@@ -153,7 +154,8 @@ async def test_list_user_analyses_sort_score_desc(db):
         latency_ms=1,
     )
     rows, _ = await list_user_analyses(db, user_id=u.id, sort="score_desc", page=1, page_size=20)
-    assert [r.target_login for r in rows] == ["hi", "lo"]
+    # v0.9.1: list_user_analyses now returns (Analysis, AnalysisRun | None) tuples.
+    assert [a.target_login for a, _run in rows] == ["hi", "lo"]
 
 
 async def test_get_user_analysis_by_target_returns_owned_row(db):
