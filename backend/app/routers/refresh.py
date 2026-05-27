@@ -16,18 +16,10 @@ from app.db.session import get_db
 from app.dependencies import get_cache, get_report_for_user
 from app.models import Report
 from app.persistence.analyses import get_user_analysis_by_target, record_run
+from app.ratelimit import hour_bucket, seconds_until_next_hour
 from app.settings import settings
 
 router = APIRouter(prefix="/me", tags=["me"])
-
-
-def _hour_bucket(now: datetime) -> str:
-    return now.strftime("%Y-%m-%d-%H")
-
-
-def _seconds_until_next_hour(now: datetime) -> int:
-    next_hour = now.replace(minute=0, second=0, microsecond=0).timestamp() + 3600
-    return max(1, int(next_hour - now.timestamp()))
 
 
 @router.post("/refresh/{username}")
@@ -48,10 +40,10 @@ async def force_refresh(
             name="force_refresh",
             subject=f"user:{session.user.id}",
             limit=settings.force_refresh_per_user_per_hour,
-            hour_bucket=_hour_bucket(now),
+            hour_bucket=hour_bucket(now),
         )
         if not result.allowed:
-            retry_after = _seconds_until_next_hour(now)
+            retry_after = seconds_until_next_hour(now)
             return JSONResponse(
                 {"detail": "rate_limited", "retry_after_seconds": retry_after},
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
