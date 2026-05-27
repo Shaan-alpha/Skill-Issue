@@ -19,6 +19,39 @@ Format:
 
 ---
 
+## 2026-05-28 — Claude (Opus 4.7) — v0.9.3 shipped (deletable history + back-nav fix + creator flair)
+
+**Slice:** v0.9.3 — the three UX changes scoped on 2026-05-27, now implemented. Executed the 8-task plan inline on `feat/v0.9.3-impl`.
+
+**Done:**
+- **Delete + undo:** `delete_analysis(db, *, analysis_id, owner_id) -> str | None` (relies on the existing FK cascade — `db.delete(analysis)` removes runs+narratives; returns the share_slug if public). New `DELETE /analyses/{id}` route (require_user + ownership → 403 via `AnalysisNotFound`; busts the share cache via `revalidate_share_slug` when public). `/me` grid is now a client `HistoryGrid`: optimistic remove + a single bottom undo toast; Undo cancels, ~5s timeout fires the DELETE then `router.refresh()`. `HistoryCard` gained a ✕ button (`preventDefault`/`stopPropagation` so it doesn't follow the card's Link).
+- **Back-nav spinner fix:** `search-bar.tsx` now resets `isLoading=false` on the `window` `pageshow` event (bfcache restore). Vitest simulates a `pageshow` re-enabling the button.
+- **Creator flair:** new `lib/creator.ts` (`CREATOR_LOGIN="shaan-alpha"` + `isCreator`). `results-view.tsx` adds `creator-theme` (overrides `--accent` to gold → gilds ring/chips/badges for free), a `creator-glow` on the score panel, a `creator-ring` shimmer (`@keyframes creator-shimmer` in globals.css), and a gold "CREATOR · SKILL ISSUE" header badge. `og-card.tsx` gained a `creator` prop (gold palette + label); `opengraph-image.tsx` passes `creator={isCreator(...)}` (twitter-image re-exports it, so both inherit).
+- **Tests:** backend +6 DB-gated (3 persistence + 3 route, skip locally). Frontend +5 (search-bar 1, history-grid 2, og-card 2). Suite: backend 281 non-DB pass (69 skipped); frontend 44 → 51 vitest.
+
+**Decisions:**
+- **Undo = client-deferred commit, not soft-delete.** The DELETE only fires after the ~5s window; Undo just cancels the timer. No DB column/migration. Navigating away mid-window = no delete (safe).
+- **Cascade confirmed in models** — `analysis_runs.analysis_id` + `narratives.analysis_run_id` are `ondelete="CASCADE"`, `Analysis.runs` is `passive_deletes=True`. The spec's conditional manual-child-delete branch was unnecessary.
+- **Dropped the full-`ResultsView` render test.** `next/dynamic` (NarrativeCard) + `framer-motion` `m` components suspend the tree under happy-dom (empty render, no mock interception), making the test brittle. Per AGENTS "UI does not need 100% coverage — visual verification is fine," creator detection is covered by the `isCreator` unit test + `tsc`/`build` + visual check. The `OgCard` creator test (pure JSX, no suspense) stays.
+
+**Learned / surprises:**
+- **happy-dom + `next/dynamic` + framer `m` = suspense hell in tests.** A component pulling a `dynamic(ssr:false)` child and `m.*` motion components renders empty under the jsdom-like env, and per-file `vi.mock("next/dynamic")` didn't intercept (sentinel never appeared). Worth memo-ing: test the small pure pieces (`isCreator`, `OgCard`) directly; don't try to full-render heavy client pages in vitest here.
+- **Most of the gold came free** from overriding one CSS var (`--accent`) under a scoped `.creator-theme` class — the ring/chips/badges all read it. The only explicit additions were the glow, the shimmer keyframe, and the header badge.
+
+**Verified:**
+- Backend `ruff check .` + `ruff format --check .` clean; `pytest -q --no-header` 281 passed / 69 skipped.
+- Frontend `lint` + `tsc --noEmit` clean; `test:run` 51/51; `build` clean.
+
+**Blocked / open:**
+- Creator gold + glitter on `/u/shaan-alpha` is visually verified by the user (not unit-tested — see decision above).
+- Release tag `v0.9.3` + the standing `INTERNAL_PROXY_SECRET` provisioning (v0.9.2) are user follow-ups.
+
+**Next:**
+- Merge `feat/v0.9.3-impl` → main → push (this session). Tag `v0.9.3` when ready.
+- v0.9.4 — DB pool tune, once RUM confirms the symptom.
+
+---
+
 ## 2026-05-27 — Claude (Opus 4.7) — v0.9.3 scoped (spec + plan written, implementation paused)
 
 **Slice:** v0.9.3 — deletable `/me` history (with undo) + back-nav loading-spinner fix + golden creator flair for `shaan-alpha`. Brainstormed → spec → TDD plan, then **paused before implementation at the user's request.**

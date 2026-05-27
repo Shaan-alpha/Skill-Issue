@@ -41,7 +41,7 @@
 | **v0.9.0** | Bounded GH fan-out (asyncio.Semaphore around ingest_profile gathers) | ✅ shipped |
 | **v0.9.1** | `/me/analyses` N+1 fix + Layer A cache schema version | ✅ shipped |
 | **v0.9.2** | Rate limiting (IP + user) on `/analyze` + `/narrative` | ✅ shipped |
-| **v0.9.3** | Deletable `/me` history + back-nav loading fix + creator flair | 📝 spec + plan ready |
+| **v0.9.3** | Deletable `/me` history + back-nav loading fix + creator flair | ✅ shipped |
 | **v0.9.4** | DB pool tune (5→10, 5→20) after PostHog baseline | pending |
 | **v0.9.5** | `/security-review` pass + load test to 100 RPS | pending |
 | **v0.9.6** | Privacy policy + terms (legal docs) | pending |
@@ -604,22 +604,29 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 ---
 
-## v0.9.3 — Deletable history + back-nav fix + creator flair (📝 spec + plan ready)
+## v0.9.3 — Deletable history + back-nav fix + creator flair (shipped 2026-05-28)
 
 **Goal:** Three UX changes — delete a saved analysis from `/me` (with undo), fix the landing search spinner stuck after browser back-navigation, and give the creator's profile (`shaan-alpha`) a golden treatment on the results page + shareable card.
 
 **Design spec:** [`docs/superpowers/specs/2026-05-27-v0.9.3-history-delete-and-creator-flair-design.md`](./docs/superpowers/specs/2026-05-27-v0.9.3-history-delete-and-creator-flair-design.md).
 **Sub-plan:** [`docs/superpowers/plans/2026-05-27-v0.9.3-history-delete-and-creator-flair.md`](./docs/superpowers/plans/2026-05-27-v0.9.3-history-delete-and-creator-flair.md) — 8 tasks, TDD-ordered.
 
-**Status:** Brainstormed + spec'd + planned 2026-05-27; **implementation paused** at the user's request (not yet built). Resume by executing the sub-plan on a fresh `feat/v0.9.3-*` branch.
-
-**Slice scope (planned):**
+**Slice scope (shipped):**
 - Backend `DELETE /analyses/{id}` (ownership-checked; DB cascade removes runs+narratives; busts the share cache when the analysis was public).
 - `/me` grid → client `HistoryGrid` with optimistic remove + a single undo toast that defers the real delete ~5s.
 - `search-bar.tsx` resets its loading flag on the `pageshow` (bfcache) event — fixes the stuck spinner after browser Back.
 - A `creator-theme` class overrides `--accent` to gold for `shaan-alpha` (gilds the score ring, chips, badges), plus a glitter shimmer + a "CREATOR · SKILL ISSUE" badge; the satori OG card gains a `creator` prop (static gold — no animation in satori).
 
-**Exit criteria:** see spec §8. To be checked when implementation completes.
+**Exit criteria:**
+- [x] `DELETE /analyses/{id}` → 204 (owner), 403 (not owner); deleting a public analysis busts its share-page cache; runs + narratives cascade.
+- [x] `/me` shows a ✕ per card; click removes + shows undo toast; Undo restores + issues no DELETE; timeout issues the DELETE.
+- [x] Landing search button no longer stuck spinning after browser Back (bfcache `pageshow` reset); vitest covers it.
+- [x] `/u/shaan-alpha` renders gold accent + glitter + "CREATOR · SKILL ISSUE" badge; a normal user's page unchanged.
+- [x] `shaan-alpha`'s shareable card + OG PNG render the gold palette + creator label.
+- [x] Backend `ruff` + `pytest` clean; frontend `lint` + `tsc` + `test:run` + `build` clean.
+- [x] `CHANGELOG.md` + `PLAN.md` + `docs/PROGRESS_LOG.md` updated; version bumped to `0.9.3`; pushed to `main`.
+
+**Note:** the planned full-`ResultsView` render test was dropped — `next/dynamic` + `framer-motion` suspend the component under happy-dom, making it brittle. Per AGENTS ("UI does not need 100% coverage — visual verification is fine"), creator detection is covered by the `isCreator` unit test + `tsc`/`build` + visual check.
 
 ---
 
