@@ -1,7 +1,8 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { ResultsView } from "@/components/results-view";
 import { NotAnIndividual } from "@/components/not-an-individual";
+import { RateLimited } from "@/components/rate-limited";
 import { Report } from "@/types";
 
 interface AuthHints {
@@ -16,19 +17,46 @@ interface AuthHints {
 // be down" copy, which is misleading for a deterministic input error.
 type AnalysisResult =
   | { kind: "ok"; report: Report }
-  | { kind: "not_individual"; detail: string };
+  | { kind: "not_individual"; detail: string }
+  | { kind: "rate_limited"; retryAfterSeconds: number };
 
 async function getAnalysis(
   username: string,
   cookieHeader: string,
 ): Promise<AnalysisResult> {
   const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+
+  // Forward the real client IP + a shared secret so the backend can attribute
+  // proxied anonymous /analyze requests to the visitor (not this RSC's egress
+  // IP). The secret is server-only — never NEXT_PUBLIC.
+  const h = await headers();
+  const clientIp =
+    h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip") || "";
+  const proxySecret = process.env.INTERNAL_PROXY_SECRET || "";
+
+  const fwd: Record<string, string> = {};
+  if (cookieHeader) fwd["cookie"] = cookieHeader;
+  if (proxySecret) fwd["x-internal-secret"] = proxySecret;
+  if (clientIp) fwd["x-client-ip"] = clientIp;
+
   const res = await fetch(`${baseUrl}/analyze/${username}`, {
     cache: "no-store",
-    headers: cookieHeader ? { cookie: cookieHeader } : undefined,
+    headers: fwd,
   });
 
   if (res.status === 404 || res.status === 400) notFound();
+  if (res.status === 429) {
+    let retryAfterSeconds = 3600;
+    try {
+      const body = (await res.json()) as { retry_after_seconds?: number };
+      if (typeof body.retry_after_seconds === "number") {
+        retryAfterSeconds = body.retry_after_seconds;
+      }
+    } catch {
+      // fall through with the default
+    }
+    return { kind: "rate_limited", retryAfterSeconds };
+  }
   if (res.status === 422) {
     let detail = `'${username}' is a GitHub organization, not a user.`;
     try {
@@ -89,6 +117,9 @@ export default async function AnalysisPage({
   const result = await getAnalysis(username, cookieHeader);
   if (result.kind === "not_individual") {
     return <NotAnIndividual username={username} detail={result.detail} />;
+  }
+  if (result.kind === "rate_limited") {
+    return <RateLimited retryAfterSeconds={result.retryAfterSeconds} />;
   }
 
   const { report } = result;

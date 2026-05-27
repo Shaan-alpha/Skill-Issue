@@ -40,8 +40,8 @@
 | **v0.8.7** | `vercel.json` → `vercel.ts` migration (Vercel 2026-02-27 knowledge update) | ✅ shipped |
 | **v0.9.0** | Bounded GH fan-out (asyncio.Semaphore around ingest_profile gathers) | ✅ shipped |
 | **v0.9.1** | `/me/analyses` N+1 fix + Layer A cache schema version | ✅ shipped |
-| **v0.9.2** | DB pool tune (5→10, 5→20) after PostHog baseline | pending |
-| **v0.9.3** | Rate limiting (IP + user) + abuse heuristics | pending |
+| **v0.9.2** | Rate limiting (IP + user) on `/analyze` + `/narrative` | ✅ shipped |
+| **v0.9.3** | DB pool tune (5→10, 5→20) after PostHog baseline | pending |
 | **v0.9.4** | `/security-review` pass + load test to 100 RPS | pending |
 | **v0.9.5** | Privacy policy + terms (legal docs) | pending |
 | **v1.0.0** | Public launch | pending |
@@ -572,17 +572,40 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 ---
 
-## v0.9.2 — DB pool tune (deferred)
+## v0.9.2 — Rate limiting (IP + user) (shipped 2026-05-27)
 
-**Goal:** Raise `pool_size=5, max_overflow=5` to `pool_size=10, max_overflow=20` once PostHog/Sentry baseline confirms the symptom in v0.8.0-shipped RUM data.
+**Goal:** Cap `/analyze` and `/narrative` request volume so no single client can burn the shared GitHub-token quota, the DB, or the shared LLM budget. Anonymous callers are limited per-IP; signed-in callers per-user (they bring their own GitHub token).
 
-**Exit criteria:** TBD when the slice begins.
+**Design spec:** [`docs/superpowers/specs/2026-05-27-v0.9.2-rate-limiting-design.md`](./docs/superpowers/specs/2026-05-27-v0.9.2-rate-limiting-design.md).
+**Sub-plan:** [`docs/superpowers/plans/2026-05-27-v0.9.2-rate-limiting.md`](./docs/superpowers/plans/2026-05-27-v0.9.2-rate-limiting.md) — 8 tasks, TDD-ordered.
+
+**Slice scope (shipped):**
+- `try_increment_counter` / `rate_limit_key` generalized from `user_id: int` to `subject: str` (`user:<id>` | `ip:<addr>`); the v0.8.2 force-refresh caller adapts.
+- New `app/ratelimit.py`: `client_ip`, `is_trusted_proxy`, shared `hour_bucket` / `seconds_until_next_hour` time helpers (moved out of `refresh.py`), and a `make_rate_limiter` dependency factory. Auth-tier model: signed-in → per-user cap, anonymous → per-IP cap. Fail-open on Redis error or unconfigured cache.
+- Defaults (env-overridable): anon 20 analyze/hr + 30 narrative/hr; signed-in 60 analyze/hr + 90 narrative/hr.
+- Trusted-proxy header: the Next.js RSC forwards the real client IP (`X-Client-IP`) + a shared secret (`INTERNAL_PROXY_SECRET`); the backend trusts the forwarded IP only on a constant-time secret match. When the secret is unset, anonymous `/analyze` enforcement is skipped (so website visitors aren't collapsed into one Vercel-infra-IP bucket); narrative + signed-in limits stay active.
+- 429 returns `{"error":"rate_limited","retry_after_seconds":N}` + `Retry-After` (the shared exception handler now forwards `exc.headers`). Frontend renders an on-voice "slow down" view instead of `error.tsx`.
+- **Deferred to a later v0.9.x patch:** abuse heuristics / suspicious-username throttle, `/auth` throttling, per-day caps.
+
+**Exit criteria:**
+- [x] `rate_limit_key` / `try_increment_counter` take `subject: str`; `refresh.py` adapted; cache tests green.
+- [x] Anonymous `/analyze` over the IP cap (secret configured) → 429 + `Retry-After`; under cap → 200.
+- [x] Signed-in `/analyze` and `/narrative` limited per-user, independent of IP.
+- [x] Anonymous `/narrative` over the IP cap → 429 (browser-direct, real IP).
+- [x] `internal_proxy_secret` unset → anonymous `/analyze` enforcement skipped; narrative + user limits still active.
+- [x] Spoofed `X-Client-IP` without a valid secret is ignored (falls back to connection IP).
+- [x] Cache unconfigured / Redis error → fail-open.
+- [x] Frontend renders an on-voice 429 view, not `error.tsx`.
+- [x] `event=rate_limit.throttled` logged with no raw IP/user_id; documented in `OBSERVABILITY.md`.
+- [x] Backend non-DB suite 281 pass; frontend 44 vitest pass; both lint/tsc/build clean.
+- [ ] Post-merge prod `/health` reports `version: 0.9.2`; `INTERNAL_PROXY_SECRET` provisioned on both services.
+- [x] `CHANGELOG.md` + `docs/PROGRESS_LOG.md` + `PLAN.md` updated; version bumped to `0.9.2`.
 
 ---
 
-## v0.9.3 — Rate limiting + abuse heuristics (deferred)
+## v0.9.3 — DB pool tune (deferred)
 
-**Goal:** Per-IP + per-user rate limiting via Upstash. Suspicious-username regex throttle. Reuses v0.8.2's `try_increment_counter`.
+**Goal:** Raise `pool_size=5, max_overflow=5` to `pool_size=10, max_overflow=20` once PostHog/Sentry baseline confirms the symptom in v0.8.0-shipped RUM data. Mind Neon's pooled-host (PgBouncer) connection caps when sizing.
 
 **Exit criteria:** TBD when the slice begins.
 

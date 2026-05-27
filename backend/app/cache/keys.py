@@ -73,11 +73,13 @@ def report_key(username: str) -> str:
     return f"v{REPORT_SCHEMA_VERSION}:{username.lower()}"
 
 
-def rate_limit_key(name: str, *, user_id: int, hour_bucket: str) -> str:
+def rate_limit_key(name: str, *, subject: str, hour_bucket: str) -> str:
     """Compose a rate-limit counter key. `name` namespaces the counter so a
-    single user can have separate caps per feature (force_refresh, analyze, ...).
-    `hour_bucket` is the bucket label (e.g. UTC hour) the caller chose."""
-    return f"{name}:{user_id}:{hour_bucket}"
+    single subject can have separate caps per feature (force_refresh, analyze,
+    narrative, ...). `subject` is the caller-scoped identity — `user:<id>` for
+    signed-in callers, `ip:<addr>` for anonymous ones. `hour_bucket` is the
+    bucket label (e.g. UTC hour) the caller chose."""
+    return f"{name}:{subject}:{hour_bucket}"
 
 
 def narrative_key(username: str, scores_hash: str, mode: str) -> str:

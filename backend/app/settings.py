@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-VERSION = "0.9.1"
+VERSION = "0.9.2"
 
 
 class Settings(BaseSettings):
@@ -81,6 +81,21 @@ class Settings(BaseSettings):
     # cache only revalidates at its 3600s cacheLife TTL (graceful degradation).
     frontend_base_url: str | None = None
     revalidate_secret: str | None = None
+
+    # v0.9.2 — rate limiting (IP + user)
+    # Hourly caps per UTC-hour bucket. Anonymous callers are capped per-IP;
+    # signed-in callers per-user (they bring their own GitHub token). Narrative
+    # ~1.5x analyze because one analysis view can fire both Roast and Mentor.
+    analyze_anon_per_ip_per_hour: int = 20
+    analyze_user_per_hour: int = 60
+    narrative_anon_per_ip_per_hour: int = 30
+    narrative_user_per_hour: int = 90
+    # Shared secret authenticating the Next.js RSC -> backend hop so a forwarded
+    # X-Client-IP can be trusted for proxied anonymous /analyze. Set the SAME
+    # value on both the frontend and backend services. When unset, anonymous
+    # /analyze enforcement is skipped (otherwise all website visitors would
+    # collapse into one Vercel-infra-IP bucket); narrative + user limits stay on.
+    internal_proxy_secret: str | None = None
 
 
 settings = Settings()

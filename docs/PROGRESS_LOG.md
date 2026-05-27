@@ -19,6 +19,46 @@ Format:
 
 ---
 
+## 2026-05-27 — Claude (Opus 4.7) — v0.9.2 shipped (rate limiting: IP + user)
+
+**Slice:** v0.9.2 — per-IP (anonymous) + per-user (signed-in) hourly rate limits on `/analyze` and `/narrative`. Renumbered ahead of the data-gated DB pool tune (now v0.9.3) so the v0.9.x release timeline stays gapless.
+
+**Done:**
+- All 8 tasks from [`docs/superpowers/plans/2026-05-27-v0.9.2-rate-limiting.md`](./superpowers/plans/2026-05-27-v0.9.2-rate-limiting.md). Inline TDD execution, red→green per task.
+- **Primitive generalized:** `try_increment_counter` / `rate_limit_key` now take `subject: str` (`user:<id>` | `ip:<addr>`) instead of `user_id: int`. The v0.8.2 force-refresh caller passes `subject=f"user:{id}"`.
+- **New `app/ratelimit.py`:** `client_ip` (trusted-proxy-aware), `is_trusted_proxy` (constant-time `X-Internal-Secret` compare), shared `hour_bucket` / `seconds_until_next_hour` time helpers (moved out of `refresh.py`, which imports them back), and `make_rate_limiter(name, anon_limit_field, user_limit_field, via_trusted_proxy)` — a dependency factory. Two instances: `analyze_rate_limiter` (`via_trusted_proxy=True`), `narrative_rate_limiter` (`via_trusted_proxy=False`).
+- **Auth-tier model:** signed-in → per-user cap (via the request-cached `optional_session`); anonymous → per-IP cap. Defaults 20/60 analyze, 30/90 narrative (env-overridable). Fail-open on Redis error or unconfigured cache.
+- **Trusted-proxy header:** RSC `getAnalysis` forwards `X-Client-IP` (from `headers()`) + `X-Internal-Secret` (server-only `INTERNAL_PROXY_SECRET`). Backend trusts the forwarded IP only on secret match; unset secret → anonymous `/analyze` enforcement skipped so website visitors don't collapse into one Vercel-infra-IP bucket.
+- **429 contract:** `{"error":"rate_limited","retry_after_seconds":N}` + `Retry-After`. Required forwarding `exc.headers` in `main.py`'s `StarletteHTTPException` handler (it was dropping headers — latent bug). Frontend renders a new on-voice `RateLimited` view instead of `error.tsx`.
+- **Tests:** +16 backend (8 identity, 6 dependency, 2 route) → 281 non-DB pass; +2 frontend (`RateLimited`) → 44 vitest. Docs ritual across CHANGELOG/PLAN/DEPLOY/.env.example/README/OBSERVABILITY + version literals + `uv.lock`.
+
+**Decisions:**
+- **Auth-tier over IP-always.** Rewards signing in (matches the v0.5.0 own-token design) and avoids NAT collateral damage for signed-in users behind a shared office/campus IP.
+- **Trusted-proxy secret over frontend-side limiting.** The backend is publicly reachable (the narrative `EventSource` proves it), so frontend-only limiting isn't a security boundary. Attributing the real client IP server-side via a shared secret (the v0.8.6 pattern) is the only correct option that also doesn't throttle all website visitors as one infra IP.
+- **Skip-anon-analyze-when-secret-unset.** Graceful degradation: provisioning `INTERNAL_PROXY_SECRET` is the switch that turns anonymous-analyze protection on. Without it, deploying would have collapsed every website visitor into one bucket and locked them out at 20/hr. Narrative (browser-direct, real IP) and signed-in limits never depend on the secret.
+- **`session: Annotated[object | None, ...]` in the dependency.** Mirrors `analyze_user` in main.py — avoids needing `_ResolvedSession` resolvable at runtime under `from __future__ import annotations` (FastAPI's lenient type eval), while `Request` stays a runtime import (FastAPI must resolve it to inject).
+- **Renumber rather than gap.** Rate limiting takes v0.9.2; the data-gated pool tune moves to v0.9.3. Every version bump is a GitHub Release, so a v0.9.3-with-no-v0.9.2 gap was the wrong shape.
+
+**Verified:**
+- Backend `ruff check .` + `ruff format --check .` clean. `pytest -q --no-header`: **281 passed, 63 skipped** (was 265; +16 matches 8+6+2).
+- Frontend `lint` + `tsc --noEmit` clean; `test:run` 44/44; `build` clean (`/u/[username]` still `◐ Partial Prerender`).
+- CI to verify on PR. Post-merge prod smoke + tag pending.
+
+**Learned / surprises:**
+- **The shared `StarletteHTTPException` handler silently dropped `exc.headers`.** A dependency raising `HTTPException(429, headers={"Retry-After": ...})` would have lost the header without the one-line `headers=getattr(exc, "headers", None)` forward. Worth memo-ing: custom exception handlers that reconstruct the response must re-attach `exc.headers` or every header-bearing `HTTPException` in the app silently loses them.
+- **Ruff TC002 only fires when ALL names on an import line are type-only.** Keeping `Request` on the same `from fastapi import Depends, HTTPException, Request, status` line as runtime-used names sidesteps the flag — no `# noqa` needed — while still giving FastAPI the runtime symbol it needs to inject the Request.
+- **`/analyze` (RSC server-fetch) vs `/narrative` (browser `EventSource`) see opposite IPs.** This split was the crux of the design and is easy to miss — a naive "rate-limit by request IP" on both would have been correct for narrative and actively harmful for analyze.
+
+**Blocked / open:**
+- `INTERNAL_PROXY_SECRET` provisioning on both Vercel services (Production + Preview) — user action, AGENTS rule 5. Until set, anonymous `/analyze` isn't IP-limited (safe default).
+- Post-merge prod smoke + tag `v0.9.2` pending.
+
+**Next:**
+- Push branch → CI → merge → prod auto-deploy → provision `INTERNAL_PROXY_SECRET` → curl `/health` for `version: 0.9.2` → tag `v0.9.2` → release.
+- v0.9.3 — DB pool tune, once PostHog/Sentry RUM confirms the pool-exhaustion symptom.
+
+---
+
 ## 2026-05-27 — Claude (Opus 4.7) — v0.9.1 shipped (`/me/analyses` N+1 + Layer A cache schema version)
 
 **Slice:** v0.9.1 — two tiny perf patches batched per the 2026-05-26 v0.9.x decomposition.

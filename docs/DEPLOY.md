@@ -71,6 +71,11 @@ In Vercel → **Settings** → **Environment Variables**, add (Production + Prev
 | `FRONTEND_BASE_URL` | `https://<your-vercel-host>` (no trailing slash). **Backend env only.** Where the share-revalidate webhook POSTs to. Unset = webhook is a logged no-op; the 3600s `cacheLife` fallback absorbs revocations. (v0.8.6+) | — |
 | `REVALIDATE_SECRET` | 32+ byte random hex string. **Both `frontend` and `backend` services**, same value byte-for-byte. Authenticates the backend → frontend webhook that busts `/share/[slug]` cache tags on every share toggle. Unset = webhook disabled; revocations only revalidate at the 3600s fallback. Generate: `python -c "import secrets; print(secrets.token_hex(32))"`. (v0.8.6+) | ✅ |
 | `GH_INGEST_CONCURRENCY` | Max concurrent GitHub API calls per `ingest_profile` invocation. Default `8`. Backend env only. Raise if Layer A cache hit-rate is high and you want lower analysis latency; lower if you're hitting GitHub secondary rate-limit 403s. (v0.9.0+) | — |
+| `INTERNAL_PROXY_SECRET` | 32+ byte random hex string. **Both `frontend` and `backend` services**, same value byte-for-byte. Lets the backend trust the real client IP the Next.js RSC forwards (`X-Client-IP`) for proxied anonymous `/analyze`. Unset = anonymous `/analyze` is **not** IP-limited (real visitors are never throttled by mistake); narrative + signed-in limits stay active. Generate: `python -c "import secrets; print(secrets.token_hex(32))"`. (v0.9.2+) | — |
+| `ANALYZE_ANON_PER_IP_PER_HOUR` | Anonymous per-IP `/analyze` cap. Default `20`. Backend env only. (v0.9.2+) | — |
+| `ANALYZE_USER_PER_HOUR` | Signed-in per-user `/analyze` cap. Default `60`. Backend env only. (v0.9.2+) | — |
+| `NARRATIVE_ANON_PER_IP_PER_HOUR` | Anonymous per-IP `/narrative` cap. Default `30`. Backend env only. (v0.9.2+) | — |
+| `NARRATIVE_USER_PER_HOUR` | Signed-in per-user `/narrative` cap. Default `90`. Backend env only. (v0.9.2+) | — |
 
 ### 5. Run the initial Alembic migration
 

@@ -19,6 +19,7 @@ from app.dependencies import get_cache, get_report_for_user
 from app.models import Report
 from app.observability import RequestIDMiddleware, init_logging, init_sentry
 from app.persistence.analyses import record_run, upsert_analysis
+from app.ratelimit import analyze_rate_limiter
 from app.routers import analyses, auth, cron, me, narrative, refresh, share
 from app.settings import VERSION, settings
 
@@ -48,9 +49,10 @@ app = FastAPI(title="Skill Issue API", version=VERSION, lifespan=lifespan)
 
 @app.exception_handler(StarletteHTTPException)
 async def _http_exc_handler(_request: Request, exc: StarletteHTTPException):
+    headers = getattr(exc, "headers", None)
     if isinstance(exc.detail, dict) and "error" in exc.detail:
-        return JSONResponse(exc.detail, status_code=exc.status_code)
-    return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+        return JSONResponse(exc.detail, status_code=exc.status_code, headers=headers)
+    return JSONResponse({"detail": exc.detail}, status_code=exc.status_code, headers=headers)
 
 
 app.add_middleware(
@@ -107,6 +109,7 @@ def _scores_hash(report: Report) -> str:
 @app.get("/analyze/{username}", response_model=Report)
 async def analyze_user(
     username: str,  # path param forwarded to get_report_for_user via request scope
+    _rl: Annotated[None, Depends(analyze_rate_limiter)],
     report: Annotated[Report, Depends(get_report_for_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
     session: Annotated[object | None, Depends(optional_session)],

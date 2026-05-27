@@ -127,6 +127,15 @@ Backend → frontend webhook for busting `/share/[slug]` cache tags after a shar
 | `share.revalidate_succeeded` | info | breadcrumb | Frontend returned 2xx within the 5s timeout |
 | `share.revalidate_failed` | warn | breadcrumb | 4xx response, network error, or timeout. Includes status/body excerpt for 4xx |
 
+### Rate-limit taxonomy (v0.9.2)
+
+Backend emits structured `logger.warning` lines only — no Sentry capture, no PostHog event (log-only, matching the cron approach). **No raw IP or `user_id` is logged** (see PII contract below).
+
+| Event | Level | Fired when | Fields |
+| --- | --- | --- | --- |
+| `rate_limit.throttled` | warn | A request exceeds its hourly cap and gets a 429 | `name` (analyze\|narrative), `subject_type` (ip\|user), `limit` |
+| `rate_limit.skipped` | warn | Anonymous `/analyze` enforcement skipped because `internal_proxy_secret` is unset | `name`, `reason=internal_proxy_secret_unset` |
+
 ## PII contract
 
 These fields must never reach Sentry or PostHog. Code that handles them is

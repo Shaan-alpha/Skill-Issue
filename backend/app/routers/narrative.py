@@ -21,6 +21,7 @@ from app.models import Report
 from app.narrative.service import NarrativeService, NarrativeStreamMeta
 from app.persistence.analyses import record_run, upsert_analysis
 from app.persistence.narratives import save_narrative
+from app.ratelimit import narrative_rate_limiter
 from app.settings import settings
 
 router = APIRouter(tags=["narrative"])
@@ -59,6 +60,7 @@ def _resolve_provider(base_url: str | None) -> str:
 @router.get("/narrative/{username}")
 async def get_narrative(
     username: str,
+    _rl: Annotated[None, Depends(narrative_rate_limiter)],
     report: Annotated[Report, Depends(get_report_for_user)],
     service: Annotated[NarrativeService, Depends(get_narrative_service)],
     db: Annotated[AsyncSession, Depends(get_db)],
