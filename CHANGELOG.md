@@ -8,6 +8,13 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
+## [0.9.8] — 2026-05-29
+
+### Added
+- **Launch landing sections.** Beneath the hero: a "see it in action" row of example profiles linking to live reports, a "how it works" methodology section, and a "Star on GitHub" call-to-action.
+
+---
+
 ## [0.9.7] — 2026-05-28
 
 ### Added

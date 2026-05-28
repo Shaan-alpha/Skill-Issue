@@ -19,6 +19,30 @@ Format:
 
 ---
 
+## 2026-05-29 — Claude (Opus 4.7) — v0.9.8 shipped (launch landing sections)
+
+**Slice:** v0.9.8 — below-the-fold launch sections beneath the hero. First v1.0.0-prep piece (the user picked "marketing landing variant"); the launch itself stays human-gated as v1.0.0.
+
+**Done:**
+- Three new client section components under `frontend/src/components/landing/`: `ExampleProfiles` (clickable cards for torvalds/gaearon/sindresorhus/antfu/yyx990803/tj → live `/u/<username>` reports), `HowItWorks` (4-point deterministic-methodology grid), `StarCta` ("Star on GitHub" → repo, new tab). Wired into `page.tsx` after the hero (hero container changed from `flex-1` fill to a `min-h-[calc(100vh-header)]` section; fragment + 3 sections below).
+- 1 smoke test (`example-profiles.test.tsx`) — mocks `framer-motion` to plain divs (the happy-dom `m.*` lesson) and asserts 6 cards + the `/u/torvalds` link. Frontend vitest 57 → 58.
+- Docs ritual + version bump to 0.9.8.
+
+**Decisions:**
+- **Honest proof only** — example reports (live, clickable), no testimonials/usage-stats (user confirmed none real). The repo wasn't selected as a proof asset, but the user separately asked for a **Star-on-GitHub CTA** to grow stars — added as the closing section.
+- **Static star button, no live count** — a live count needs a GitHub-API server fetch, which trips the Cache-Components prerender guard (cf. the v0.9.7 `new Date()` lesson); static keeps `/` cleanly static. Count is a later enhancement.
+- **Hero untouched; shipped v0.9.8, not 1.0.0** — 1.0.0 is reserved for the actual launch (its exit criteria are about live traffic). Avatars via plain `<img>` (`github.com/<u>.png`) to skip an image-config change.
+
+**Verified:**
+- Frontend `lint` + `tsc` clean; vitest 58 passed; `next build` clean with `/` still `○ Static`. Backend untouched (290 pass).
+- Visual check of the three sections (desktop + mobile): operator quick-confirm on prod after deploy — the smoke test + build only cover structure, not appearance.
+
+**Blocked / open:** none for v0.9.8. v1.0.0 (public launch) is human-gated.
+
+**Next:** v1.0.0 — public launch (domain + SSL, launch posts, 72h-stable traffic, on-call, retro). Pre-launch reminders still open: professional legal review; run the full 100 RPS load test.
+
+---
+
 ## 2026-05-28 — Claude (Opus 4.7) — v0.9.7 shipped (privacy + terms)
 
 **Slice:** v0.9.7 — the final pre-1.0 slice. Privacy Policy + Terms of Service pages + a new global footer.
