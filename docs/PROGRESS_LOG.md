@@ -19,6 +19,35 @@ Format:
 
 ---
 
+## 2026-05-28 — Claude (Opus 4.7) — v0.9.7 shipped (privacy + terms)
+
+**Slice:** v0.9.7 — the final pre-1.0 slice. Privacy Policy + Terms of Service pages + a new global footer.
+
+**Done:**
+- **`/privacy` + `/terms`** — static TSX server-component pages (prerender as `○ Static`) using a shared `LegalProse`/`LegalSection` wrapper (`frontend/src/components/legal-prose.tsx`). Content is lightweight + honest, grounded in the app's real data flows (GitHub `read:user`, saved analyses in Neon, IP for rate-limiting, Upstash caches, Groq narrative, Sentry/PostHog) — India governing law, 13+, contact shaansatsangi.cse@gmail.com.
+- **Global `SiteFooter`** (`frontend/src/components/site-footer.tsx`) wired into `app/layout.tsx` (`mt-auto`, bottom of the flex-col body): Privacy · Terms · GitHub.
+- **3 smoke tests** (`legal-pages.test.tsx`): each page heading + contact/governing-law text + footer links. Frontend vitest 54 → 57.
+- `docs/legal/README.md` pointer (single source of truth = the TSX pages; no markdown duplicate to drift). Docs ritual + version bump to 0.9.7.
+
+**Decisions:**
+- **Static TSX over markdown** — no rendering dependency, full design control, SEO/PPR-friendly, single source of truth.
+- **Static footer year, not `new Date()`** — under Cache Components (`cacheComponents: true`), `new Date().getFullYear()` in a prerendered server component trips the Next 16 prerender guard (needs a Suspense boundary). The first implementer worked around it with a `"use client"` `CopyrightYear` + Suspense; simplified to a hardcoded `© 2026` (YAGNI — a client component + boundary for a constant is over-engineering; the legal pages already carry a dated "Last updated").
+- **Lightweight, India, 13+, contact shaansatsangi.cse@gmail.com** per the user's brainstorm answers. Operator = Shaan Satsangi (individual).
+- **Not legal advice** — drafts grounded in real practices; flagged for professional review before public launch.
+
+**Learned / surprises:**
+- **Next 16 + Cache Components blocks `new Date()` in prerendered server components** (and even a client component using it without a Suspense boundary above). For trivial dynamic values like a copyright year, a static constant is the clean fix rather than a Suspense+client dance.
+
+**Verified:**
+- Frontend `lint` + `tsc` clean; vitest 57 passed; `next build` clean with `/privacy` + `/terms` as `○ Static`. Backend untouched (290 still pass after the version bump).
+- Footer visual check (landing hero intact, mobile stacking): operator quick-confirm on prod after deploy.
+
+**Blocked / open:** professional legal review recommended before relying on the docs at public launch.
+
+**Next:** v1.0.0 — public launch.
+
+---
+
 ## 2026-05-28 — Claude (Opus 4.7) — v0.9.6 shipped (load-test harness)
 
 **Slice:** v0.9.6. Reusable backend load-test harness + runbook; the full 100 RPS validation run is an operator step (hardware-gated). Split from the original v0.9.5 "security review + load test"; legal docs are now v0.9.7.
