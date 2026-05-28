@@ -191,9 +191,9 @@ export function ResultsView({
             <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" aria-hidden="true" />
             Back to search
           </Link>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
             {creator && (
-              <Badge className="border-accent/40 bg-accent/10 font-mono text-xs text-accent">
+              <Badge className="max-w-full shrink truncate border-accent/40 bg-accent/10 font-mono text-xs text-accent">
                 CREATOR · SKILL ISSUE
               </Badge>
             )}

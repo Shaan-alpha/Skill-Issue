@@ -9,7 +9,7 @@ import { StarCta } from "@/components/landing/star-cta";
 export default function Home() {
   return (
     <>
-      <section className="relative flex min-h-[calc(100vh-3.75rem)] flex-col items-center justify-center overflow-hidden py-12 px-4 sm:min-h-[calc(100vh-4rem)] sm:py-16 sm:px-6 md:py-20">
+      <section className="relative flex min-h-[calc(100vh-3.75rem)] flex-col items-center justify-start overflow-hidden px-4 pt-10 pb-12 sm:min-h-[calc(100vh-4rem)] sm:justify-center sm:px-6 sm:py-16 md:py-20">
         {/* Ambient blobs — smaller and lighter on mobile to keep paint cheap */}
         <div className="absolute top-0 -left-4 w-48 h-48 sm:w-72 sm:h-72 bg-accent/20 rounded-full mix-blend-screen blur-[96px] sm:blur-[128px] animate-pulse" />
         <div className="absolute bottom-0 -right-4 w-48 h-48 sm:w-72 sm:h-72 bg-blue-500/10 rounded-full mix-blend-screen blur-[96px] sm:blur-[128px] animate-pulse [animation-delay:700ms]" />
