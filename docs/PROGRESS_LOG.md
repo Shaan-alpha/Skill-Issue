@@ -19,6 +19,35 @@ Format:
 
 ---
 
+## 2026-05-28 — Claude (Opus 4.7) — v0.9.5 shipped (pre-launch security audit + hardening)
+
+**Slice:** v0.9.5. Full pre-launch security audit of the whole app + two Medium hardening fixes. The load test originally bundled here was split to v0.9.6 (needs target/cost/rate-limit design); legal docs shifted to v0.9.7.
+
+**Done:**
+- **Whole-app security audit — no high/critical findings.** Reviewed: authz/IDOR, session crypto, OAuth CSRF, SQLi, XSS, SSRF, secrets, CORS, rate limiting, security headers. All core surfaces sound (see Decisions for specifics).
+- **Fix #1 — OAuth scope `read:user public_repo` → `read:user`** (`app/auth/oauth.py`). Added `test_authorize_url_requests_read_only_scope`. Updated current-state docs (ARCHITECTURE/TECH_STACK/PLAN); left historical changelog/spec entries as-is.
+- **Fix #2 — HTTP security headers** (`frontend/next.config.ts` `headers()`): enforced `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`; plus a **report-only** CSP (logs, doesn't block) as a tunable baseline.
+- Docs ritual + version bump 0.9.5; DEPLOY security pre-launch checklist note.
+
+**Decisions:**
+- **Verified-clean surfaces:** every mutation ownership-checked via `_owned_analysis` (`id AND user_id` → 403; no IDOR); AES-GCM token encryption (fail-fast 32-byte key, random nonce); OAuth `state` CSRF constant-time; no raw SQL (SQLAlchemy constructs only; `text()` only for `SELECT 1`); no `dangerouslySetInnerHTML` (LLM narrative escaped by React); username regex-validated server-side so GitHub URLs never take a user-controlled host (no SSRF); `INTERNAL_PROXY_SECRET`/`REVALIDATE_SECRET` server-only + constant-time compared.
+- **`public_repo` is a write scope** — a common misconception treated it as "read public." Reading public data needs no repo scope at all; dropping it shrinks a leaked token's blast radius with zero functional loss (new logins only).
+- **CSP report-only, not enforcing** — a wrong CSP silently breaks PostHog/Sentry/Next and I can't browser-test enforcement headlessly. Report-only ships the signal safely; promote after tuning.
+- **Load test split out (v0.9.6)** — our own v0.9.2 rate limits would make a naive 100 RPS test just measure 429s; it needs a deliberate target + cost design, and is independently shippable.
+
+**Operator follow-ups (config, no code):** confirm `COOKIE_SECURE=true` in prod; ensure `CORS_ALLOW_ORIGIN_REGEX` is scoped to our origins (not `*.vercel.app`). Both noted in DEPLOY.md.
+
+**Verified:**
+- Backend `ruff` clean; `pytest tests/auth/test_oauth.py` 6 passed (incl. new scope test). Full suite to re-confirm pre-commit.
+- Frontend `lint` + `tsc` clean; `next build` clean (headers config valid).
+- Security headers verifiable via `curl -I` on prod after deploy.
+
+**Blocked / open:** push/PR/CI/merge/tag pending (confirm-before-tag per the session norm).
+
+**Next:** v0.9.6 — load test to 100 RPS (design the target + rate-limit handling first).
+
+---
+
 ## 2026-05-28 — Claude (Opus 4.7) — v0.9.4 shipped (DB pool size env-tunable + real back-nav spinner fix)
 
 **Slice:** v0.9.4. Two changes: the planned DB-pool work, plus a genuine fix for the back-nav search spinner that v0.9.3 only *appeared* to fix.

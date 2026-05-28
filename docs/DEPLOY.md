@@ -81,6 +81,8 @@ In Vercel → **Settings** → **Environment Variables**, add (Production + Prev
 
 > **DB pool ceiling.** The Neon compute exposes ~105 usable connections (`max_connections` 112 - 7 `superuser_reserved_connections` on the current ~0.25 CU compute). The app connects through the PgBouncer pooler (`statement_cache_size=0`), which multiplexes many client connections onto few server ones — so the ceiling is heavily buffered. If ever switched to a direct connection, keep `(DB_POOL_SIZE + DB_MAX_OVERFLOW) × peak_instances < 105`.
 
+> **Security pre-launch checklist (v0.9.5).** The v0.9.5 audit found no high/critical issues, but confirm these *config* items before public launch: (1) `COOKIE_SECURE=true` is set in prod; (2) `CORS_ALLOW_ORIGIN_REGEX` is scoped to our own origins only (never a blanket `*.vercel.app`); (3) promote the report-only Content-Security-Policy in `frontend/next.config.ts` to enforcing once it's been tuned against real violation reports.
+
 ### 5. Run the initial Alembic migration
 
 The DB schema lives in `backend/migrations/`. Pulling the prod `DATABASE_DIRECT_URL` locally (or pasting it once into a shell session — don't persist it) is the safe way to run migrations:

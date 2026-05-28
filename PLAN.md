@@ -43,8 +43,9 @@
 | **v0.9.2** | Rate limiting (IP + user) on `/analyze` + `/narrative` | ✅ shipped |
 | **v0.9.3** | Deletable `/me` history + back-nav loading fix + creator flair | ✅ shipped |
 | **v0.9.4** | DB pool size env-tunable + real back-nav spinner fix | ✅ shipped |
-| **v0.9.5** | `/security-review` pass + load test to 100 RPS | pending |
-| **v0.9.6** | Privacy policy + terms (legal docs) | pending |
+| **v0.9.5** | Security review + hardening (OAuth scope ↓ `read:user`, HTTP security headers) | ✅ shipped |
+| **v0.9.6** | Load test to 100 RPS | pending |
+| **v0.9.7** | Privacy policy + terms (legal docs) | pending |
 | **v1.0.0** | Public launch | pending |
 
 ---
@@ -175,7 +176,7 @@
 **Design spec:** [`docs/superpowers/specs/2026-05-16-v0.5.0-auth-persistence-design.md`](./docs/superpowers/specs/2026-05-16-v0.5.0-auth-persistence-design.md).
 
 **Slice scope:**
-- GitHub **OAuth App** (not GitHub App), server-side flow, scopes `read:user public_repo`. State token in a short-lived httpOnly cookie. Server-side opaque sessions in Postgres (no JWT).
+- GitHub **OAuth App** (not GitHub App), server-side flow, scope `read:user` (v0.9.5 dropped `public_repo`). State token in a short-lived httpOnly cookie. Server-side opaque sessions in Postgres (no JWT).
 - **Neon Postgres** schema (5 tables): `users`, `sessions`, `analyses`, `analysis_runs`, `narratives`. Cascade deletes from `users` clean everything up.
 - **SQLAlchemy 2.0 async + asyncpg** against Neon's pooled host (port 6543, `statement_cache_size=0`). Direct host (port 5432) only for Alembic migrations.
 - **Alembic** migrations, hand-edited, reversibility tested.
@@ -649,15 +650,35 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 ---
 
-## v0.9.5 — `/security-review` pass + load test (deferred)
+## v0.9.5 — Security review + hardening (shipped 2026-05-28)
 
-**Goal:** Run `/security-review` against the codebase; resolve any high/critical findings. Load-test to 100 RPS sustained, verify error budget holds.
+**Goal:** Full pre-launch security audit of the whole app; resolve any high/critical findings. (The load test was split out to v0.9.6 — it needs a deliberate target/cost/rate-limit-bypass design and is independently shippable.)
+
+**Audit result:** No high or critical findings. Verified sound: authorization (every mutation ownership-checked via `_owned_analysis`, no IDOR), AES-GCM session-token encryption, OAuth `state` CSRF with constant-time compare, no SQL injection (SQLAlchemy constructs only), no XSS (no `dangerouslySetInnerHTML`; LLM narrative renders as escaped text), no SSRF (username regex-validated server-side; GitHub URLs built only from validated input + trusted API responses), server-only secrets.
+
+**Fixes shipped (two Mediums):**
+- **OAuth scope `read:user public_repo` → `read:user`.** `public_repo` is a *write* scope; reading public data needs none. Reduces a leaked stored token's blast radius. New logins only; existing sessions unaffected.
+- **HTTP security headers** in `frontend/next.config.ts`: enforced `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`; plus a **report-only** Content-Security-Policy (logs violations without blocking — to be tuned against real reports before enforcing).
+
+**Operator follow-ups (config, no code):** verify `COOKIE_SECURE=true` in prod; confirm `CORS_ALLOW_ORIGIN_REGEX` is scoped to our own origins (not `*.vercel.app`).
+
+**Exit criteria:**
+- [x] Whole-app security audit completed; findings severity-ranked.
+- [x] All high/critical findings resolved (none found).
+- [x] OAuth scope tightened + test; security headers added; `next build` clean.
+- [x] Docs ritual + version bump to 0.9.5; tag + release.
+
+---
+
+## v0.9.6 — Load test to 100 RPS (deferred)
+
+**Goal:** Load-test to 100 RPS sustained and verify the error budget holds. Needs a deliberate design: target (prod vs preview vs local), cost ceiling (Vercel Active-CPU pricing), and how to handle the v0.9.2 rate limits (a naive test from one IP just measures 429s — raise limits for the window, test `/health` + a warm-cached path, or use a bypass).
 
 **Exit criteria:** TBD when the slice begins.
 
 ---
 
-## v0.9.6 — Legal docs (deferred)
+## v0.9.7 — Legal docs (deferred)
 
 **Goal:** Privacy policy + terms in `docs/legal/`. Link from frontend footer.
 
