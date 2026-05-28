@@ -1,18 +1,10 @@
 import Link from "next/link";
-import { Suspense } from "react";
-import { CopyrightYear } from "@/components/copyright-year";
 
 export function SiteFooter() {
   return (
     <footer className="mt-auto border-t border-white/5 px-4 py-6 sm:px-6">
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 text-xs text-muted-foreground sm:flex-row">
-        <p>
-          ©{" "}
-          <Suspense fallback="2026">
-            <CopyrightYear />
-          </Suspense>{" "}
-          Skill Issue
-        </p>
+        <p>© 2026 Skill Issue</p>
         <nav className="flex items-center gap-4">
           <Link href="/privacy" className="transition-colors hover:text-foreground">
             Privacy
