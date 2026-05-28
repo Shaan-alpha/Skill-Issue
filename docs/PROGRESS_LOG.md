@@ -19,6 +19,36 @@ Format:
 
 ---
 
+## 2026-05-28 — Claude (Opus 4.7) — v0.9.6 shipped (load-test harness)
+
+**Slice:** v0.9.6. Reusable backend load-test harness + runbook; the full 100 RPS validation run is an operator step (hardware-gated). Split from the original v0.9.5 "security review + load test"; legal docs are now v0.9.7.
+
+**Done:**
+- **`backend/loadtest/run.py`** — open-loop (fixed-rate) async load generator (httpx, already a dep). Pure helpers `percentile`/`summarize`/`evaluate_thresholds` + `Result`/`Summary` dataclasses; async `run_stage` dispatcher (rate-paced, bounded-concurrency with a `dropped` saturation counter); `_parse_ramp`, `_print_summary`, argparse CLI (`--target/--path/--rps/--duration/--warmup/--ramp/--max-inflight/--timeout/--p95-ms/--max-error-rate`). Exit 0 PASS / non-zero FAIL.
+- **6 unit tests** for the stats helpers (`backend/tests/loadtest/test_stats.py`) — deterministic, no network. Backend non-DB suite 284 → 290.
+- **`backend/loadtest/README.md`** runbook — local SRH (Docker) warm-cache setup, prime-then-measure, ramp-to-find-knee, point-at-deploy, and the Windows/Git-Bash `MSYS_NO_PATHCONV=1` gotcha.
+- Docs ritual + version bump to 0.9.6.
+
+**Decisions:**
+- **Open-loop over closed-loop** — a closed-loop (await-then-send) generator self-throttles and masks saturation; open-loop dispatches at a fixed rate so a slow server shows as latency/error/`dropped` growth.
+- **Local SRH for the warm cache** — `get_cache()` has no in-process Report-cache fallback, so the warm path needs an Upstash-compatible endpoint; real Upstash's ~10k/day free tier can't absorb a 100 RPS run, so SRH (real Redis over Docker) is the only viable local option.
+- **No rate-limit bypass needed** — anonymous load + unset `INTERNAL_PROXY_SECRET` makes the analyze limiter skip enforcement (existing behavior), so the warm test needs no limit-raising or bypass code. Zero application-code change in this slice.
+- **Build + sanity now, full run deferred** — per the user's hardware constraint (localhost previously overheated the laptop). The harness is the durable deliverable; the headline 100 RPS number is the operator's to record.
+
+**Learned / surprises:**
+- **Locally `/health` blocks ~20 s/request** when `DATABASE_URL` is unset (the startup-placeholder DB ping times out per request). Used `/openapi.json` for the clean sanity run instead. Not a prod issue (prod has a DB).
+- **Git-Bash mangles a bare `--path /health`** into a Windows path via MSYS, corrupting the URL (`Invalid port: '8000C:'`). `MSYS_NO_PATHCONV=1` fixes it — noted in the runbook. (Surfaced a real edge: a malformed URL raises `httpx.InvalidURL`, which is *not* an `HTTPError`, so it isn't caught per-request — acceptable, since a bad `--target/--path` is operator error that should fail loudly.)
+
+**Verified:**
+- Backend `ruff` clean; `pytest` (stats tests 6/6; full non-DB suite 290 expected). Frontend unchanged (54 vitest).
+- Harness sanity run (controller, backend-only): `/openapi.json` 10 RPS × 5 s → 51 completed, **0 errors**, p50 3.0 ms / p95 6.2 ms, achieved 10.2 RPS, **PASS**, exit 0.
+
+**Blocked / open:** full 100 RPS warm-`/analyze` run is the operator's (Docker/SRH + GITHUB_TOKEN); result to be appended when run.
+
+**Next:** v0.9.7 — privacy policy + terms (legal docs).
+
+---
+
 ## 2026-05-28 — Claude (Opus 4.7) — v0.9.5 shipped (pre-launch security audit + hardening)
 
 **Slice:** v0.9.5. Full pre-launch security audit of the whole app + two Medium hardening fixes. The load test originally bundled here was split to v0.9.6 (needs target/cost/rate-limit design); legal docs shifted to v0.9.7.

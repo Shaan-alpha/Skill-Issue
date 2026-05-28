@@ -8,6 +8,13 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
+## [0.9.6] — 2026-05-28
+
+### Added
+- **Load-test harness** (`backend/loadtest/`) — a reusable open-loop load tester for the backend warm `/analyze` path, reporting latency percentiles, error rate, and achieved throughput against pass/fail thresholds. Includes a runbook for a local 100 RPS warm-cache run and for pointing at a deployed target.
+
+---
+
 ## [0.9.5] — 2026-05-28
 
 ### Security
