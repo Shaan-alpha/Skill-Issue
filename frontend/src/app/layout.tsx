@@ -16,10 +16,25 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const SITE_DESCRIPTION =
+  "Deterministic, evidence-based engineering reports from any GitHub profile. Six signals, one hundred points, zero hallucinations.";
+
 export const metadata: Metadata = {
+  metadataBase: new URL("https://skill-issue-tau.vercel.app"),
   title: "Skill Issue — your GitHub, read honestly",
-  description:
-    "Deterministic, evidence-based engineering reports from any GitHub profile. Six signals, one hundred points, zero hallucinations.",
+  description: SITE_DESCRIPTION,
+  openGraph: {
+    title: "Skill Issue — your GitHub, read honestly",
+    description: SITE_DESCRIPTION,
+    url: "/",
+    siteName: "Skill Issue",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Skill Issue — your GitHub, read honestly",
+    description: SITE_DESCRIPTION,
+  },
 };
 
 export const viewport: Viewport = {
