@@ -42,7 +42,7 @@
 | **v0.9.1** | `/me/analyses` N+1 fix + Layer A cache schema version | ✅ shipped |
 | **v0.9.2** | Rate limiting (IP + user) on `/analyze` + `/narrative` | ✅ shipped |
 | **v0.9.3** | Deletable `/me` history + back-nav loading fix + creator flair | ✅ shipped |
-| **v0.9.4** | DB pool tune (5→10, 5→20) after PostHog baseline | pending |
+| **v0.9.4** | DB pool size env-tunable (defaults unchanged) | ✅ shipped |
 | **v0.9.5** | `/security-review` pass + load test to 100 RPS | pending |
 | **v0.9.6** | Privacy policy + terms (legal docs) | pending |
 | **v1.0.0** | Public launch | pending |
@@ -630,11 +630,19 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 ---
 
-## v0.9.4 — DB pool tune (deferred)
+## v0.9.4 — DB pool size env-tunable (shipped 2026-05-28)
 
-**Goal:** Raise `pool_size=5, max_overflow=5` to `pool_size=10, max_overflow=20` once PostHog/Sentry baseline confirms the symptom in v0.8.0-shipped RUM data. Mind Neon's pooled-host (PgBouncer) connection caps when sizing.
+**Goal:** Make the SQLAlchemy engine's `pool_size` / `max_overflow` configurable via `DB_POOL_SIZE` / `DB_MAX_OVERFLOW`, keeping the 5/5 defaults.
 
-**Exit criteria:** TBD when the slice begins.
+**Why not the planned 10/20 bump:** Direct telemetry on 2026-05-28 (Neon `max_connections=112`, ~1 live app connection; Vercel 0% error rate; Sentry clean) showed no pool-exhaustion symptom. A blind bump to 30 connections/instance would also risk the 105-usable ceiling under multi-instance Fluid Compute. So the slice ships tunability instead of a default change; flip the env var if RUM ever shows the symptom.
+
+**Design spec:** [`docs/superpowers/specs/2026-05-28-v0.9.4-db-pool-tunable-design.md`](./docs/superpowers/specs/2026-05-28-v0.9.4-db-pool-tunable-design.md).
+**Sub-plan:** [`docs/superpowers/plans/2026-05-28-v0.9.4-db-pool-tunable.md`](./docs/superpowers/plans/2026-05-28-v0.9.4-db-pool-tunable.md).
+
+**Exit criteria:**
+- [x] `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` settings (default 5); `_build_engine` reads them via the module reference.
+- [x] 2 new non-DB tests (defaults + override) pass; suite 281 → 283.
+- [x] Docs ritual + version bump to 0.9.4; tag + release.
 
 ---
 

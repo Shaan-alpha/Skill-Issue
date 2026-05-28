@@ -19,6 +19,30 @@ Format:
 
 ---
 
+## 2026-05-28 — Claude (Opus 4.7) — v0.9.4 shipped (DB pool size env-tunable)
+
+**Slice:** v0.9.4.
+
+**Done:**
+- Added `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` settings (default 5); `_build_engine` reads them via the `settings_module` module reference; 2 new non-DB tests (defaults + override) asserting the kwargs passed to `create_async_engine`; suite 281 → 283. Docs ritual across CHANGELOG/PLAN/DEPLOY/.env.example/README + version literals + uv.lock.
+
+**Decisions:**
+- Ship *tunability*, NOT the originally-planned 10/20 bump. Evidence gathered 2026-05-28 via Neon SQL + Vercel logs + Sentry: `max_connections=112`, `superuser_reserved_connections=7` → 105 usable; live app footprint ~1 connection (`neondb_owner`); Vercel 0% error rate; Sentry clean. No pool-exhaustion symptom exists, and a blind bump to 30 conns/instance would risk the 105 ceiling under multi-instance Fluid Compute. Defaults stay 5/5 → byte-identical runtime; flip env var if RUM ever shows the symptom. Module-reference read chosen for test monkeypatch propagation (v0.8.1/v0.9.0 lesson).
+
+**Learned / surprises:**
+- App connects through Neon PgBouncer pooler (`statement_cache_size=0`), which multiplexes and buffers the 112 ceiling heavily.
+
+**Verified:**
+- Backend ruff clean + pytest 283 passed/69 skipped; (frontend lint/tsc/test/build to be confirmed by controller).
+
+**Blocked / open:**
+- Push/PR/tag/release pending controller+user (this entry written pre-ship).
+
+**Next:**
+- v0.9.5 — security review + load test.
+
+---
+
 ## 2026-05-28 — Claude (Opus 4.7) — post-v0.9.3 fix-forward (creator glow removed; deploy unblocked)
 
 **Slice:** post-v0.9.3, no version bump (fix-forward on `main`, matching the v0.8.0 next.config precedent).

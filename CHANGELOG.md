@@ -8,6 +8,13 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
+## [0.9.4] — 2026-05-28
+
+### Changed
+- **Database connection pool size is now configurable** via the `DB_POOL_SIZE` and `DB_MAX_OVERFLOW` environment variables (defaults unchanged at 5 each), so it can be tuned in production without a redeploy. Telemetry showed no connection-pool pressure at current scale, so this ships the capability without changing the running defaults.
+
+---
+
 ## [0.9.3] — 2026-05-28
 
 ### Added
