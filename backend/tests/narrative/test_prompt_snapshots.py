@@ -46,4 +46,4 @@ def test_mentor_prompt_stable_snapshot() -> None:
     dumped = json.dumps(msgs, sort_keys=True, indent=2)
     digest = hashlib.sha256(dumped.encode()).hexdigest()
 
-    assert digest == "d69a9f846bcd520c19f10f91d407e1ac3edf5f7796f2c92edab2f1eb0b56eeaa"
+    assert digest == "face531cc392324efa4e312748fae7e8111ca902293b6b0655b831c648e2e99b"

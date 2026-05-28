@@ -20,6 +20,11 @@ First stable release. Caps the v0.9.x beta-hardening line with launch polish.
 ### Changed
 - Removed unused starter assets.
 
+### Fixed
+- **Mentor-mode advice no longer shows raw field names** (e.g. `engineering_maturity`) — it reads in plain English.
+- **Tighter spacing at the top of the mobile landing page.**
+- **The creator scorecard no longer overflows horizontally on mobile.**
+
 ---
 
 ## [0.9.8] — 2026-05-29
