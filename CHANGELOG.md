@@ -8,6 +8,20 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
+## [1.0.0] — 2026-05-29
+
+First stable release. Caps the v0.9.x beta-hardening line with launch polish.
+
+### Added
+- **Rich link previews for the homepage.** Sharing the site now renders a branded Open Graph / Twitter card (image, title, description).
+- **The search box is focused on arrival** (desktop), so you can type a username immediately.
+- **Analyze another profile without leaving a report** — a search box now lives on the report page.
+
+### Changed
+- Removed unused starter assets.
+
+---
+
 ## [0.9.8] — 2026-05-29
 
 ### Added

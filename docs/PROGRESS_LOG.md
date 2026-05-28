@@ -19,6 +19,33 @@ Format:
 
 ---
 
+## 2026-05-29 — Claude (Opus 4.7) — v1.0.0 shipped (first stable release + launch polish)
+
+**Slice:** v1.0.0 — the 1.0 code release. Per the user: v1.0.0 = the stable release + launch polish; the *public launch* (marketing, domain, posts, traffic) they run themselves (see `docs/LAUNCH.md`). They picked four polish items, then "make it v1.0.0 then ship it."
+
+**Done (four user-chosen polish items):**
+- **Homepage link previews** — `app/opengraph-image.tsx` (branded next/og card, Inter fonts) + `app/twitter-image.tsx` re-export + `metadataBase`/`openGraph`/`twitter` in `layout.tsx`. Sharing the site root now renders a rich card. (Was a real gap — layout had no OG metadata.)
+- **Autofocus the landing search** (desktop) — `SearchBar` gained an `autoFocus` prop; effect focuses the input via a scoped form query, guarded by `matchMedia("(pointer: fine)")` so mobile keyboards don't pop. Prop-gated so the new results-page `SearchBar` never steals focus. `page.tsx` passes `<SearchBar autoFocus />`.
+- **Inline "analyze another" on the report page** — `results-view.tsx` renders `<SearchBar />` in a row after the header (reuses the working component → inherits validation + the v0.9.4 back-nav fix).
+- **Removed unused Next starter svgs** from `public/`.
+- Version bump 0.9.8 → 1.0.0 + docs ritual (CHANGELOG `[1.0.0]`, PLAN, README de-"pre-alpha"'d).
+
+**Decisions:**
+- **`Input` (base-ui) doesn't forward a ref**, so autofocus uses a scoped `formRef.current.querySelector("input")` rather than a ref on the Input. Desktop-gated + prop-gated to avoid mobile-keyboard pop and cross-instance focus theft.
+- **Reused `SearchBar` for the inline results search** (DRY; inherits validation + the useTransition back-nav fix) rather than a new compact variant — keeps surface area small right at 1.0.
+- **OG image via next/og** mirroring the existing `/u` opengraph-image conventions (Inter fonts from `public/fonts`, 1200×630). Static branded card (no per-request data).
+- **v1.0.0 is the code release, not the launch.** Launch ops are operator-run (`docs/LAUNCH.md`); PLAN/CHANGELOG framed accordingly so we don't claim 72h-traffic/on-call/retro as done. No spec/plan docs — scope locked directly with the user.
+
+**Verified:**
+- Frontend `lint` + `tsc` clean; vitest 58 passed; `next build` clean — `/opengraph-image` + `/twitter-image` routes generate. Backend untouched (290 pass).
+- Visual behavior (autofocus, OG card appearance, inline-search layout, mobile): operator's eyeball check on prod — build/tests cover structure only.
+
+**Blocked / open:** none for the 1.0 code release. Public launch is operator-run; pre-launch reminders open: legal review, full 100 RPS load test.
+
+**Next:** public launch (operator, per `docs/LAUNCH.md`); post-launch retro back here. Beyond v1.0: GitLab / LinkedIn / Resume checkers (PLAN "Beyond v1.0").
+
+---
+
 ## 2026-05-29 — Claude (Opus 4.7) — v0.9.8 shipped (launch landing sections)
 
 **Slice:** v0.9.8 — below-the-fold launch sections beneath the hero. First v1.0.0-prep piece (the user picked "marketing landing variant"); the launch itself stays human-gated as v1.0.0.
