@@ -8,6 +8,13 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
+## [0.9.7] — 2026-05-28
+
+### Added
+- **Privacy Policy and Terms of Service.** Plain-language legal pages at `/privacy` and `/terms`, linked from a new site-wide footer.
+
+---
+
 ## [0.9.6] — 2026-05-28
 
 ### Added

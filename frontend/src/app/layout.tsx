@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { FramerProvider } from "@/components/framer-provider";
+import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { ObservabilityProvider } from "@/observability/provider";
 import "./globals.css";
@@ -44,6 +45,7 @@ export default function RootLayout({
         <ObservabilityProvider>
           <FramerProvider>{children}</FramerProvider>
         </ObservabilityProvider>
+        <SiteFooter />
       </body>
     </html>
   );

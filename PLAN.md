@@ -45,7 +45,7 @@
 | **v0.9.4** | DB pool size env-tunable + real back-nav spinner fix | ✅ shipped |
 | **v0.9.5** | Security review + hardening (OAuth scope ↓ `read:user`, HTTP security headers) | ✅ shipped |
 | **v0.9.6** | Load-test harness (warm /analyze; full 100 RPS run = operator step) | ✅ shipped |
-| **v0.9.7** | Privacy policy + terms (legal docs) | pending |
+| **v0.9.7** | Privacy policy + terms + global footer | ✅ shipped |
 | **v1.0.0** | Public launch | pending |
 
 ---
@@ -688,11 +688,20 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 ---
 
-## v0.9.7 — Legal docs (deferred)
+## v0.9.7 — Privacy + Terms (shipped 2026-05-28)
 
-**Goal:** Privacy policy + terms in `docs/legal/`. Link from frontend footer.
+**Goal:** Plain-language Privacy Policy + Terms of Service pages, linked from a new global footer.
 
-**Exit criteria:** TBD when the slice begins.
+**Delivered:** Static TSX pages `/privacy` + `/terms` (shared `LegalProse` wrapper), a global `SiteFooter`, content grounded in the app's real data practices (GitHub `read:user`, Neon, Upstash, Groq, Sentry, PostHog), India governing law, 13+, contact shaansatsangi.cse@gmail.com. Not legal advice — flagged for professional review before launch.
+
+**Design spec:** [`docs/superpowers/specs/2026-05-28-v0.9.7-legal-docs-design.md`](./docs/superpowers/specs/2026-05-28-v0.9.7-legal-docs-design.md).
+**Sub-plan:** [`docs/superpowers/plans/2026-05-28-v0.9.7-legal-docs.md`](./docs/superpowers/plans/2026-05-28-v0.9.7-legal-docs.md).
+
+**Exit criteria:**
+- [x] `/privacy` + `/terms` render via `LegalProse`; metadata + "Last updated 2026-05-28".
+- [x] Global `SiteFooter` links both (+ GitHub); landing hero intact; mobile verified.
+- [x] Smoke tests pass (3); frontend lint/tsc/test/build clean.
+- [x] Docs ritual + version bump to 0.9.7; tag + release.
 
 ---
 
