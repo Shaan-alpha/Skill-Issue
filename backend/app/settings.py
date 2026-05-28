@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-VERSION = "0.9.3"
+VERSION = "0.9.4"
 
 
 class Settings(BaseSettings):
@@ -96,6 +96,17 @@ class Settings(BaseSettings):
     # /analyze enforcement is skipped (otherwise all website visitors would
     # collapse into one Vercel-infra-IP bucket); narrative + user limits stay on.
     internal_proxy_secret: str | None = None
+
+    # v0.9.4 — DB connection pool sizing
+    # SQLAlchemy async engine pool. Defaults match the pre-v0.9.4 hardcoded
+    # values, so a deploy with neither env var set is byte-identical to before.
+    # Raise via env only when RUM shows pool exhaustion (QueuePool timeouts).
+    # Ceiling: ~105 usable Postgres connections (112 max_connections - 7
+    # reserved on the current ~0.25 CU Neon compute). On the PgBouncer pooler
+    # this is buffered by multiplexing; on a direct connection keep
+    # (pool_size + max_overflow) x peak_instances < 105.
+    db_pool_size: int = 5
+    db_max_overflow: int = 5
 
 
 settings = Settings()

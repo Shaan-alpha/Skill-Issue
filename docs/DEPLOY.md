@@ -76,6 +76,10 @@ In Vercel → **Settings** → **Environment Variables**, add (Production + Prev
 | `ANALYZE_USER_PER_HOUR` | Signed-in per-user `/analyze` cap. Default `60`. Backend env only. (v0.9.2+) | — |
 | `NARRATIVE_ANON_PER_IP_PER_HOUR` | Anonymous per-IP `/narrative` cap. Default `30`. Backend env only. (v0.9.2+) | — |
 | `NARRATIVE_USER_PER_HOUR` | Signed-in per-user `/narrative` cap. Default `90`. Backend env only. (v0.9.2+) | — |
+| `DB_POOL_SIZE` | SQLAlchemy pool size per Fluid Compute instance. Default `5`. Backend env only. Raise only on confirmed pool exhaustion. (v0.9.4+) | — |
+| `DB_MAX_OVERFLOW` | Extra connections beyond `DB_POOL_SIZE` under burst. Default `5`. Backend env only. (v0.9.4+) | — |
+
+> **DB pool ceiling.** The Neon compute exposes ~105 usable connections (`max_connections` 112 - 7 `superuser_reserved_connections` on the current ~0.25 CU compute). The app connects through the PgBouncer pooler (`statement_cache_size=0`), which multiplexes many client connections onto few server ones — so the ceiling is heavily buffered. If ever switched to a direct connection, keep `(DB_POOL_SIZE + DB_MAX_OVERFLOW) × peak_instances < 105`.
 
 ### 5. Run the initial Alembic migration
 

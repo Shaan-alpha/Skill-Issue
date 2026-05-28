@@ -42,7 +42,7 @@
 | **v0.9.1** | `/me/analyses` N+1 fix + Layer A cache schema version | ✅ shipped |
 | **v0.9.2** | Rate limiting (IP + user) on `/analyze` + `/narrative` | ✅ shipped |
 | **v0.9.3** | Deletable `/me` history + back-nav loading fix + creator flair | ✅ shipped |
-| **v0.9.4** | DB pool tune (5→10, 5→20) after PostHog baseline | pending |
+| **v0.9.4** | DB pool size env-tunable + real back-nav spinner fix | ✅ shipped |
 | **v0.9.5** | `/security-review` pass + load test to 100 RPS | pending |
 | **v0.9.6** | Privacy policy + terms (legal docs) | pending |
 | **v1.0.0** | Public launch | pending |
@@ -630,11 +630,22 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 ---
 
-## v0.9.4 — DB pool tune (deferred)
+## v0.9.4 — DB pool size env-tunable + back-nav spinner fix (shipped 2026-05-28)
 
-**Goal:** Raise `pool_size=5, max_overflow=5` to `pool_size=10, max_overflow=20` once PostHog/Sentry baseline confirms the symptom in v0.8.0-shipped RUM data. Mind Neon's pooled-host (PgBouncer) connection caps when sizing.
+**Goal:** Make the SQLAlchemy engine's `pool_size` / `max_overflow` configurable via `DB_POOL_SIZE` / `DB_MAX_OVERFLOW`, keeping the 5/5 defaults. Plus a genuine fix for the landing-page search spinner sticking on browser-back (the v0.9.3 attempt fixed the wrong mechanism).
 
-**Exit criteria:** TBD when the slice begins.
+**Why not the planned 10/20 bump:** Direct telemetry on 2026-05-28 (Neon `max_connections=112`, ~1 live app connection; Vercel 0% error rate; Sentry clean) showed no pool-exhaustion symptom. A blind bump to 30 connections/instance would also risk the 105-usable ceiling under multi-instance Fluid Compute. So the slice ships tunability instead of a default change; flip the env var if RUM ever shows the symptom.
+
+**Back-nav spinner root cause:** Cache Components (`cacheComponents: true`, shipped v0.8.6) keeps the landing page mounted in a hidden React `<Activity>` on navigation instead of unmounting it, so the manual `isLoading` `useState` was preserved and reappeared as a stuck spinner on browser-back. Fixed by switching `search-bar.tsx` to `useTransition` (pending state derived from the live navigation, idle on return by construction). The v0.9.3 `pageshow` listener was inert (same-document soft-nav never fires it) and its test was a false positive.
+
+**Design spec:** [`docs/superpowers/specs/2026-05-28-v0.9.4-db-pool-tunable-design.md`](./docs/superpowers/specs/2026-05-28-v0.9.4-db-pool-tunable-design.md).
+**Sub-plan:** [`docs/superpowers/plans/2026-05-28-v0.9.4-db-pool-tunable.md`](./docs/superpowers/plans/2026-05-28-v0.9.4-db-pool-tunable.md).
+
+**Exit criteria:**
+- [x] `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` settings (default 5); `_build_engine` reads them via the module reference.
+- [x] 2 new non-DB tests (defaults + override) pass; backend suite 281 → 283.
+- [x] `search-bar.tsx` uses `useTransition`; inert `pageshow` effect removed; bfcache test replaced with normalize/validation/nav coverage (frontend vitest 51 → 54).
+- [x] Docs ritual + version bump to 0.9.4; tag + release.
 
 ---
 

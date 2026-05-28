@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, act } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { vi, describe, it, expect, beforeEach } from "vitest";
 
 const push = vi.fn();
@@ -9,21 +9,30 @@ import { SearchBar } from "../search-bar";
 describe("SearchBar", () => {
   beforeEach(() => push.mockReset());
 
-  it("re-enables the button on pageshow after a navigation (bfcache restore)", async () => {
+  function submit(value: string) {
     render(<SearchBar />);
-    const input = screen.getByLabelText("GitHub username");
-    fireEvent.change(input, { target: { value: "shaan-alpha" } });
+    fireEvent.change(screen.getByLabelText("GitHub username"), { target: { value } });
     fireEvent.click(screen.getByRole("button", { name: "Analyze profile" }));
+  }
 
-    // After submit the button is in the loading state (disabled).
-    expect(screen.getByRole("button", { name: "Analyze profile" })).toBeDisabled();
+  it("navigates to the normalized username on submit", () => {
+    submit("shaan-alpha");
     expect(push).toHaveBeenCalledWith("/u/shaan-alpha");
+  });
 
-    // Browser back restores the page from bfcache -> pageshow fires.
-    act(() => {
-      window.dispatchEvent(new Event("pageshow"));
-    });
+  it("extracts the username from a pasted github.com URL", () => {
+    submit("https://github.com/shaan-alpha/some-repo");
+    expect(push).toHaveBeenCalledWith("/u/shaan-alpha");
+  });
 
-    expect(screen.getByRole("button", { name: "Analyze profile" })).not.toBeDisabled();
+  it("strips a leading @ handle", () => {
+    submit("@shaan-alpha");
+    expect(push).toHaveBeenCalledWith("/u/shaan-alpha");
+  });
+
+  it("shows an error and does not navigate on an invalid username", () => {
+    submit("-bad-");
+    expect(push).not.toHaveBeenCalled();
+    expect(screen.getByText(/valid GitHub username/i)).toBeInTheDocument();
   });
 });
