@@ -46,6 +46,7 @@
 | **v0.9.5** | Security review + hardening (OAuth scope ↓ `read:user`, HTTP security headers) | ✅ shipped |
 | **v0.9.6** | Load-test harness (warm /analyze; full 100 RPS run = operator step) | ✅ shipped |
 | **v0.9.7** | Privacy policy + terms + global footer | ✅ shipped |
+| **v0.9.8** | Launch landing sections (examples + how-it-works + star CTA) | ✅ shipped |
 | **v1.0.0** | Public launch | pending |
 
 ---
@@ -702,6 +703,23 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 - [x] Global `SiteFooter` links both (+ GitHub); landing hero intact; mobile verified.
 - [x] Smoke tests pass (3); frontend lint/tsc/test/build clean.
 - [x] Docs ritual + version bump to 0.9.7; tag + release.
+
+---
+
+## v0.9.8 — Launch landing sections (shipped 2026-05-29)
+
+**Goal:** Below-the-fold launch landing sections beneath the existing hero.
+
+**Delivered:** `ExampleProfiles` (clickable example-profile cards → live `/u/<username>` reports — the honest proof), `HowItWorks` (deterministic-methodology feature grid), `StarCta` ("Star on GitHub" → repo). Hero/search/stats untouched; `/` still static-prerendered; responsive. No testimonials/usage-stats (none real). Shipped as v0.9.8, keeping 1.0.0 for the actual launch.
+
+**Design spec:** [`docs/superpowers/specs/2026-05-28-v0.9.8-launch-landing-design.md`](./docs/superpowers/specs/2026-05-28-v0.9.8-launch-landing-design.md).
+**Sub-plan:** [`docs/superpowers/plans/2026-05-28-v0.9.8-launch-landing.md`](./docs/superpowers/plans/2026-05-28-v0.9.8-launch-landing.md).
+
+**Exit criteria:**
+- [x] Three sections render beneath the hero; hero unchanged; `/` still static.
+- [x] Example cards link to live reports; star CTA → repo (new tab).
+- [x] Smoke test passes; frontend lint/tsc/test/build clean; mobile verified.
+- [x] Docs ritual + version bump to 0.9.8; tag + release.
 
 ---
 
