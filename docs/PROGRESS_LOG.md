@@ -19,24 +19,27 @@ Format:
 
 ---
 
-## 2026-05-28 — Claude (Opus 4.7) — v0.9.4 shipped (DB pool size env-tunable)
+## 2026-05-28 — Claude (Opus 4.7) — v0.9.4 shipped (DB pool size env-tunable + real back-nav spinner fix)
 
-**Slice:** v0.9.4.
+**Slice:** v0.9.4. Two changes: the planned DB-pool work, plus a genuine fix for the back-nav search spinner that v0.9.3 only *appeared* to fix.
 
 **Done:**
-- Added `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` settings (default 5); `_build_engine` reads them via the `settings_module` module reference; 2 new non-DB tests (defaults + override) asserting the kwargs passed to `create_async_engine`; suite 281 → 283. Docs ritual across CHANGELOG/PLAN/DEPLOY/.env.example/README + version literals + uv.lock.
+- **DB pool:** Added `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` settings (default 5); `_build_engine` reads them via the `settings_module` module reference; 2 new non-DB tests (defaults + override) asserting the kwargs passed to `create_async_engine`; backend suite 281 → 283. Docs ritual across CHANGELOG/PLAN/DEPLOY/.env.example/README + version literals + uv.lock.
+- **Back-nav spinner (real fix):** `search-bar.tsx` now uses `useTransition` for the pending state instead of a manual `isLoading` `useState`. Removed the inert v0.9.3 `pageshow` effect. Replaced the false-positive bfcache test with normalize/validation/navigation coverage (search-bar tests 1 → 4; frontend vitest 51 → 54).
 
 **Decisions:**
-- Ship *tunability*, NOT the originally-planned 10/20 bump. Evidence gathered 2026-05-28 via Neon SQL + Vercel logs + Sentry: `max_connections=112`, `superuser_reserved_connections=7` → 105 usable; live app footprint ~1 connection (`neondb_owner`); Vercel 0% error rate; Sentry clean. No pool-exhaustion symptom exists, and a blind bump to 30 conns/instance would risk the 105 ceiling under multi-instance Fluid Compute. Defaults stay 5/5 → byte-identical runtime; flip env var if RUM ever shows the symptom. Module-reference read chosen for test monkeypatch propagation (v0.8.1/v0.9.0 lesson).
+- **DB pool — ship tunability, NOT the planned 10/20 bump.** Evidence gathered 2026-05-28 via Neon SQL + Vercel logs + Sentry: `max_connections=112`, `superuser_reserved_connections=7` → 105 usable; live app footprint ~1 connection (`neondb_owner`); Vercel 0% error rate; Sentry clean. No pool-exhaustion symptom exists, and a blind bump to 30 conns/instance would risk the 105 ceiling under multi-instance Fluid Compute. Defaults stay 5/5 → byte-identical runtime; flip env var if RUM ever shows the symptom. Module-reference read chosen for test monkeypatch propagation (v0.8.1/v0.9.0 lesson).
+- **Back-nav — `useTransition`, not an effect reset.** A mount effect that resets `isLoading` would trip the `react-hooks/set-state-in-effect` lint gate. `useTransition`'s `isPending` is derived from the live navigation, so on browser-back (which never invokes this page's `startTransition`) it's idle by construction — no preserved-state to get stuck. Folded into v0.9.4 (unshipped branch) at the user's request rather than renumbering.
 
 **Learned / surprises:**
-- App connects through Neon PgBouncer pooler (`statement_cache_size=0`), which multiplexes and buffers the 112 ceiling heavily.
+- **Cache Components (`cacheComponents: true`, shipped v0.8.6) was the real culprit.** With it enabled, the App Router keeps the previous route mounted in a hidden React `<Activity>` instead of unmounting it — so a manual loading `useState` is *preserved* and reappears as a stuck spinner on browser-back. v0.9.3 misdiagnosed this as bfcache; its `pageshow` listener never fires on same-document soft-nav, and its unit test was a false positive (mocked the router, fired a synthetic `pageshow`). Memo: UI behavior that depends on Activity hide/show is not reproducible in happy-dom — verify in a real browser.
 
 **Verified:**
-- Backend ruff clean + pytest 283 passed/69 skipped; (frontend lint/tsc/test/build to be confirmed by controller).
+- Backend ruff clean + pytest 283 passed/69 skipped. Frontend lint + tsc clean, vitest 54 passed, `next build` clean (PPR routes intact).
+- **Back-nav fix live behavior: pending user confirmation in-browser** (Activity show/hide can't be exercised headlessly; static checks pass).
 
 **Blocked / open:**
-- Push/PR/tag/release pending controller+user (this entry written pre-ship).
+- Live browser confirmation of the spinner fix + push/PR/tag/release pending controller+user (this entry written pre-ship).
 
 **Next:**
 - v0.9.5 — security review + load test.

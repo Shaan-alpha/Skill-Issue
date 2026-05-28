@@ -13,6 +13,9 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 ### Changed
 - **Database connection pool size is now configurable** via the `DB_POOL_SIZE` and `DB_MAX_OVERFLOW` environment variables (defaults unchanged at 5 each), so it can be tuned in production without a redeploy. Telemetry showed no connection-pool pressure at current scale, so this ships the capability without changing the running defaults.
 
+### Fixed
+- **Search button no longer sticks on a spinner after pressing browser Back.** Returning to the landing page from a report could leave the analyze button spinning and its input disabled. The v0.9.3 attempt fixed the wrong mechanism; this is the real fix.
+
 ---
 
 ## [0.9.3] — 2026-05-28
