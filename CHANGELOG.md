@@ -8,6 +8,17 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
+## [0.9.5] — 2026-05-28
+
+### Security
+- **Full pre-launch security review — no high or critical findings.** Authorization (ownership checks on every mutation), session encryption, OAuth CSRF protection, SQL-injection safety, output escaping, and SSRF protection on user-supplied input were all verified sound.
+
+### Changed
+- **Tightened the GitHub sign-in permission to read-only.** Sign-in previously requested a scope that technically allowed writing to your public repositories; it now requests read-only access only, since Skill Issue exclusively reads public data. (Existing sessions are unaffected; the narrower permission applies on next sign-in.)
+- **Added HTTP security headers** (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`) plus a report-only Content-Security-Policy as a baseline for hardening before public launch.
+
+---
+
 ## [0.9.4] — 2026-05-28
 
 ### Changed

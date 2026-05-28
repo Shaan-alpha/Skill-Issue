@@ -67,7 +67,7 @@
 
 | Tool | Role |
 | --- | --- |
-| **GitHub OAuth (App)** | Sign-in + higher API rate limits. Scopes: `read:user`, `public_repo`. Never `repo` or `admin:*`. |
+| **GitHub OAuth (App)** | Sign-in + higher API rate limits. Scope: `read:user` only (v0.9.5 dropped the write-granting `public_repo`; reading public data needs no repo scope). Never `repo` or `admin:*`. |
 | **Server-side opaque sessions** | Cookie value is `secrets.token_urlsafe(32)`; server looks the row up directly. Chosen over JWT in v0.5.0 to keep revocation cheap and access tokens server-side. |
 | **AES-GCM at rest** | GitHub access tokens encrypted in the `sessions` table with `SESSION_TOKEN_ENC_KEY`. Fresh 12-byte nonce per row; key rotation invalidates every session by design. |
 
