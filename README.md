@@ -7,7 +7,7 @@
 [![Version](https://img.shields.io/github/v/release/Shaan-alpha/Skill-Issue?style=for-the-badge&label=release&color=10b981)](https://github.com/Shaan-alpha/Skill-Issue/releases)
 [![License](https://img.shields.io/github/license/Shaan-alpha/Skill-Issue?style=for-the-badge&color=475569)](./LICENSE)
 [![Live preview](https://img.shields.io/badge/live-skill--issue--tau.vercel.app-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://skill-issue-tau.vercel.app)
-[![Status](https://img.shields.io/badge/status-pre--alpha-eab308?style=for-the-badge)](./PLAN.md)
+[![Status](https://img.shields.io/badge/status-v1.0.0%20·%20live-10b981?style=for-the-badge)](https://skill-issue-tau.vercel.app)
 
 [![Next.js](https://img.shields.io/badge/Next.js%2016-000000?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React%2019-149eca?style=for-the-badge&logo=react&logoColor=white)](https://react.dev/)
@@ -25,6 +25,8 @@
 **Skill Issue** is an AI-powered GitHub intelligence platform. Drop in a username and it analyzes repositories, engineering maturity, OSS contributions, coding discipline, and growth trajectory — then turns it into actionable feedback, a 100-point engineering score, and shareable "GitHub Receipts."
 
 Engineering insight first. AI flavor second. Scoring is deterministic and explainable; AI only handles narrative, summaries, and humor.
+
+> **▶ Try it live — [skill-issue-tau.vercel.app](https://skill-issue-tau.vercel.app)** — analyze any GitHub profile in seconds. If it's useful, a ⭐ on the repo helps other devs find it.
 
 ---
 
