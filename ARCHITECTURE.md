@@ -154,7 +154,7 @@ Two thin cross-cutting layers. Both fail open — telemetry is never a correctne
 ### Auth — GitHub OAuth (v0.5.0)
 
 - Server-side OAuth code flow (no PKCE — GitHub OAuth Apps don't support it). State in a short-lived httpOnly cookie.
-- We request `read:user` and `public_repo` only. Never `repo` (we do not need private data) and never `admin:*`.
+- We request `read:user` only (tightened in v0.9.5). We exclusively read public data, which needs no repo scope; `public_repo` was dropped because — despite its name — it grants *write* access to public repos and needlessly widened a leaked token's blast radius. Never `repo`, never `admin:*`.
 - Token storage: **server-side opaque session** cookie (`secrets.token_urlsafe(32)`); the GitHub access token is **AES-GCM encrypted at rest** in the `sessions` row with a per-environment `SESSION_TOKEN_ENC_KEY`.
 - Signed-in `/analyze` uses the user's GitHub token for ingestion, giving each user a dedicated 5000/hr rate-limit budget.
 

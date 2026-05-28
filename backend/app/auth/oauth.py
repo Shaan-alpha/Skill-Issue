@@ -27,10 +27,18 @@ def verify_state_token(*, cookie: str | None, query: str) -> None:
 
 
 def build_authorize_url(state: str) -> str:
-    """Construct the GitHub authorize URL we 302 to."""
+    """Construct the GitHub authorize URL we 302 to.
+
+    Scope is `read:user` only. We exclusively READ public GitHub data, which
+    needs no repo scope at all — an authenticated token reads public repos/
+    commits/contents regardless of scope, and `read:user` covers the profile.
+    `public_repo` was dropped in v0.9.5: despite its name it grants *write*
+    access to public repositories, so it needlessly widened the blast radius of
+    a leaked stored token. Never `repo`, never `admin:*`.
+    """
     params = {
         "client_id": settings.github_oauth_client_id or "",
-        "scope": "read:user public_repo",
+        "scope": "read:user",
         "state": state,
         "redirect_uri": settings.oauth_redirect_url or "",
     }

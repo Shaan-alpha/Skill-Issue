@@ -1,12 +1,24 @@
 import secrets
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 
 from app.auth.oauth import (
     InvalidOAuthState,
+    build_authorize_url,
     generate_state_token,
     verify_state_token,
 )
+
+
+def test_authorize_url_requests_read_only_scope():
+    """v0.9.5: scope must be `read:user` only — no write scope (`public_repo`),
+    never `repo`/`admin:*`. The app only reads public data."""
+    qs = parse_qs(urlparse(build_authorize_url("state123")).query)
+    assert qs["scope"] == ["read:user"]
+    assert "public_repo" not in qs["scope"][0]
+    assert "repo" not in qs["scope"][0].split()
+    assert qs["state"] == ["state123"]
 
 
 def test_state_token_is_url_safe_high_entropy():
