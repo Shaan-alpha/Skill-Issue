@@ -17,6 +17,7 @@ import dynamic from "next/dynamic";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress, ProgressLabel } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+import { SearchBar } from "@/components/search-bar";
 import { Report, ScoreResult, TierInfo } from "@/types";
 import { PositionBar } from "@/components/position-bar";
 import { BadgeRow } from "@/components/badge-row";
@@ -213,6 +214,10 @@ export function ResultsView({
             </Link>
           </div>
         </header>
+
+        <div className="flex justify-center sm:justify-end">
+          <SearchBar />
+        </div>
 
         {!sharedNarrative && (
           <SaveShareControls
