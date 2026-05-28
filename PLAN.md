@@ -44,7 +44,7 @@
 | **v0.9.3** | Deletable `/me` history + back-nav loading fix + creator flair | ✅ shipped |
 | **v0.9.4** | DB pool size env-tunable + real back-nav spinner fix | ✅ shipped |
 | **v0.9.5** | Security review + hardening (OAuth scope ↓ `read:user`, HTTP security headers) | ✅ shipped |
-| **v0.9.6** | Load test to 100 RPS | pending |
+| **v0.9.6** | Load-test harness (warm /analyze; full 100 RPS run = operator step) | ✅ shipped |
 | **v0.9.7** | Privacy policy + terms (legal docs) | pending |
 | **v1.0.0** | Public launch | pending |
 
@@ -670,11 +670,21 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 ---
 
-## v0.9.6 — Load test to 100 RPS (deferred)
+## v0.9.6 — Load-test harness (shipped 2026-05-28)
 
-**Goal:** Load-test to 100 RPS sustained and verify the error budget holds. Needs a deliberate design: target (prod vs preview vs local), cost ceiling (Vercel Active-CPU pricing), and how to handle the v0.9.2 rate limits (a naive test from one IP just measures 429s — raise limits for the window, test `/health` + a warm-cached path, or use a bypass).
+**Goal:** Reusable Python/httpx open-loop load harness for the backend warm `/analyze` path; the full 100 RPS validation run is an operator step (hardware-gated).
 
-**Exit criteria:** TBD when the slice begins.
+**Delivered:** `backend/loadtest/run.py` (open-loop dispatcher, p50/p95/p99, error rate, achieved RPS, pass/fail thresholds, ramp), unit-tested stats helpers, and `backend/loadtest/README.md` runbook (local SRH warm-cache setup + deploy target). Local warm-cache uses SRH (Upstash-compatible Redis over Docker) — real Upstash's ~10k/day free tier can't absorb a 100 RPS run. Anonymous load + unset `INTERNAL_PROXY_SECRET` means the analyze limiter skips enforcement, so no bypass is needed.
+
+**Design spec:** [`docs/superpowers/specs/2026-05-28-v0.9.6-load-test-harness-design.md`](./docs/superpowers/specs/2026-05-28-v0.9.6-load-test-harness-design.md).
+**Sub-plan:** [`docs/superpowers/plans/2026-05-28-v0.9.6-load-test-harness.md`](./docs/superpowers/plans/2026-05-28-v0.9.6-load-test-harness.md).
+
+**Exit criteria:**
+- [x] `loadtest/run.py` + unit-tested stats helpers; ruff clean; backend suite green.
+- [x] Runbook complete (local SRH + deploy target).
+- [x] Light `/health`-class sanity run passes (ran against `/openapi.json`: 10 RPS × 5 s, 0 errors, p95 6.2 ms, PASS).
+- [x] Docs ritual + version bump to 0.9.6; tag + release.
+- [ ] Full 100 RPS warm-`/analyze` result recorded — operator step, filled in when run.
 
 ---
 
