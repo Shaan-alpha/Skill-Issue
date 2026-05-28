@@ -47,7 +47,7 @@
 | **v0.9.6** | Load-test harness (warm /analyze; full 100 RPS run = operator step) | ✅ shipped |
 | **v0.9.7** | Privacy policy + terms + global footer | ✅ shipped |
 | **v0.9.8** | Launch landing sections (examples + how-it-works + star CTA) | ✅ shipped |
-| **v1.0.0** | Public launch | pending |
+| **v1.0.0** | First stable release (launch polish) — public-launch ops in docs/LAUNCH.md | ✅ shipped |
 
 ---
 
@@ -723,21 +723,19 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 ---
 
-## v1.0.0 — Public launch
+## v1.0.0 — First stable release (shipped 2026-05-29)
 
-**Goal:** Ship it.
+**Goal:** Cap the v0.9.x beta-hardening line as the first stable (1.0) release, with launch-readiness polish. The *public launch itself* (domain, posts, traffic) is operator-run, not a code milestone — tracked in [`docs/LAUNCH.md`](./docs/LAUNCH.md).
 
-**Slice scope:**
-- Production domain + SSL
-- Launch post (HN, X, LinkedIn, Reddit r/programming)
-- Marketing landing variant with social proof / testimonials
-- Public roadmap moved to GitHub Issues / Projects
+**Delivered (launch polish):** homepage Open Graph / Twitter link-preview cards (`app/opengraph-image.tsx` + `metadataBase`/`openGraph`/`twitter` in `layout.tsx`); desktop autofocus on the landing search (prop-gated so the results-page instance doesn't steal focus); an inline "analyze another" search on the report page (reuses `SearchBar`); removed unused Next starter svgs. The marketing landing sections shipped earlier in v0.9.8.
 
-**Exit criteria:**
-- [ ] Production traffic stable for 72 hours
-- [ ] On-call rotation documented
-- [ ] Post-launch retro in `docs/PROGRESS_LOG.md`
-- [ ] `CHANGELOG.md` bumped to `1.0.0`
+**Design spec / plan:** none — scope was locked directly with the user (the four polish items), implemented inline at the user's "make it v1.0.0 then ship it" direction.
+
+**Exit criteria (code release):**
+- [x] Launch-polish items implemented; frontend lint/tsc/test/build clean (58 vitest); backend 290.
+- [x] Version bumped to `1.0.0` across literals; CHANGELOG `[1.0.0]`; tag + release.
+
+**Public-launch ops (operator-run, see `docs/LAUNCH.md`):** production domain + SSL, launch posts (HN/X/Reddit/LinkedIn), 72h traffic watch, on-call notes, post-launch retro. Pre-launch reminders still open: professional legal review of `/privacy` + `/terms`; run the full 100 RPS load test.
 
 ---
 

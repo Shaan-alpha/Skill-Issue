@@ -17,6 +17,7 @@ import dynamic from "next/dynamic";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress, ProgressLabel } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+import { SearchBar } from "@/components/search-bar";
 import { Report, ScoreResult, TierInfo } from "@/types";
 import { PositionBar } from "@/components/position-bar";
 import { BadgeRow } from "@/components/badge-row";
@@ -214,6 +215,10 @@ export function ResultsView({
           </div>
         </header>
 
+        <div className="flex justify-center sm:justify-end">
+          <SearchBar />
+        </div>
+
         {!sharedNarrative && (
           <SaveShareControls
             analysisId={analysisId ?? null}
@@ -352,7 +357,7 @@ export function ResultsView({
         </section>
 
         <footer className="space-y-2 pt-8 text-center text-xs uppercase tracking-widest text-muted-foreground sm:pt-12">
-          <p>Skill Issue — GitHub Reputation Protocol v0.9.8</p>
+          <p>Skill Issue — GitHub Reputation Protocol v1.0.0</p>
         </footer>
       </main>
 

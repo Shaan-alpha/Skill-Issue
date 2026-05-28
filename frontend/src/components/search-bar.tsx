@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Search, ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -21,10 +21,21 @@ function normalize(raw: string): string {
   return v;
 }
 
-export function SearchBar() {
+export function SearchBar({ autoFocus = false }: { autoFocus?: boolean } = {}) {
   const [raw, setRaw] = useState("");
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
+
+  // Autofocus the input on the landing page so visitors can type immediately.
+  // Desktop only (pointer: fine) — autofocusing on touch pops the keyboard and
+  // shifts the layout. Scoped to this form so the results-page instance (which
+  // passes no autoFocus) never steals focus or scrolls.
+  useEffect(() => {
+    if (!autoFocus) return;
+    if (!window.matchMedia?.("(pointer: fine)").matches) return;
+    formRef.current?.querySelector("input")?.focus();
+  }, [autoFocus]);
   // isLoading comes from useTransition, not a stored useState. Under Cache
   // Components (next.config.ts) the App Router keeps this page mounted in a
   // hidden React <Activity> on navigation rather than unmounting it, so a
@@ -52,7 +63,7 @@ export function SearchBar() {
 
   return (
     <div className="w-full max-w-md space-y-2">
-      <form onSubmit={handleSearch} className="relative flex w-full items-center gap-2">
+      <form ref={formRef} onSubmit={handleSearch} className="relative flex w-full items-center gap-2">
         <div className="relative flex-1">
           <Search
             className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
