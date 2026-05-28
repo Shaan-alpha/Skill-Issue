@@ -45,7 +45,7 @@ export default function Home() {
               transition={{ delay: 0.4, duration: 0.6 }}
               className="flex w-full justify-center pt-4 sm:pt-8"
             >
-              <SearchBar />
+              <SearchBar autoFocus />
             </m.div>
 
             <m.div
