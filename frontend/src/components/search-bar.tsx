@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Search, ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -24,17 +24,14 @@ function normalize(raw: string): string {
 export function SearchBar() {
   const [raw, setRaw] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
-
-  // After navigating to /u/<user> the browser may restore THIS page from the
-  // bfcache on back-navigation, with isLoading still true (stuck spinner +
-  // disabled input). Reset it whenever the page is shown again.
-  useEffect(() => {
-    const reset = () => setIsLoading(false);
-    window.addEventListener("pageshow", reset);
-    return () => window.removeEventListener("pageshow", reset);
-  }, []);
+  // isLoading comes from useTransition, not a stored useState. Under Cache
+  // Components (next.config.ts) the App Router keeps this page mounted in a
+  // hidden React <Activity> on navigation rather than unmounting it, so a
+  // manual loading flag would be preserved and reappear as a stuck spinner on
+  // browser-back. A transition has no pending work once navigation settles, so
+  // on return the button is idle by construction.
+  const [isLoading, startTransition] = useTransition();
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,8 +45,9 @@ export function SearchBar() {
       return;
     }
     setError(null);
-    setIsLoading(true);
-    router.push(`/u/${username}`);
+    startTransition(() => {
+      router.push(`/u/${username}`);
+    });
   };
 
   return (
