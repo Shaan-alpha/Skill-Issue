@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from app.settings import settings
+import app.settings as settings_module
 
 
 def _normalize_async_url(url: str) -> tuple[str, bool]:
@@ -81,15 +81,15 @@ def _build_engine(url: str) -> AsyncEngine:
     return create_async_engine(
         normalized,
         connect_args=connect_args,
-        pool_size=5,
-        max_overflow=5,
+        pool_size=settings_module.settings.db_pool_size,
+        max_overflow=settings_module.settings.db_max_overflow,
         pool_pre_ping=True,
         pool_recycle=1800,
     )
 
 
 engine: AsyncEngine = _build_engine(
-    settings.database_url
+    settings_module.settings.database_url
     or "postgresql+asyncpg://placeholder:placeholder@localhost:5432/placeholder"
 )
 
