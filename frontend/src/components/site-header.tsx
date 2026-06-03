@@ -2,9 +2,71 @@
 
 import { Suspense } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { Menu } from "@base-ui/react/menu";
 import { useSession, signIn, signOut } from "@/lib/auth";
 import { trackSignInClicked } from "@/observability/events";
+
+// Score-ring "S" mark — same motif as the favicon and the aggregate-score
+// ring on the report page, so the tab icon and the header logo read as one
+// brand. Track + 78% accent gauge arc (rounded cap) starting from the top.
+const RING = 2 * Math.PI * 12; // circumference for r=12
+
+function BrandMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 32 32" className={className} aria-hidden="true">
+      <circle
+        cx="16"
+        cy="16"
+        r="12"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3"
+        className="text-white/10"
+      />
+      <circle
+        cx="16"
+        cy="16"
+        r="12"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeDasharray={RING}
+        strokeDashoffset={RING * (1 - 0.78)}
+        transform="rotate(-90 16 16)"
+        className="text-accent"
+      />
+      <text
+        x="16"
+        y="16.5"
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontSize="13"
+        fontWeight="700"
+        fill="currentColor"
+        className="text-foreground"
+      >
+        S
+      </text>
+    </svg>
+  );
+}
+
+function BrandLink() {
+  return (
+    <Link
+      href="/"
+      aria-label="Skill Issue — home"
+      className="group flex items-center gap-2 rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+    >
+      <BrandMark className="h-7 w-7 transition-transform group-hover:scale-105" />
+      <span className="text-sm font-semibold tracking-tight text-foreground">
+        Skill Issue
+      </span>
+    </Link>
+  );
+}
 
 function HeaderInner() {
   const session = useSession();
@@ -72,7 +134,8 @@ export function SiteHeader() {
   // doesn't push `div.min-h-screen` below. Lighthouse traced the ~0.04
   // anonymous CLS to this swap.
   return (
-    <header className="sticky top-0 z-30 flex items-center justify-end min-h-[3.75rem] sm:min-h-[4rem] px-4 py-3 sm:px-6 sm:py-4 bg-background/70 backdrop-blur-md border-b border-white/5">
+    <header className="sticky top-0 z-30 flex items-center justify-between min-h-[3.75rem] sm:min-h-[4rem] px-4 py-3 sm:px-6 sm:py-4 bg-background/70 backdrop-blur-md border-b border-white/5">
+      <BrandLink />
       <Suspense fallback={<div className="h-9" aria-hidden="true" />}>
         <HeaderInner />
       </Suspense>

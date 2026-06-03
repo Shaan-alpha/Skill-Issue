@@ -1,8 +1,38 @@
 "use client";
 
+import { useState } from "react";
 import { m } from "framer-motion";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+
+// GitHub avatars 404 or rate-limit occasionally; fall back to the person's
+// initial on a muted disc instead of a broken-image glyph. bg-white/5 also
+// gives the <img> a placeholder tint while it loads.
+function ProfileAvatar({ username, name }: { username: string; name: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <span
+        aria-hidden="true"
+        className="grid size-12 place-items-center rounded-full border border-white/10 bg-white/10 text-sm font-semibold text-muted-foreground"
+      >
+        {(name || username).trim().charAt(0).toUpperCase()}
+      </span>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={`https://github.com/${username}.png?size=80`}
+      alt=""
+      width={48}
+      height={48}
+      loading="lazy"
+      onError={() => setFailed(true)}
+      className="size-12 rounded-full border border-white/10 bg-white/5"
+    />
+  );
+}
 
 const PROFILES = [
   { username: "torvalds", name: "Linus Torvalds" },
@@ -35,15 +65,7 @@ export function ExampleProfiles() {
               href={`/u/${p.username}`}
               className="glass group flex items-center gap-4 rounded-2xl p-4 transition-colors hover:bg-white/10"
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={`https://github.com/${p.username}.png?size=80`}
-                alt=""
-                width={48}
-                height={48}
-                loading="lazy"
-                className="size-12 rounded-full border border-white/10"
-              />
+              <ProfileAvatar username={p.username} name={p.name} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-foreground">{p.name}</p>
                 <p className="truncate text-xs text-muted-foreground">@{p.username}</p>

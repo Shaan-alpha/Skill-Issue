@@ -23,6 +23,7 @@ import { PositionBar } from "@/components/position-bar";
 import { BadgeRow } from "@/components/badge-row";
 import { SaveShareControls } from "@/components/save-share-controls";
 import { isCreator } from "@/lib/creator";
+import { APP_VERSION } from "@/lib/site";
 import { trackAnalyzeSubmitted } from "@/observability/events";
 
 // NarrativeCard pulls a heavy SSE-streaming client that only matters
@@ -357,7 +358,7 @@ export function ResultsView({
         </section>
 
         <footer className="space-y-2 pt-8 text-center text-xs uppercase tracking-widest text-muted-foreground sm:pt-12">
-          <p>Skill Issue — GitHub Reputation Protocol v1.0.0</p>
+          <p>Skill Issue — GitHub Reputation Protocol v{APP_VERSION}</p>
         </footer>
       </main>
 

@@ -8,6 +8,20 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ---
 
+## [Unreleased]
+
+### Added
+- **A brand mark in the header.** Every page now carries the Skill Issue logo — a score-ring "S" matching the report-page score gauge — plus the wordmark in the top-left, linking home.
+- **A new favicon and Apple touch icon** built from the same score-ring motif, so the browser-tab icon finally matches the site instead of the old generic placeholder.
+
+### Changed
+- **The homepage 100 / 6 / 0 stats now read at full strength** instead of half-dimmed, so "0 hallucinations" lands as the trust signal it's meant to be.
+
+### Fixed
+- **Example-profile photos fall back to the person's initial** when GitHub's avatar fails to load, instead of showing a broken-image icon.
+
+---
+
 ## [1.0.0] — 2026-05-29
 
 First stable release. Caps the v0.9.x beta-hardening line with launch polish.

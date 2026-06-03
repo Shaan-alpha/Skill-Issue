@@ -19,6 +19,37 @@ Format:
 
 ---
 
+## 2026-06-03 — Claude (Opus 4.8) — Post-1.0 UI polish: brand mark, favicon, hero stats, avatar fallback (unreleased)
+
+**Slice:** post-v1.0.0 polish (unreleased — staged under CHANGELOG `[Unreleased]`; no version bump/tag, release paused per operator).
+
+**Done (user asked: "change favicon to match the site" + "improve the UI"):**
+- **New favicon + apple-icon** built from the product's score-ring motif: `#27272a` track + 78% `#60a5fa` gauge arc (rounded cap, from top) wrapping a bold Inter "S" on the `#09090b` tile. Replaced the old generic black-circle/white-triangle `favicon.ico`. Generated via `frontend/scripts/gen_favicon.py` (Pillow, 4× supersample → LANCZOS); outputs `src/app/favicon.ico` (16/32/48/64/256) + `src/app/apple-icon.png` (180, square for iOS masking). Next auto-injects both `<link>` tags.
+- **Header brand mark** — `site-header.tsx` gained a `BrandLink` (inline-SVG ring-"S" `BrandMark`, matching the favicon + the report score ring) and wordmark, linking `/`. Header went `justify-end` → `justify-between`. Closes the empty top-left and gives report pages a one-click route home.
+- **Hero stats brightened** — `page.tsx` stat row `animate` opacity `0.5 → 1`; numbers (`text-foreground`) now pop, labels stay `text-muted-foreground`. "0 hallucinations" now reads as a real trust signal.
+- **Avatar fallback** — `example-profiles.tsx` extracted a `ProfileAvatar` client subcomponent: on `<img onError>` it swaps to the person's initial on a muted disc (+ `bg-white/5` load placeholder). No more broken-image glyph when GitHub avatars 404/rate-limit.
+- **Version string centralized** — new `src/lib/site.ts` `APP_VERSION`; consumed by the hero badge and the results footer (was hard-coded `v1.0.0` in two spots).
+
+**Decisions:**
+- Favicon direction chosen by the user from three rendered candidates (pure ring / ring+dot / ring+"S"); picked **ring+"S"** for unambiguous brand identity (a bare gauge ring reads like a tab spinner).
+- Header mark reuses the favicon motif as inline SVG (not an `<img>`) so it inherits `currentColor`/theme and stays crisp — same `strokeDasharray` gauge technique as the report score ring.
+- Logged under CHANGELOG `[Unreleased]`, **not** a version bump — these are reactive tweaks, and release is operator-paused. Becomes `v1.0.1` whenever the operator cuts it.
+
+**Verified:**
+- `eslint` clean on all touched files; **vitest 58/58 pass** (incl. `example-profiles.test.tsx`).
+- Favicon served at `/favicon.ico` (HTTP 200, multi-size ICO) and `apple-icon.png` `<link>` injected; confirmed in rendered head.
+- **No mobile horizontal overflow** — measured via CDP device-metrics (`frontend/scripts/check_overflow.py`) at 360/390/414/768: `scrollWidth == innerWidth` everywhere.
+- Live desktop screenshot confirms header logo + brighter stats.
+
+**Learned / surprises:**
+- `next dev` (Turbopack) **OOM-crashed on first cold compile** on this machine (~2.7 GB free of 15.7) — `Fatal process out of memory` / `paging file too small` (Windows commit/thread-spawn limit). Restarting with `NODE_OPTIONS=--max-old-space-size=2048` compiled and served fine. Not a code bug; environment memory pressure.
+
+**Blocked / open:** none. Unreleased — operator decides if/when this becomes `v1.0.1`.
+
+**Next:** operator to review visually + decide on releasing as `v1.0.1`. Beyond v1.0: GitLab / LinkedIn / Resume checkers (PLAN "Beyond v1.0").
+
+---
+
 ## 2026-05-29 — Claude (Opus 4.7) — v1.0.0 shipped (first stable release + launch polish)
 
 **Slice:** v1.0.0 — the 1.0 code release. Per the user: v1.0.0 = the stable release + launch polish; the *public launch* (marketing, domain, posts, traffic) they run themselves (see `docs/LAUNCH.md`). They picked four polish items, then "make it v1.0.0 then ship it."

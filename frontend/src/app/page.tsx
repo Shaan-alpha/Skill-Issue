@@ -5,6 +5,7 @@ import { SearchBar } from "@/components/search-bar";
 import { ExampleProfiles } from "@/components/landing/example-profiles";
 import { HowItWorks } from "@/components/landing/how-it-works";
 import { StarCta } from "@/components/landing/star-cta";
+import { APP_VERSION } from "@/lib/site";
 
 export default function Home() {
   return (
@@ -27,7 +28,7 @@ export default function Home() {
               transition={{ delay: 0.2, duration: 0.5 }}
               className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium uppercase tracking-wider text-muted-foreground"
             >
-              Deterministic engineering reports · v1.0.0
+              Deterministic engineering reports · v{APP_VERSION}
             </m.span>
 
             <h1 className="text-4xl sm:text-5xl md:text-7xl font-bold tracking-tight text-gradient leading-tight">
@@ -50,7 +51,7 @@ export default function Home() {
 
             <m.div
               initial={{ opacity: 0 }}
-              animate={{ opacity: 0.5 }}
+              animate={{ opacity: 1 }}
               transition={{ delay: 0.8, duration: 1 }}
               className="grid grid-cols-3 gap-4 pt-10 text-xs font-medium uppercase tracking-widest text-muted-foreground sm:gap-8 sm:pt-16 sm:text-sm md:gap-16"
             >
