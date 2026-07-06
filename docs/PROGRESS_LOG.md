@@ -19,6 +19,30 @@ Format:
 
 ---
 
+## 2026-07-06 — Claude (Fable 5) — Report page: save/share controls + search box merged into one row (unreleased)
+
+**Slice:** post-v1.0.0 polish (unreleased — staged under CHANGELOG `[Unreleased]`; release still operator-paused).
+
+**Done (user asked, with screenshot: move the share block to the left of the search box so they share the row):**
+- `results-view.tsx` — the right-aligned `SearchBar` row and the full-width `SaveShareControls` bar below it merged into one `flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between` row: share controls left, search right. Search wrapper is `lg:flex-1` + `justify-end` so it stays right-aligned even on share pages where `SaveShareControls` doesn't render (`sharedNarrative`).
+- `save-share-controls.tsx` — dropped the `mt-4` from both variants (signed-in row and anonymous sign-in CTA); the parent row's `gap` owns spacing now.
+- `loading.tsx` skeleton — section 2 now mirrors the combined row, and gained the search-bar placeholder (h-12 input + button + tip line) it had been missing entirely, keeping the skeleton→real swap CLS-clean.
+
+**Decisions:**
+- Side-by-side kicks in at **`lg:` (≥1024px), not `sm:`** — runtime verification caught that at 768px the anonymous sign-in banner (631px wide) starves a `sm:flex-1` search bar down to a 114px icon stub. Below `lg` the row stacks exactly like production did.
+- Stacked order is share bar above search via plain `flex-col`; DOM order matches visual order at every breakpoint, so tab order stays sane — no `flex-col-reverse` tricks.
+
+**Verified (runtime, headless-Chrome CDP against local backend+frontend, `/u/octocat` + `/u/torvalds`):**
+- 1440/1024: share left + search right on one row, flush tops, search keeps 448/314px; 768/390: stacked, search right-aligned (768) / centered full-width (390); horizontal overflow 0 at every width (screenshots + `getBoundingClientRect` measurements via `scratchpad verify_row.py` pattern, now persisted in `.claude/skills/verify/SKILL.md`).
+- Loading skeleton captured mid-analysis on an uncached profile — new row renders in the skeleton at the same coordinates as the real page (swap is shift-free).
+- Also `tsc --noEmit` clean, `eslint` clean, vitest **58/58 pass**.
+
+**Blocked / open:** none.
+
+**Next:** operator visual review; entry rides in `[Unreleased]` until they cut v1.0.1.
+
+---
+
 ## 2026-06-03 — Claude (Opus 4.8) — Post-1.0 UI polish: brand mark, favicon, hero stats, avatar fallback (unreleased)
 
 **Slice:** post-v1.0.0 polish (unreleased — staged under CHANGELOG `[Unreleased]`; no version bump/tag, release paused per operator).

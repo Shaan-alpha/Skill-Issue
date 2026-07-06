@@ -30,7 +30,7 @@ export function SaveShareControls({ initialShareSlug, analysisId, username }: Pr
   // Anonymous viewers see a sign-in CTA so the feature is discoverable.
   if (!session) {
     return (
-      <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-white/5 bg-card/30 px-4 py-3 text-sm">
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/5 bg-card/30 px-4 py-3 text-sm">
         <span className="text-muted-foreground">
           Sign in to save this analysis to your history and share it with a link.
         </span>
@@ -78,7 +78,7 @@ export function SaveShareControls({ initialShareSlug, analysisId, username }: Pr
 
   return (
     <div
-      className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-white/5 bg-card/30 px-4 py-3"
+      className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/5 bg-card/30 px-4 py-3"
       role="status"
       aria-live="polite"
     >

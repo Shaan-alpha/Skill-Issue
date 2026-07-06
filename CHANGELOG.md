@@ -16,6 +16,7 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ### Changed
 - **The homepage 100 / 6 / 0 stats now read at full strength** instead of half-dimmed, so "0 hallucinations" lands as the trust signal it's meant to be.
+- **The report page's save/share controls and the "analyze another" search box now share one row on desktop** — share actions on the left, search on the right — instead of stacking as two full-width rows with dead space beside the search box. Below 1024px they still stack, so tablets and phones are unchanged.
 
 ### Fixed
 - **Example-profile photos fall back to the person's initial** when GitHub's avatar fails to load, instead of showing a broken-image icon.

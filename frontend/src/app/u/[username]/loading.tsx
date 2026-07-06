@@ -3,7 +3,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 // Skeleton structure mirrors ResultsView's render order exactly so the
 // skeleton→real swap doesn't shift the layout. Sections, in order:
 //   1. Header (back link + Badge + ExternalLink)
-//   2. SaveShareControls (anonymous: sign-in CTA; signed-in: save+share row)
+//   2. SaveShareControls (left) + SearchBar (right); stacked on mobile
 //   3. PositionBar (tier + progress bar)
 //   4. BadgeRow (3-5 chips)
 //   5. Aggregate-score panel + Engineering-report panel (lg:grid-cols-3)
@@ -24,10 +24,21 @@ export default function Loading() {
           </div>
         </header>
 
-        {/* 2. SaveShareControls (anonymous CTA height) */}
-        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-white/5 bg-card/30 px-4 py-3">
-          <Skeleton className="h-4 w-72 max-w-full bg-white/5" />
-          <Skeleton className="h-7 w-36 rounded-full bg-white/5" />
+        {/* 2. SaveShareControls (left, anonymous CTA height) + SearchBar (right) */}
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/5 bg-card/30 px-4 py-3">
+            <Skeleton className="h-4 w-72 max-w-full bg-white/5" />
+            <Skeleton className="h-7 w-36 rounded-full bg-white/5" />
+          </div>
+          <div className="flex justify-center sm:justify-end lg:flex-1">
+            <div className="w-full max-w-md space-y-2">
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-12 flex-1 rounded-lg bg-white/5" />
+                <Skeleton className="h-12 w-12 rounded-lg bg-white/5" />
+              </div>
+              <Skeleton className="h-5 w-64 max-w-full bg-white/5" />
+            </div>
+          </div>
         </div>
 
         {/* 3. PositionBar */}

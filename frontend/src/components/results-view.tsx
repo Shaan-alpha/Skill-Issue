@@ -216,17 +216,20 @@ export function ResultsView({
           </div>
         </header>
 
-        <div className="flex justify-center sm:justify-end">
-          <SearchBar />
+        {/* Side-by-side only at lg — below that the sign-in banner starves
+            the search input (it collapses to a bare icon at ~768px). */}
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          {!sharedNarrative && (
+            <SaveShareControls
+              analysisId={analysisId ?? null}
+              initialShareSlug={initialShareSlug ?? null}
+              username={canonicalUsername}
+            />
+          )}
+          <div className="flex justify-center sm:justify-end lg:flex-1">
+            <SearchBar />
+          </div>
         </div>
-
-        {!sharedNarrative && (
-          <SaveShareControls
-            analysisId={analysisId ?? null}
-            initialShareSlug={initialShareSlug ?? null}
-            username={canonicalUsername}
-          />
-        )}
 
         <PositionBar tier={report.tier} total={report.total} />
         <BadgeRow badges={report.badges} />
