@@ -12,17 +12,20 @@ if (dsn) {
       process.env.NEXT_PUBLIC_VERCEL_ENV ??
       process.env.SENTRY_ENVIRONMENT ??
       "development",
+    // `||` not `??`: a present-but-blank env var must fall back to the
+    // default, not become Number("") === 0 and silently disable sampling.
+    // An explicit "0" stays honored ("0" is a truthy string).
     tracesSampleRate: Number(
-      process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE ?? 0.2,
+      process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE || 0.2,
     ),
     // Session Replay (Sentry education plan). Masking stays default-on —
     // the v0.8.0 PII contract applies to replay payloads too.
     integrations: [Sentry.replayIntegration()],
     replaysSessionSampleRate: Number(
-      process.env.NEXT_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE ?? 0.1,
+      process.env.NEXT_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE || 0.1,
     ),
     replaysOnErrorSampleRate: Number(
-      process.env.NEXT_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE ?? 1.0,
+      process.env.NEXT_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE || 1.0,
     ),
     sendDefaultPii: false,
     beforeSend(event) {

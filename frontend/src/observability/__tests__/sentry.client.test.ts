@@ -56,4 +56,21 @@ describe("sentry.client init", () => {
     await import("../sentry.client");
     expect(initSpy).not.toHaveBeenCalled();
   });
+
+  it("treats blank env vars as unset instead of sampling at 0", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE", "");
+    vi.stubEnv("NEXT_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE", "");
+    vi.stubEnv("NEXT_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE", "");
+    await import("../sentry.client");
+    const options = lastInitOptions();
+    expect(options.tracesSampleRate).toBe(0.2);
+    expect(options.replaysSessionSampleRate).toBe(0.1);
+    expect(options.replaysOnErrorSampleRate).toBe(1.0);
+  });
+
+  it("honors an explicit zero", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE", "0");
+    await import("../sentry.client");
+    expect(lastInitOptions().tracesSampleRate).toBe(0);
+  });
 });
