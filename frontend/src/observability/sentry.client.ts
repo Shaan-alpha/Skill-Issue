@@ -12,7 +12,18 @@ if (dsn) {
       process.env.NEXT_PUBLIC_VERCEL_ENV ??
       process.env.SENTRY_ENVIRONMENT ??
       "development",
-    tracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE ?? 0.1),
+    tracesSampleRate: Number(
+      process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE ?? 0.2,
+    ),
+    // Session Replay (Sentry education plan). Masking stays default-on —
+    // the v0.8.0 PII contract applies to replay payloads too.
+    integrations: [Sentry.replayIntegration()],
+    replaysSessionSampleRate: Number(
+      process.env.NEXT_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE ?? 0.1,
+    ),
+    replaysOnErrorSampleRate: Number(
+      process.env.NEXT_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE ?? 1.0,
+    ),
     sendDefaultPii: false,
     beforeSend(event) {
       if (event.request) {
