@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 import { CardActions } from "@/components/card-actions";
 import { fetchReportForUser } from "@/lib/og-card-data";
+import { siteOrigin } from "@/lib/site";
 
 interface PageProps {
   params: Promise<{ username: string }>;
@@ -18,12 +19,6 @@ export async function generateMetadata({ params }: PageProps) {
     title: `${username}'s Skill Issue card`,
     description: `Shareable Skill Issue scorecard for @${username}.`,
   };
-}
-
-function siteOrigin(): string {
-  const fromEnv = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
-  if (fromEnv) return fromEnv;
-  return "https://skill-issue-tau.vercel.app";
 }
 
 export default async function CardPage({ params }: PageProps) {
