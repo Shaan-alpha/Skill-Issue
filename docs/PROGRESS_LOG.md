@@ -39,6 +39,10 @@ Format:
 
 **Same-day update (execution):** Spec approved; plan written ([`docs/superpowers/plans/2026-07-10-v1.0.1-launch-ops.md`](./superpowers/plans/2026-07-10-v1.0.1-launch-ops.md)) and Phase 1 executed inline on `feat/v1.0.1-launch-ops` → **PR #12, CI fully green** (vitest 64/64 = 58 + 6 new; tsc/eslint clean). Shipped: shared `siteOrigin()`/`siteHost()` in `lib/site.ts` consumed by `layout.tsx` metadataBase, the card page, and the OG receipt watermark; Sentry Session Replay (masking default-on) + `NEXT_PUBLIC_SENTRY_*` sampling envs — found and fixed a latent bug where the client-side `SENTRY_TRACES_SAMPLE_RATE` env lacked the `NEXT_PUBLIC_` prefix and could never reach the browser (rate was silently pinned to the 0.1 fallback since v0.8.0). Ball is with Shaan: Phase 2 operator checklist (perk redemption, skillissue.tech registration, env+OAuth cutover, DO load test), then Phase 3 release (pause-gated tag).
 
+---
+
+## 2026-07-06 — Claude (Fable 5) — Report page: save/share controls + search box merged into one row (unreleased)
+
 **Slice:** post-v1.0.0 polish (unreleased — staged under CHANGELOG `[Unreleased]`; release still operator-paused).
 
 **Done (user asked, with screenshot: move the share block to the left of the search box so they share the row):**
