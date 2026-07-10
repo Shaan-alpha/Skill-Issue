@@ -757,7 +757,7 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 ## v1.1.0 — Progress Pulse (opt-in monthly score digest)
 
-**Goal:** The retention loop. Signed-in users opt in (typed email, double opt-in — OAuth scope stays `read:user`) to a monthly email showing how their score moved: total/tier/bucket deltas + badges gained/lost, deterministic content only, no LLM. Powered by the pack's Mailgun offer (20K emails/mo, 12 months) from `mg.skillissue.tech`. Implements the "Engineering Evolution Tracking" idea below in email form.
+**Goal:** The retention loop. Signed-in users opt in (typed email, double opt-in — OAuth scope stays `read:user`) to a monthly email showing how their score moved: total/tier/bucket deltas + badges gained/lost, deterministic content only, no LLM. Email provider: originally the pack's Mailgun offer, but Sinch terminated new student claims (found 2026-07-11) — the slice's sender abstraction stands; pick a free-tier provider (likely Resend, 3K/mo) at implementation time, sending from `mg.skillissue.tech`. Implements the "Engineering Evolution Tracking" idea below in email form.
 
 **Design spec:** [`docs/superpowers/specs/2026-07-10-github-education-upgrades-design.md`](./docs/superpowers/specs/2026-07-10-github-education-upgrades-design.md) (§4).
 

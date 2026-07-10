@@ -133,8 +133,8 @@ A new `email_subscriptions` table (one row per user, cascade-deleted with the ac
 | Namecheap | Free .me for 1 year + SSL cert | **Optional.** `skillissu.me` is available (domain hack); grab defensively and 308-redirect to skillissue.tech if desired. The SSL cert is unneeded (Vercel auto-SSL) |
 | Name.com | 1 free year domain + Advanced Security | **Hold in reserve** — a second defensive TLD later if the brand takes off |
 | Sentry | Education plan: 50K errors / 100K transactions / 1 GB attachments / 500 replays, 1 year | **USE — v1.0.1.** Already integrated both services; unlocks replay + higher trace sampling |
-| DigitalOcean | ~$100–200 credit, 1 year | **USE — v1.0.1.** One-off load-test droplet; keep remainder for future staging needs |
-| Mailgun | 20K emails/mo + 100 validations/mo, 12 months | **USE — v1.1.0.** Progress Pulse digests |
+| DigitalOcean | ~$100–200 credit | **USE — v1.0.1, URGENT.** Program winding down: all pack credits expire **2026-07-31** (confirmed 2026-07-11). Run the load-test droplet before then |
+| Mailgun | 20K emails/mo + 100 validations/mo, 12 months | **DEAD for new claims** (2026-07-11: Sinch terminated the student offer over abuse; existing accounts grandfathered). v1.1.0 swaps to a free-tier provider — Resend (3K/mo free) fits a monthly digest; sender is isolated in `app/email/mailgun.py` by design, so this is a one-file concern |
 | GitHub Pro + Copilot | Free while student | **USE — personal.** Also: Codespaces hours sidestep the local `next dev` OOM problem |
 | Polypane | Free 1 year | **USE — personal tooling.** Multi-breakpoint browser; pairs with the responsive-is-non-negotiable rule |
 | BrowserStack / LambdaTest | Automate Mobile 1 yr / Live plan 1 yr | **USE — personal tooling.** Real-device checks before releases |
