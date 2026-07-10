@@ -739,6 +739,38 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 ---
 
+## v1.0.1 — Launch Ops (GitHub Education perks)
+
+**Goal:** Use the GitHub Student Developer Pack (received 2026-07) to clear the open launch blockers in [`docs/LAUNCH.md`](./docs/LAUNCH.md): production domain **skillissue.tech** (free year via the pack's .TECH offer), the 100 RPS load test on a DigitalOcean credit droplet, and the Sentry education plan with Session Replay enabled for launch-day watching.
+
+**Design spec:** [`docs/superpowers/specs/2026-07-10-github-education-upgrades-design.md`](./docs/superpowers/specs/2026-07-10-github-education-upgrades-design.md) (§3).
+
+**Shape:** operator checklist (redeem perks, register + cut over the domain, run the load test) + one small PR (Sentry replay/sampling config, host references in copy).
+
+**Exit criteria:**
+- [ ] skillissue.tech live with SSL; old vercel.app host redirects; OAuth verified end-to-end on the new domain.
+- [ ] Test error produces a Sentry event with session replay attached.
+- [ ] Load-test max RPS + p95 recorded in `docs/PROGRESS_LOG.md`.
+- [ ] `CHANGELOG.md` `[1.0.1]`; tag `v1.0.1`; release.
+
+---
+
+## v1.1.0 — Progress Pulse (opt-in monthly score digest)
+
+**Goal:** The retention loop. Signed-in users opt in (typed email, double opt-in — OAuth scope stays `read:user`) to a monthly email showing how their score moved: total/tier/bucket deltas + badges gained/lost, deterministic content only, no LLM. Powered by the pack's Mailgun offer (20K emails/mo, 12 months) from `mg.skillissue.tech`. Implements the "Engineering Evolution Tracking" idea below in email form.
+
+**Design spec:** [`docs/superpowers/specs/2026-07-10-github-education-upgrades-design.md`](./docs/superpowers/specs/2026-07-10-github-education-upgrades-design.md) (§4).
+
+**Shape:** `email_subscriptions` table + `app/email/` (Mailgun via `httpx`, delta computation, template) + tokenized confirm/unsubscribe routes + daily due-based cron (`CRON_SECRET` pattern, per-sub fail-open, send only when something changed) + `/me` opt-in card + privacy-page clause.
+
+**Exit criteria:**
+- [ ] Opt-in → confirm → digest → unsubscribe loop verified in prod with a real inbox.
+- [ ] Delta computation fully unit-tested (up/down/flat, tier change, badges, first digest).
+- [ ] Mid-batch failure skips the sub, logs to Sentry, completes the rest.
+- [ ] Privacy page updated; `CHANGELOG.md` `[1.1.0]`; tag `v1.1.0`; release.
+
+---
+
 ## Beyond v1.0 — future ideas
 
 Not committed. Tracked here so they don't get lost.
@@ -761,7 +793,7 @@ The long-term play: Skill Issue is the *reputation layer for developers*, not a 
 - **Career Timeline** — animated history of a developer's growth
 - **Hiring Mode** — recruiter dashboard with shortlists
 - **Skill Graphs** — visualize stack expertise as a graph
-- **Engineering Evolution Tracking** — month-over-month deltas
+- **Engineering Evolution Tracking** — month-over-month deltas → email form scheduled as **v1.1.0 Progress Pulse** above; richer in-app timelines remain a future idea
 
 ---
 

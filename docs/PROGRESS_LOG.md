@@ -19,7 +19,23 @@ Format:
 
 ---
 
-## 2026-07-06 — Claude (Fable 5) — Report page: save/share controls + search box merged into one row (unreleased)
+## 2026-07-10 — Claude (Fable 5) — GitHub Education perks mapped to two slices; skillissue.tech chosen
+
+**Slice:** planning (spec for v1.0.1 + v1.1.0).
+
+**Done:** Shaan received the GitHub Student Developer Pack; brainstormed what it unlocks for Skill Issue. Verified the current partner list against the official FAQ repo and checked domain availability live (Vercel registrar API). Wrote [`docs/superpowers/specs/2026-07-10-github-education-upgrades-design.md`](./superpowers/specs/2026-07-10-github-education-upgrades-design.md) and added the two slice stubs to `PLAN.md`.
+
+**Decisions:**
+- **Production domain = skillissue.tech** (user-approved) — free year 1 via the pack's .TECH offer, redeemed through the pack portal (not Vercel). Nearly every other `skillissue.*` TLD (.me/.dev/.gg/.io/.app/.lol) is already registered; `skillissu.me` (free via Namecheap .me offer) noted as an optional defensive grab.
+- **v1.0.1 Launch Ops:** domain cutover + Sentry education plan (Session Replay on, traces ~0.2) + 100 RPS load test on a throwaway DigitalOcean credit droplet — clears the blocking LAUNCH.md items. Legal review of privacy/terms stays a human errand.
+- **v1.1.0 Progress Pulse (user picked digest-only):** opt-in **monthly** score-delta email via the pack's Mailgun offer. Deterministic content only (no LLM), typed email + double opt-in (OAuth scope stays `read:user`), `mg.skillissue.tech` sender, daily due-based cron with per-sub fail-open, send only when something changed.
+- **Skipped perks logged with reasons** (spec §6): Datadog/New Relic/Honeybadger/Simple Analytics redundant with Sentry+PostHog; Heroku/Azure/MongoDB/LocalStack don't fit the stack.
+
+**Learned / surprises:** "skill issue" is meme-popular enough that the .com/.dev/.gg/.me/.lol variants are all taken — brand-name domains needed live availability checks, not assumptions. The pack's Sentry education tier includes 500 session replays, which the current free-tier config never enables.
+
+**Blocked / open:** perk redemption itself is operator work (Shaan's GitHub account). `.tech` renewal (~$40–50/yr) and Mailgun expiry both land ~2027-07 — calendar reminders are part of the v1.0.1 checklist.
+
+**Next:** Shaan reviews the spec → `superpowers:writing-plans` for the v1.0.1 PR + operator checklist, then v1.1.0's TDD plan after launch.
 
 **Slice:** post-v1.0.0 polish (unreleased — staged under CHANGELOG `[Unreleased]`; release still operator-paused).
 
