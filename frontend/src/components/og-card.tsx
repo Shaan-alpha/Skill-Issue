@@ -1,4 +1,5 @@
 import type { Report } from "@/types";
+import { siteHost } from "@/lib/site";
 import {
   OG_BG_DARK,
   OG_BG_DARK_TOP,
@@ -74,7 +75,7 @@ export function OgCard({ report, avatarUrl, creator = false }: Props) {
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
           <div style={{ display: "flex", fontSize: 32, fontWeight: 700 }}>Skill Issue</div>
           <div style={{ display: "flex", fontSize: 16, color: "#666", marginTop: 4 }}>
-            skill-issue-tau.vercel.app
+            {siteHost()}
           </div>
           {creator ? (
             <div

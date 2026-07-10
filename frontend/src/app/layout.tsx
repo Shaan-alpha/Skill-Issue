@@ -4,6 +4,7 @@ import { FramerProvider } from "@/components/framer-provider";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { ObservabilityProvider } from "@/observability/provider";
+import { siteOrigin } from "@/lib/site";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -20,7 +21,7 @@ const SITE_DESCRIPTION =
   "Deterministic, evidence-based engineering reports from any GitHub profile. Six signals, one hundred points, zero hallucinations.";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://skill-issue-tau.vercel.app"),
+  metadataBase: new URL(siteOrigin()),
   title: "Skill Issue — your GitHub, read honestly",
   description: SITE_DESCRIPTION,
   openGraph: {
