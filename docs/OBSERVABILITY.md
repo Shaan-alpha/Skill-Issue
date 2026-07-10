@@ -136,6 +136,28 @@ Backend emits structured `logger.warning` lines only — no Sentry capture, no P
 | `rate_limit.throttled` | warn | A request exceeds its hourly cap and gets a 429 | `name` (analyze\|narrative), `subject_type` (ip\|user), `limit` |
 | `rate_limit.skipped` | warn | Anonymous `/analyze` enforcement skipped because `internal_proxy_secret` is unset | `name`, `reason=internal_proxy_secret_unset` |
 
+## Session Replay (v1.0.1)
+
+Frontend Sentry records a masked DOM replay of sessions, so an error report
+can be watched instead of reconstructed. Quota comes from the Sentry
+education plan (500 replays/mo, through ~2027-07).
+
+| Env (frontend build) | Default | Meaning |
+| --- | --- | --- |
+| `NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE` | `0.2` | Client trace sampling. Raised from 0.1 with the education plan's 100K/mo transaction budget; retune after a week of launch data. |
+| `NEXT_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE` | `0.1` | Ambient replay sampling — fraction of ordinary sessions recorded. |
+| `NEXT_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE` | `1.0` | Replay-on-error — buffered sessions that hit an error are always sent. |
+
+Two constraints:
+
+- **Masking is default-on** (`maskAllText` / `maskAllInputs` / `blockAllMedia`)
+  and stays that way. Replay payloads are subject to the PII contract below;
+  weakening masking requires updating that contract first.
+- The pre-v1.0.1 client read `SENTRY_TRACES_SAMPLE_RATE` without the
+  `NEXT_PUBLIC_` prefix — Next.js never inlines un-prefixed vars into client
+  bundles, so the browser rate was silently pinned to its fallback. That env
+  name remains valid for the **backend** service only.
+
 ## PII contract
 
 These fields must never reach Sentry or PostHog. Code that handles them is
