@@ -17,7 +17,7 @@ The code is launch-ready as of **v0.9.8**. v1.0.0 is the public launch itself �
 
 - [ ] Register **skillissue.tech** — free year 1 via the GitHub Student Pack .TECH offer (redeem at education.github.com/pack → .TECH; do NOT buy via Vercel, it would charge). Availability verified 2026-07-10.
 - [ ] Vercel → Project → **Settings → Domains** → add the domain; follow the DNS records Vercel shows. SSL is automatic.
-- [ ] Update env/config that hard-codes the host: `CORS_ALLOW_ORIGINS`, `OAUTH_REDIRECT_URL` (and the GitHub OAuth App's callback URL), `FRONTEND_BASE_URL`, `NEXT_PUBLIC_SITE_URL`, and the repo/footer links if needed.
+- [ ] Update env/config that hard-codes the host: `CORS_ALLOW_ORIGINS` (and/or `CORS_ALLOW_ORIGIN_REGEX`), `OAUTH_REDIRECT_URL` (and the GitHub OAuth App's callback URL), `FRONTEND_BASE_URL`, `NEXT_PUBLIC_SITE_URL`, **`NEXT_PUBLIC_BACKEND_URL`** (it embeds the host too — missing it breaks session cookies cross-origin), and the repo/footer links if needed.
 - [ ] Re-verify OAuth sign-in end-to-end on the new domain (the GitHub callback URL must match).
 - [ ] Set the Sentry sampling envs while editing env vars (see `docs/OBSERVABILITY.md`): `NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE=0.2`, backend `SENTRY_TRACES_SAMPLE_RATE=0.2`.
 
