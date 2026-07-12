@@ -91,6 +91,7 @@ async def test_cron_correct_bearer_runs_chunk(monkeypatch):
     from app.routers import cron as cron_router
 
     monkeypatch.setattr(cron_router, "run_refresh_chunk", AsyncMock(return_value=canned))
+    monkeypatch.setattr(cron_router, "purge_expired_sessions", AsyncMock(return_value=3))
 
     # Bypass the db dependency.
     from app.db.session import get_db
@@ -126,3 +127,4 @@ async def test_cron_correct_bearer_runs_chunk(monkeypatch):
     assert body["skipped"] == 0
     assert body["rate_limited"] == 0
     assert body["deadline_reached"] is False
+    assert body["purged_sessions"] == 3

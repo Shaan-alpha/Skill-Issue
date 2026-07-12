@@ -66,3 +66,15 @@ async def touch_session(db: AsyncSession, session_id: str) -> None:
 
 async def delete_session(db: AsyncSession, session_id: str) -> None:
     await db.execute(delete(Session).where(Session.id == session_id))
+
+
+async def purge_expired_sessions(db: AsyncSession) -> int:
+    """Delete every session past its TTL; return the row count removed.
+
+    Session rows hold AES-GCM-encrypted GitHub tokens. Expired rows are never
+    read again (get_session_with_token rejects them) but otherwise linger
+    forever, maximizing the at-rest token footprint and growing the table
+    unboundedly. Run from the daily cron for data minimization.
+    """
+    result = await db.execute(delete(Session).where(Session.expires_at <= datetime.now(UTC)))
+    return result.rowcount or 0
