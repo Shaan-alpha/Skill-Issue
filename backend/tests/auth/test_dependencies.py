@@ -58,3 +58,25 @@ async def test_private_returns_401_without_session(mini_app):
     async with AsyncClient(transport=ASGITransport(app=mini_app), base_url="http://t") as ac:
         r = await ac.get("/private")
     assert r.status_code == 401
+
+
+def _req_with_headers(headers: dict[str, str]):
+    from starlette.requests import Request
+
+    scope = {
+        "type": "http",
+        "headers": [(k.lower().encode(), v.encode()) for k, v in headers.items()],
+    }
+    return Request(scope)
+
+
+def test_is_cross_site_write_flags_only_cross_site():
+    from app.auth.dependencies import is_cross_site_write
+
+    # The CSRF signal: a cross-site browser navigation.
+    assert is_cross_site_write(_req_with_headers({"sec-fetch-site": "cross-site"})) is True
+    # Legit first-party callers.
+    for site in ("same-origin", "same-site", "none"):
+        assert is_cross_site_write(_req_with_headers({"sec-fetch-site": site})) is False
+    # Absent header (Next.js RSC server fetch, old browsers) — never penalized.
+    assert is_cross_site_write(_req_with_headers({})) is False

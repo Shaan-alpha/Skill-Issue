@@ -2,12 +2,28 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import Cookie, Depends, HTTPException, status
+from fastapi import Cookie, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.sessions import get_session_with_token, touch_session
 from app.db.models import User
 from app.db.session import get_db
+
+
+def is_cross_site_write(request: Request) -> bool:
+    """True when the request looks like a cross-site browser navigation — the
+    CSRF signal for our GET endpoints that persist state.
+
+    Browsers stamp ``Sec-Fetch-Site: cross-site`` on requests initiated from a
+    different site (e.g. a top-level navigation from an attacker page, which
+    would carry the SameSite=Lax session cookie). Legitimate first-party
+    callers send ``same-origin``/``same-site``/``none``, and the Next.js RSC
+    server-to-server proxy omits the header entirely. We treat ONLY the explicit
+    ``cross-site`` value as hostile, so anything that legitimately lacks the
+    header (old browsers, server fetches) is never penalized — the write simply
+    proceeds as before.
+    """
+    return request.headers.get("sec-fetch-site") == "cross-site"
 
 
 class _ResolvedSession:
