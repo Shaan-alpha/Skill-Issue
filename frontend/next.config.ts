@@ -1,9 +1,15 @@
 import type { NextConfig } from "next";
 
-// v0.9.5 security headers. The first four are enforced (zero-risk). CSP ships
+// v0.9.5 security headers. The first five are enforced (zero-risk). CSP ships
 // Report-Only: it logs violations to the browser console without blocking, so
 // it can be tuned against real reports before being promoted to enforcing —
 // a wrong directive would otherwise silently break PostHog/Sentry/Next.
+//
+// 'unsafe-eval' is intentionally NOT in script-src: prod Next.js 16 doesn't
+// need it, so leaving it out surfaces any real eval usage as a report-only
+// violation during tuning. 'unsafe-inline' stays until we wire nonce/hash-based
+// scripts+styles (Next emits inline hydration/style today); that removal is the
+// last step before promoting this to an enforcing Content-Security-Policy.
 const CSP_REPORT_ONLY = [
   "default-src 'self'",
   "base-uri 'self'",
@@ -12,12 +18,19 @@ const CSP_REPORT_ONLY = [
   "img-src 'self' data: https://avatars.githubusercontent.com",
   "font-src 'self' data:",
   "style-src 'self' 'unsafe-inline'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.posthog.com https://*.i.posthog.com",
+  "script-src 'self' 'unsafe-inline' https://*.posthog.com https://*.i.posthog.com",
   "connect-src 'self' https://*.posthog.com https://*.i.posthog.com https://*.sentry.io https://*.ingest.sentry.io",
   "form-action 'self'",
 ].join("; ");
 
 const SECURITY_HEADERS = [
+  {
+    key: "Strict-Transport-Security",
+    // includeSubDomains is safe because every skillissue.tech host is served
+    // over HTTPS via Vercel. `preload` makes the apex eligible for the browser
+    // preload list — it only takes effect after submitting to hstspreload.org.
+    value: "max-age=63072000; includeSubDomains; preload",
+  },
   { key: "X-Frame-Options", value: "SAMEORIGIN" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
