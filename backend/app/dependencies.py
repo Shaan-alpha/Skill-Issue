@@ -132,6 +132,13 @@ async def _live_ingest(
     session: "_ResolvedSession | None",
     cache: RedisCache | None,
 ) -> Report:
+    # Funnel guard: every path to the GitHub client passes through here,
+    # including the cron refresh (which reaches _live_ingest directly, not via
+    # get_report_for_user). Re-validate so an unexpected caller can never
+    # interpolate an unchecked login into a GitHub API request path.
+    if not _USERNAME_RE.fullmatch(username):
+        raise HTTPException(status_code=400, detail="Invalid GitHub username")
+
     access_token = (
         getattr(session, "access_token", None) if session is not None else None
     ) or settings.github_token
