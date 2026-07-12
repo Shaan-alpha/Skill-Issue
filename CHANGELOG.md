@@ -19,6 +19,7 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 - **The report page's save/share controls and the "analyze another" search box now share one row on desktop** — share actions on the left, search on the right — instead of stacking as two full-width rows with dead space beside the search box. Below 1024px they still stack, so tablets and phones are unchanged.
 
 ### Fixed
+- **Saved analyses refresh on schedule again.** The nightly refresh job silently failed on every run — it rejected the scheduler's request method and never executed — so saved profiles went stale until a manual re-analyze. It now runs as intended, and has more headroom to finish large batches.
 - **Example-profile photos fall back to the person's initial** when GitHub's avatar fails to load, instead of showing a broken-image icon.
 
 ---

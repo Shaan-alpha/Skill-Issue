@@ -38,7 +38,13 @@ def require_cron_auth(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
 
 
-@router.post("/refresh-saved-analyses")
+# Vercel Cron Jobs invoke the scheduled path with an HTTP GET (there is no way
+# to make a Vercel cron POST), so GET is the method that actually fires in
+# production. POST is kept for manual triggers (`vercel crons run`, curl). Both
+# go through `require_cron_auth` — Vercel injects the Bearer CRON_SECRET header
+# on the scheduled GET. Before this, the route was POST-only and every daily
+# fire 405'd before any handler code ran.
+@router.api_route("/refresh-saved-analyses", methods=["GET", "POST"])
 async def refresh_saved_analyses(
     db: Annotated[AsyncSession, Depends(get_db)],
     _auth: Annotated[None, Depends(require_cron_auth)],

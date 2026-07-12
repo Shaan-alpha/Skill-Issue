@@ -23,6 +23,21 @@ async def test_cron_missing_auth_returns_401(monkeypatch):
     assert r.json() == {"detail": "Unauthorized"}
 
 
+async def test_cron_get_is_routed_not_405(monkeypatch):
+    # Regression: Vercel Cron fires the path with GET. The route must accept GET
+    # and reach require_cron_auth (401 without a bearer) rather than 405'ing
+    # because it was POST-only. A 401 here proves GET is routed to the handler.
+    monkeypatch.setenv("CRON_SECRET", secrets.token_hex(16))
+    from app import settings as settings_module
+
+    settings_module.settings = settings_module.Settings()
+
+    async with await _client() as ac:
+        r = await ac.get("/cron/refresh-saved-analyses")
+    assert r.status_code == 401
+    assert r.json() == {"detail": "Unauthorized"}
+
+
 async def test_cron_wrong_bearer_returns_401(monkeypatch):
     expected = secrets.token_hex(16)
     monkeypatch.setenv("CRON_SECRET", expected)
