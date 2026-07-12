@@ -22,6 +22,9 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 - **Saved analyses refresh on schedule again.** The nightly refresh job silently failed on every run — it rejected the scheduler's request method and never executed — so saved profiles went stale until a manual re-analyze. It now runs as intended, and has more headroom to finish large batches.
 - **Example-profile photos fall back to the person's initial** when GitHub's avatar fails to load, instead of showing a broken-image icon.
 
+### Security
+- **Updated web dependencies to clear known npm security advisories** (transitive packages only — no behavior change).
+
 ---
 
 ## [1.0.0] — 2026-05-29
