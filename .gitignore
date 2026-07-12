@@ -24,11 +24,8 @@ htmlcov/
 dist/
 
 # --- Env / secrets ---
-.env
-.env.local
-.env.*.local
-.env.development
-.env.production
+.env*
+!.env.example
 *.pem
 
 # --- Editor / OS ---
@@ -58,10 +55,3 @@ coverage/
 
 # --- Misc ---
 *.local
-
-.vercel
-.env*.local
-.env.production
-.env.development
-
-.env*
