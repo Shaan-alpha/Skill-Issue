@@ -23,6 +23,7 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 - **Example-profile photos fall back to the person's initial** when GitHub's avatar fails to load, instead of showing a broken-image icon.
 
 ### Security
+- **Patched known CVEs in backend dependencies** — Starlette (4 advisories), FastAPI, cryptography, joserfc (JWT), and pydantic-settings upgraded to fixed versions. All tests pass on the new stack.
 - **Updated web dependencies to clear known npm security advisories** (transitive packages only — no behavior change).
 
 ---
