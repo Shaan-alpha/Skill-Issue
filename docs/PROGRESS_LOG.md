@@ -19,6 +19,24 @@ Format:
 
 ---
 
+## 2026-07-12 — Claude (Fable 5) with Shaan — skillissue.tech is live: domain cutover complete, sign-in fixed after two env misfires
+
+**Slice:** v1.0.1 Launch Ops, Phase 2 (operator cutover, agent-assisted).
+
+**Done:** skillissue.tech registered (free via pack), delegated to Vercel nameservers, SSL auto-issued. Apex = Production; `www` 307→apex; old `skill-issue-tau.vercel.app` 308→apex. Full env cutover + GitHub OAuth callback swap; sign-in verified end-to-end; share pages, OG images, and `/health` (db/cache up) verified on the new host. LAUNCH.md §2 fully checked off. DigitalOcean support restored the pack credit ($205 total) — load test unblocked (run before 2026-07-31 credit expiry).
+
+**Learned / surprises (the debugging story):**
+- **Dashboard Redeploy is broken for this repo** (recurring since v0.9.x): `No Next.js version detected` — multi-service root detection. Env changes apply only via a pushed commit (empty works).
+- **Two envs silently mis-saved on the first cutover pass.** `OAUTH_REDIRECT_URL` kept sending the old host to GitHub (`redirect_uri not associated` — the error appears only *after* the GitHub app side is already correct). Then `NEXT_PUBLIC_BACKEND_URL`: sign-in completed, session cookie landed on skillissue.tech, but the UI stayed logged out because the client bundle still fetched `/me` on the old host — cross-origin, cookieless, `null`.
+- **Verification pattern that ended the guessing:** probe the deployed artifact, not the dashboard — `curl -sD -` the `/auth/login` redirect and read the `redirect_uri` param; grep the served `/_next/static/chunks/*.js` for the baked host literal. Both are definitive about what production actually runs.
+- One `invalid_state` between the two fixes was collateral: sign-in initiated from an old-host tab sets the state cookie there while the callback lands on the new host. Clean-tab retry resolves it.
+
+**Blocked / open:** replay smoke test (operator, 30s — event with Replay attached in Sentry); 100 RPS load test on a DO droplet (before 2026-07-31); legal review of privacy/terms (pre-launch-posts, unchanged). Then Phase 3: README/CHANGELOG/version → pause → tag v1.0.1.
+
+**Next:** load test → record numbers here → Phase 3 release ritual.
+
+---
+
 ## 2026-07-10 — Claude (Fable 5) — GitHub Education perks mapped to two slices; skillissue.tech chosen
 
 **Slice:** planning (spec for v1.0.1 + v1.1.0).

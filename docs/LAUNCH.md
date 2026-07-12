@@ -11,15 +11,17 @@ The code is launch-ready as of **v0.9.8**. v1.0.0 is the public launch itself �
   - `CORS_ALLOW_ORIGIN_REGEX` scoped to our origins — confirmed (`evil.example.com` + arbitrary `*.vercel.app` rejected).
   - `INTERNAL_PROXY_SECRET` set on both Vercel services (turns on anonymous `/analyze` IP rate limiting).
   - Security headers live — confirmed via `curl -I` (`X-Frame-Options`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`, CSP report-only). Consider promoting the CSP from report-only to enforcing after tuning against real violation reports.
-- [ ] **Smoke the live app:** `/health` is `up/up`, sign-in works, an analysis runs, `/me` history + delete work, a `/share/<slug>` link resolves.
+- [x] **Smoke the live app** (2026-07-12, on skillissue.tech): `/health` `up/up`, sign-in works, an analysis runs, `/me` history works, a `/share/<slug>` link resolves.
 
-## 2. Production domain + SSL
+## 2. Production domain + SSL — ✅ done 2026-07-12
 
-- [ ] Register **skillissue.tech** — free year 1 via the GitHub Student Pack .TECH offer (redeem at education.github.com/pack → .TECH; do NOT buy via Vercel, it would charge). Availability verified 2026-07-10.
-- [ ] Vercel → Project → **Settings → Domains** → add the domain; follow the DNS records Vercel shows. SSL is automatic.
-- [ ] Update env/config that hard-codes the host: `CORS_ALLOW_ORIGINS` (and/or `CORS_ALLOW_ORIGIN_REGEX`), `OAUTH_REDIRECT_URL` (and the GitHub OAuth App's callback URL), `FRONTEND_BASE_URL`, `NEXT_PUBLIC_SITE_URL`, **`NEXT_PUBLIC_BACKEND_URL`** (it embeds the host too — missing it breaks session cookies cross-origin), and the repo/footer links if needed.
-- [ ] Re-verify OAuth sign-in end-to-end on the new domain (the GitHub callback URL must match).
-- [ ] Set the Sentry sampling envs while editing env vars (see `docs/OBSERVABILITY.md`): `NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE=0.2`, backend `SENTRY_TRACES_SAMPLE_RATE=0.2`.
+- [x] Register **skillissue.tech** — redeemed free via the GitHub Student Pack .TECH offer (2026-07-11).
+- [x] Vercel → Domains: apex on Production, `www` 307→apex, old `skill-issue-tau.vercel.app` 308→apex. Nameservers delegated to Vercel (`ns1/ns2.vercel-dns.com`); SSL auto-issued.
+- [x] Env cutover done: `CORS_ALLOW_ORIGINS`, `OAUTH_REDIRECT_URL` (+ GitHub OAuth App callback), `FRONTEND_BASE_URL`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_BACKEND_URL`. **Lesson:** two envs mis-saved on the first pass (`OAUTH_REDIRECT_URL` → `invalid redirect_uri`; `NEXT_PUBLIC_BACKEND_URL` → sign-in "succeeded" but UI stayed logged out because `/me` fetched the old host without the cookie). Verify env edits by probing the deployed artifact (login `Location` header; grep the JS chunks for the baked host), not by trusting the dashboard.
+- [x] OAuth sign-in re-verified end-to-end on skillissue.tech (2026-07-12).
+- [x] Sentry sampling envs set (`NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE=0.2`, replay 0.1/1.0, backend `SENTRY_TRACES_SAMPLE_RATE=0.2`).
+
+> **Deploy quirk (recurring):** the dashboard **Redeploy** button fails on this repo (`No Next.js version detected` — multi-service root detection). Apply env changes by pushing a commit (empty is fine). First seen v0.9.x, reconfirmed 2026-07-11.
 
 ## 3. Launch day
 
