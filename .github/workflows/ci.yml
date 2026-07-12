@@ -59,6 +59,11 @@ jobs:
         # anything we can run for free."
         run: uv run pytest -q --no-header
 
+      - name: pip-audit (shipped dependency CVEs)
+        # Audits the exported requirements.txt (what actually deploys), not the
+        # dev tooling. Fails the build on any known CVE in a runtime dependency.
+        run: uvx pip-audit -r requirements.txt
+
   frontend:
     name: Frontend (lint + test + build)
     runs-on: ubuntu-latest
@@ -76,6 +81,11 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: npm audit (shipped high+ advisories)
+        # Gate on high/critical advisories in production dependencies only —
+        # dev-tooling advisories (never shipped to the browser) don't block.
+        run: npm audit --omit=dev --audit-level=high
 
       - name: ESLint
         run: npm run lint
