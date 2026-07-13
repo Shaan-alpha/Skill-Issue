@@ -10,6 +10,10 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ## [Unreleased]
 
+## [1.0.2] — 2026-07-13
+
+Security & hardening slice — a full audit of the repo + Vercel and its remediation. (v1.0.1 was the operational launch-ops milestone — the skillissue.tech domain cutover, tracked in `docs/LAUNCH.md` — and did not ship as a separate code release.)
+
 ### Added
 - **A brand mark in the header.** Every page now carries the Skill Issue logo — a score-ring "S" matching the report-page score gauge — plus the wordmark in the top-left, linking home.
 - **A new favicon and Apple touch icon** built from the same score-ring motif, so the browser-tab icon finally matches the site instead of the old generic placeholder.

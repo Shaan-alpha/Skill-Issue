@@ -1,6 +1,6 @@
 [project]
 name = "skill-issue-backend"
-version = "1.0.0"
+version = "1.0.2"
 description = "Skill Issue backend — FastAPI service that ingests a GitHub profile and returns a deterministic engineering report."
 readme = "README.md"
 authors = [
