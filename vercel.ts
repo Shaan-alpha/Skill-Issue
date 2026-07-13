@@ -28,6 +28,10 @@ export const config: VercelConfig = {
       'style/*': false,
       'refactor/*': false,
       'test/*': false,
+      // Dependabot PRs are validated by CI (GitHub Actions) — they don't need
+      // a Vercel preview, and letting the whole flock deploy at once trips the
+      // concurrent-build limit (canceled/ERROR previews). CI is the gate.
+      'dependabot/*': false,
     },
   },
 };
