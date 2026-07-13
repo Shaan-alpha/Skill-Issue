@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-VERSION = "1.0.0"
+VERSION = "1.0.2"
 
 
 class Settings(BaseSettings):
@@ -34,7 +34,11 @@ class Settings(BaseSettings):
     session_cookie_name: str = "si_session"
     session_ttl_days: int = 30
     cookie_domain: str | None = None
-    cookie_secure: bool = False
+    # Fail closed: default the session/OAuth-state cookies to Secure so any
+    # environment that forgets to set COOKIE_SECURE still ships hardened
+    # cookies. Local HTTP dev must opt out with COOKIE_SECURE=false (browsers
+    # won't send Secure cookies over http://localhost).
+    cookie_secure: bool = True
 
     # v0.7.0 — caching
     upstash_redis_rest_url: str | None = None

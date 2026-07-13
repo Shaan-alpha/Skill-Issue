@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import settings as settings_module
+from app.auth.sessions import purge_expired_sessions
 from app.cron import run_refresh_chunk
 from app.db.session import get_db
 
@@ -38,18 +39,29 @@ def require_cron_auth(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
 
 
-@router.post("/refresh-saved-analyses")
+# Vercel Cron Jobs invoke the scheduled path with an HTTP GET (there is no way
+# to make a Vercel cron POST), so GET is the method that actually fires in
+# production. POST is kept for manual triggers (`vercel crons run`, curl). Both
+# go through `require_cron_auth` — Vercel injects the Bearer CRON_SECRET header
+# on the scheduled GET. Before this, the route was POST-only and every daily
+# fire 405'd before any handler code ran.
+@router.api_route("/refresh-saved-analyses", methods=["GET", "POST"])
 async def refresh_saved_analyses(
     db: Annotated[AsyncSession, Depends(get_db)],
     _auth: Annotated[None, Depends(require_cron_auth)],
 ) -> dict[str, object]:
     summary = await run_refresh_chunk(db)
+    # Data minimization: drop expired session rows (encrypted GitHub tokens)
+    # on the same daily tick. Independent of the refresh commit above.
+    purged_sessions = await purge_expired_sessions(db)
+    await db.commit()
     return {
         "processed": summary.processed,
         "succeeded": summary.succeeded,
         "skipped": summary.skipped,
         "rate_limited": summary.rate_limited,
         "deadline_reached": summary.deadline_reached,
+        "purged_sessions": purged_sessions,
         "outcomes": [
             {
                 "analysis_id": o.analysis_id,

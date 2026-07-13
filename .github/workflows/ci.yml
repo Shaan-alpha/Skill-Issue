@@ -31,10 +31,10 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
         with:
           version: "0.11.12"
           enable-cache: true
@@ -59,6 +59,11 @@ jobs:
         # anything we can run for free."
         run: uv run pytest -q --no-header
 
+      - name: pip-audit (shipped dependency CVEs)
+        # Audits the exported requirements.txt (what actually deploys), not the
+        # dev tooling. Fails the build on any known CVE in a runtime dependency.
+        run: uvx pip-audit -r requirements.txt
+
   frontend:
     name: Frontend (lint + test + build)
     runs-on: ubuntu-latest
@@ -66,9 +71,9 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           cache: npm
@@ -76,6 +81,11 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: npm audit (shipped high+ advisories)
+        # Gate on high/critical advisories in production dependencies only —
+        # dev-tooling advisories (never shipped to the browser) don't block.
+        run: npm audit --omit=dev --audit-level=high
 
       - name: ESLint
         run: npm run lint
@@ -97,9 +107,9 @@ jobs:
     name: Config (vercel.ts typecheck)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           cache: npm

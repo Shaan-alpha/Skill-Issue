@@ -12,7 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.auth.dependencies import optional_session
+from app.auth.dependencies import is_cross_site_write, optional_session
 from app.db.engine import engine
 from app.db.session import get_db
 from app.dependencies import get_cache, get_report_for_user
@@ -108,15 +108,22 @@ def _scores_hash(report: Report) -> str:
 
 @app.get("/analyze/{username}", response_model=Report)
 async def analyze_user(
+    request: Request,
     username: str,  # path param forwarded to get_report_for_user via request scope
     _rl: Annotated[None, Depends(analyze_rate_limiter)],
     report: Annotated[Report, Depends(get_report_for_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
     session: Annotated[object | None, Depends(optional_session)],
 ) -> Report:
-    """Ingest + score. Persists when a session is present; anonymous calls write nothing."""
+    """Ingest + score. Persists when a session is present; anonymous calls write nothing.
+
+    The persist branch is skipped for cross-site navigations (CSRF): this is a
+    GET with a SameSite=Lax cookie, so a top-level navigation from another site
+    would otherwise let an attacker write an analysis into the victim's account.
+    The read (returning the report) is unaffected.
+    """
     started_at = datetime.now(UTC)
-    if session is not None:
+    if session is not None and not is_cross_site_write(request):
         completed_at = datetime.now(UTC)
         analysis = await upsert_analysis(
             db,

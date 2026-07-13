@@ -19,6 +19,22 @@ Format:
 
 ---
 
+## 2026-07-13 — Claude (Opus 4.8) with Shaan — Security & hardening audit: dead cron fixed, 7 backend CVEs patched, CSRF + supply-chain hardening
+
+**Slice:** v1.0.2 (unreleased — security & hardening; distinct from the in-flight v1.0.1 Launch Ops slice)
+**Done:** Full audit of the repo + Vercel, then a `fix/audit-hardening` branch remediating findings, one commit per fix:
+- **P0 — dead cron:** Vercel fires the scheduled path with GET, but the handler was `@router.post`-only, so every `0 3 * * *` fire 405'd and saved analyses never refreshed (confirmed live: GET→405, POST→401). Now accepts GET (+POST); `backend/vercel.json` `maxDuration` 60→300 so a 240s refresh chunk commits before the platform kill.
+- **Deps / CVEs:** `pip-audit` found 7 shipped backend CVEs → starlette 1.0.1→1.3.1 (×4 advisories), fastapi 0.136.1→0.139.0, cryptography 48→49, joserfc 1.6.7→1.7.3 (JWT), pydantic-settings 2.14.1→2.14.2; floors recorded in `pyproject.toml`, lock + requirements re-exported, suite 292✓. Frontend npm advisories 25→2 (remaining are moderate, build-time, Next-bundled) incl. Vitest 3→4; frontend minors bumped (next 16.2.10, sentry, posthog, lucide, framer, react).
+- **Auth / app security:** `cookie_secure` defaults to true (fail closed; local dev opts out); expired sessions purged on the cron (data minimization); username re-validated at the `_live_ingest` funnel (closes a cron bypass of `_USERNAME_RE`); CSRF writes on GET `/analyze` + `/narrative` blocked via `Sec-Fetch-Site: cross-site` (no method change — narrative is EventSource/GET, /analyze is the RSC proxy + OG fetch).
+- **Supply chain / CI:** added `.github/dependabot.yml` (npm/uv/actions), pinned all GitHub Actions to commit SHAs, fixed a `release.yml` tag→shell command-injection (via `env:`), added an SCA gate to CI (`npm audit --omit=dev --audit-level=high` + `pip-audit`).
+- **Headers / hygiene:** HSTS `includeSubDomains; preload`; dropped `unsafe-eval` from the (still report-only) CSP; `backend/.vercelignore`; `frontend` `engines.node`; documented `CRON_SECRET`; deduped `.gitignore`.
+**Decisions:** CSRF mitigated via `Sec-Fetch-Site` rather than switching to POST because `/narrative` is SSE (EventSource is GET-only) and `/analyze` is consumed by the server-side RSC proxy (no Sec-Fetch header → still writes) and the OG-card fetch. CSP kept **Report-Only** — promoting to enforcing needs the report-only violation data reviewed first. SHA-pinned actions are maintained going forward by Dependabot's `github-actions` ecosystem.
+**Learned / surprises:** The scheduled refresh had silently never run in prod since v0.8.1 (a 405 doesn't reach Sentry). The frontend-only npm audit hid **real shipped backend CVEs** (starlette/fastapi) — the missing backend SCA gate was material, not just hygiene. `_live_ingest` was reachable from the cron without the route-layer username check.
+**Blocked / open (your actions — dashboard/API, I can't do these):** Vercel WAF rate-limit rule on `/_/backend/analyze*` + `/narrative*`; enable BotID; confirm `INTERNAL_PROXY_SECRET` is set in prod (else anon `/analyze` isn't IP-limited); verify `CORS_ALLOW_ORIGIN_REGEX` is scoped (allow_credentials=true); add a `main` branch-protection ruleset requiring CI; enable Vercel Spend alerts; submit the apex to hstspreload.org; promote CSP to enforcing after reviewing report-only data.
+**Next:** Open PR from `fix/audit-hardening`; after review + green CI, merge → deploy; then bump to **v1.0.2** and tag/release (paused for your go-ahead, per the slice workflow). Versioning note: `[Unreleased]` currently mixes the v1.0.1 Launch-Ops trail and this hardening slice — decide at release time whether to cut them as one version or split v1.0.1/v1.0.2.
+
+---
+
 ## 2026-07-12 — Claude (Fable 5) with Shaan — skillissue.tech is live: domain cutover complete, sign-in fixed after two env misfires
 
 **Slice:** v1.0.1 Launch Ops, Phase 2 (operator cutover, agent-assisted).

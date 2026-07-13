@@ -6,14 +6,14 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Annotated, Literal
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
-from app.auth.dependencies import optional_session
+from app.auth.dependencies import is_cross_site_write, optional_session
 from app.db.models import AnalysisRun
 from app.db.session import get_db
 from app.dependencies import get_narrative_service, get_report_for_user
@@ -59,6 +59,7 @@ def _resolve_provider(base_url: str | None) -> str:
 
 @router.get("/narrative/{username}")
 async def get_narrative(
+    request: Request,
     username: str,
     _rl: Annotated[None, Depends(narrative_rate_limiter)],
     report: Annotated[Report, Depends(get_report_for_user)],
@@ -86,7 +87,11 @@ async def get_narrative(
             payload = json.dumps({"chunk": chunk})
             yield f"data: {payload}\n\n"
 
-        if session is not None:
+        # Skip the persist branch for cross-site navigations (CSRF): this is a
+        # GET with a SameSite=Lax cookie, so a top-level navigation from another
+        # site could otherwise write into the victim's account. Streaming the
+        # narrative back is unaffected.
+        if session is not None and not is_cross_site_write(request):
             completed_at = datetime.now(UTC)
             analysis = await upsert_analysis(
                 db, user_id=session.user.id, target_login=report.username

@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
 
@@ -37,8 +37,13 @@ jobs:
 
       - name: Extract matching CHANGELOG section
         id: notes
+        # Pass the tag-derived version through the environment, never inlined
+        # via ${{ }} into the shell — a tag like v1.0.0-$(cmd) would otherwise
+        # execute in this contents:write job.
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
         run: |
-          version="${{ steps.meta.outputs.version }}"
+          version="$VERSION"
           if [ ! -f CHANGELOG.md ]; then
             echo "::error::CHANGELOG.md not found at repo root"
             exit 1

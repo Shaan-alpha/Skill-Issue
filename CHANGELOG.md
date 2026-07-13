@@ -10,6 +10,10 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ## [Unreleased]
 
+## [1.0.2] — 2026-07-13
+
+Security & hardening slice — a full audit of the repo + Vercel and its remediation. (v1.0.1 was the operational launch-ops milestone — the skillissue.tech domain cutover, tracked in `docs/LAUNCH.md` — and did not ship as a separate code release.)
+
 ### Added
 - **A brand mark in the header.** Every page now carries the Skill Issue logo — a score-ring "S" matching the report-page score gauge — plus the wordmark in the top-left, linking home.
 - **A new favicon and Apple touch icon** built from the same score-ring motif, so the browser-tab icon finally matches the site instead of the old generic placeholder.
@@ -19,7 +23,13 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 - **The report page's save/share controls and the "analyze another" search box now share one row on desktop** — share actions on the left, search on the right — instead of stacking as two full-width rows with dead space beside the search box. Below 1024px they still stack, so tablets and phones are unchanged.
 
 ### Fixed
+- **Saved analyses refresh on schedule again.** The nightly refresh job silently failed on every run — it rejected the scheduler's request method and never executed — so saved profiles went stale until a manual re-analyze. It now runs as intended, and has more headroom to finish large batches.
 - **Example-profile photos fall back to the person's initial** when GitHub's avatar fails to load, instead of showing a broken-image icon.
+
+### Security
+- **Stronger HTTP security headers** — HSTS now covers subdomains and is preload-eligible, and the Content-Security-Policy no longer allows `unsafe-eval`.
+- **Patched known CVEs in backend dependencies** — Starlette (4 advisories), FastAPI, cryptography, joserfc (JWT), and pydantic-settings upgraded to fixed versions. All tests pass on the new stack.
+- **Updated web dependencies to clear known npm security advisories** (transitive packages only — no behavior change).
 
 ---
 

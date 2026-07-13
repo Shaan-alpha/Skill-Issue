@@ -1,0 +1,20 @@
+# Keep dev-only files out of the deployed Vercel Python function bundle.
+# Only runtime code needs to ship: app/, api/, migrations/, alembic.ini,
+# requirements.txt, pyproject.toml. Everything below is tests, load/dev
+# tooling, caches, or local env — never imported by the request path.
+
+tests/
+loadtest/
+tools/
+
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.venv/
+
+# Local env files are never git-committed, but exclude them defensively so a
+# `vercel deploy` from the working tree can't upload them. Keep the example.
+.env
+.env.*
+!.env.example

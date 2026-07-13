@@ -755,6 +755,27 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 ---
 
+## v1.0.2 — Security & hardening (audit remediation)
+
+**Goal:** Remediate the findings of the 2026-07-13 full audit (repo + Vercel). Reliability + security patches only — no product features. Distinct from the v1.0.1 Launch-Ops slice.
+
+**Shape:** one `fix/audit-hardening` branch, one commit per fix; no new user-facing surface.
+
+**Delivered:**
+- **Reliability:** the daily refresh cron was dead (Vercel GET vs POST-only handler → 405 every fire); now accepts GET, `maxDuration` 60→300 to clear the 240s chunk deadline.
+- **Dependency CVEs:** 7 backend CVEs patched (starlette ×4, fastapi, cryptography, joserfc, pydantic-settings); frontend npm advisories 25→2 (remaining are moderate/build-time) incl. Vitest 3→4 + frontend minors.
+- **App security:** `cookie_secure` fail-closed default; expired-session purge on the cron; username validation moved to the `_live_ingest` funnel; CSRF writes on GET `/analyze` + `/narrative` blocked via `Sec-Fetch-Site`.
+- **Supply chain / CI:** Dependabot (npm/uv/actions); actions SHA-pinned; `release.yml` tag command-injection fixed; SCA gate (`npm audit` + `pip-audit`) added to CI.
+- **Headers / hygiene:** HSTS `includeSubDomains; preload`; `unsafe-eval` dropped from (report-only) CSP; `.vercelignore`; `engines.node`; `CRON_SECRET` documented; `.gitignore` deduped.
+
+**Exit criteria:**
+- [ ] PR from `fix/audit-hardening` reviewed; CI green (incl. the new SCA gate); prod deploy verified (cron GET returns 200 with the bearer).
+- [ ] `CHANGELOG.md` `[1.0.2]` (or merged into the v1.0.1 cut — operator's call); tag; release.
+
+**Operator follow-ups (platform, not code — tracked in the 2026-07-13 PROGRESS_LOG entry):** Vercel WAF rate-limit on `/analyze*`+`/narrative*`, BotID, confirm `INTERNAL_PROXY_SECRET` set in prod, verify `CORS_ALLOW_ORIGIN_REGEX` scoped, `main` branch-protection ruleset, Vercel Spend alerts, hstspreload.org submission, and promoting CSP to enforcing.
+
+---
+
 ## v1.1.0 — Progress Pulse (opt-in monthly score digest)
 
 **Goal:** The retention loop. Signed-in users opt in (typed email, double opt-in — OAuth scope stays `read:user`) to a monthly email showing how their score moved: total/tier/bucket deltas + badges gained/lost, deterministic content only, no LLM. Email provider: originally the pack's Mailgun offer, but Sinch terminated new student claims (found 2026-07-11) — the slice's sender abstraction stands; pick a free-tier provider (likely Resend, 3K/mo) at implementation time, sending from `mg.skillissue.tech`. Implements the "Engineering Evolution Tracking" idea below in email form.
