@@ -34,7 +34,7 @@ npm run build
 ```
 
 - **`npm run lint`** — ESLint via `eslint-config-next`.
-- **`npm run test:run`** — Vitest 3 + happy-dom 20 + Testing Library (added in v0.6.0; happy-dom bumped to v20 on 2026-05-22). 42 unit + snapshot tests cover the OG palette, data fetchers, OgCard, CardActions, events wiring, PostHog provider, FramerProvider, the `<RefreshButton>` state machine (v0.8.2), and the `/api/revalidate` route (v0.8.6).
+- **`npm run test:run`** — Vitest 4 + happy-dom 20 + Testing Library (added in v0.6.0; happy-dom bumped to v20 on 2026-05-22, Vitest 3→4 in the v1.0.x security slice). 66 unit + snapshot tests cover the OG palette, data fetchers, OgCard, CardActions, events wiring, PostHog provider, FramerProvider, the `<RefreshButton>` state machine (v0.8.2), and the `/api/revalidate` route (v0.8.6).
 - **`npm run build`** — TypeScript + Next 16 build with Turbopack. **Cache Components are enabled** (`cacheComponents: true` in `next.config.ts`, v0.8.6+) — see [`AGENTS.md`](./AGENTS.md) and the Next 16 docs for `'use cache'` constraints.
 
 ## Stack

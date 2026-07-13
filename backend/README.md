@@ -27,7 +27,7 @@ uv run uvicorn app.main:app --reload --port 8000
 | `GITHUB_OAUTH_CLIENT_ID` / `GITHUB_OAUTH_CLIENT_SECRET` / `OAUTH_REDIRECT_URL` | sign-in flow (v0.5.0+) | GitHub OAuth App credentials. |
 | `SESSION_TOKEN_ENC_KEY` | sign-in flow (v0.5.0+) | 32-byte base64 key for AES-GCM at-rest token encryption. |
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | optional (v0.7.0+) | Enables four-layer caching. Unset = in-process fallback for narrative + budget, every analyze runs cold. |
-| `CRON_SECRET` | nightly cron (v0.8.1+) | Bearer token Vercel Cron injects on `POST /cron/refresh-saved-analyses`. Unset = route 503s (visible misconfig). |
+| `CRON_SECRET` | nightly cron (v0.8.1+) | Bearer token Vercel Cron injects on `GET /cron/refresh-saved-analyses`. Unset = route 503s (visible misconfig). |
 | `FRONTEND_BASE_URL` / `REVALIDATE_SECRET` | share-ISR webhook (v0.8.6+) | URL of the frontend + shared secret for the `POST /api/revalidate` webhook that busts per-slug ISR tags. Either unset = webhook becomes a logged no-op; the frontend's 3600s `cacheLife` fallback absorbs revocations. |
 
 ## Routes
@@ -41,7 +41,7 @@ uv run uvicorn app.main:app --reload --port 8000
 | `GET /me`, `GET /me/analyses` | Authenticated user info + paginated history (v0.5.0). |
 | `POST/DELETE /analyses/{id}/share` | Toggle a public share slug (v0.5.0). Since v0.8.6 both endpoints schedule a `BackgroundTasks` webhook to the frontend's `POST /api/revalidate` to bust the per-slug ISR tag. |
 | `POST /me/refresh/{username}` | Authenticated manual force-refresh (v0.8.2). Strict ownership; 10/hour per-user rate-limit via Upstash. |
-| `POST /cron/refresh-saved-analyses` | Bearer-authed Vercel Cron route (v0.8.1). Nightly refresh of saved analyses; 25/fire with a 240s wall-clock budget. |
+| `GET /cron/refresh-saved-analyses` | Bearer-authed Vercel Cron route (v0.8.1; also accepts POST for manual triggers — Vercel Cron fires GET). Nightly refresh of saved analyses; 25/fire with a 240s wall-clock budget under a 300s function limit. Also purges expired sessions. |
 | `GET /share/{slug}` | Read-only public view of a shared analysis. |
 
 ```bash
