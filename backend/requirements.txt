@@ -108,7 +108,7 @@ starlette==1.3.1
     # via
     #   fastapi
     #   skill-issue-backend
-structlog==25.5.0
+structlog==26.1.0
     # via skill-issue-backend
 tqdm==4.67.3
     # via openai
