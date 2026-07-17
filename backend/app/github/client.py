@@ -297,7 +297,16 @@ class GitHubClient:
             "POST", GRAPHQL_URL, json={"query": query, "variables": variables}
         )
         resp.raise_for_status()
-        data = resp.json()
-        if "errors" in data:
-            raise RuntimeError(f"GraphQL error: {data['errors']}")
-        return data["data"]
+        body = resp.json()
+        payload = body.get("data")
+        errors = body.get("errors")
+        # GitHub's GraphQL returns partial `data` alongside `errors` when it can
+        # resolve some fields but not others — e.g. RESOURCE_LIMITS_EXCEEDED on an
+        # expensive field for a hyper-active account. Downstream ingestion reads
+        # every field defensively, so partial data is still useful. Only treat the
+        # response as fatal when nothing came back at all.
+        if errors:
+            if payload is None:
+                raise RuntimeError(f"GraphQL error: {errors}")
+            logger.warning("Partial GraphQL response; continuing with partial data: %s", errors)
+        return payload

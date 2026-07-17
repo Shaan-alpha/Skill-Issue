@@ -302,3 +302,52 @@ async def test_get_contribution_repos_filters_low_volume() -> None:
     async with GitHubClient(token="ghs_test") as gh:
         count = await gh.get_contribution_repo_count("alice", min_commits=10)
     assert count == 2
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_graphql_returns_partial_data_when_errors_present() -> None:
+    """GitHub returns partial `data` alongside `errors` when one expensive field
+    trips RESOURCE_LIMITS_EXCEEDED (e.g. hyper-active accounts). We must surface
+    the partial data rather than raising, so downstream defensive reads survive."""
+    respx.post("https://api.github.com/graphql").mock(
+        return_value=Response(
+            200,
+            json={
+                "data": {
+                    "user": {"pullRequests": {"totalCount": 42}, "contributionsCollection": None}
+                },
+                "errors": [
+                    {
+                        "type": "RESOURCE_LIMITS_EXCEEDED",
+                        "path": [
+                            "user",
+                            "contributionsCollection",
+                            "pullRequestReviewContributions",
+                        ],
+                        "message": "Resource limits for this query exceeded.",
+                    }
+                ],
+            },
+        )
+    )
+    async with GitHubClient(token="ghs_test") as gh:
+        data = await gh.graphql("query {}", {"login": "antfu"})
+    assert data["user"]["pullRequests"]["totalCount"] == 42
+    assert data["user"]["contributionsCollection"] is None
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_graphql_raises_only_when_no_data_returned() -> None:
+    """When GitHub returns errors with no usable `data`, the call is genuinely
+    fatal and must raise so the caller can decide how to degrade."""
+    respx.post("https://api.github.com/graphql").mock(
+        return_value=Response(
+            200,
+            json={"data": None, "errors": [{"message": "Something is broken."}]},
+        )
+    )
+    async with GitHubClient(token="ghs_test") as gh:
+        with pytest.raises(RuntimeError, match="GraphQL error"):
+            await gh.graphql("query {}", {"login": "ghost"})

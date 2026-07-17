@@ -36,6 +36,17 @@ query ExternalPRs($login: String!) {
         }
       }
     }
+  }
+}
+"""
+
+# Isolated from EXTERNAL_PRS on purpose: pullRequestReviewContributions.totalCount
+# is the field GitHub most often rejects with RESOURCE_LIMITS_EXCEEDED for
+# hyper-active accounts (SKILL-ISSUE-BACKEND-4). Keeping it in its own query means
+# a rejection here can't take down the merged-PR count / account badges alongside it.
+EXTERNAL_REVIEW_COUNT = """
+query ExternalReviewCount($login: String!) {
+  user(login: $login) {
     contributionsCollection {
       pullRequestReviewContributions(first: 1) {
         totalCount

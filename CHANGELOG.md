@@ -10,6 +10,13 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ## [Unreleased]
 
+## [1.0.3] — 2026-07-18
+
+Hotfix — `/analyze/{username}` no longer fails for hyper-active GitHub accounts whose contribution data trips GitHub's GraphQL query-cost limit.
+
+### Fixed
+- **Analyzing very active developers works again.** For accounts with an enormous volume of PR reviews (e.g. `antfu`), GitHub's GraphQL API rejected our external-contributions query with `RESOURCE_LIMITS_EXCEEDED`, and the backend turned that into a 500. Two changes fix it: the GitHub client now keeps GitHub's *partial* responses (data returned alongside a single per-field error) instead of discarding the whole thing, and the expensive PR-review count is now fetched in its own isolated query — so when GitHub refuses to compute it, the merged-PR count and account badges still come through and only the review count degrades to 0. (Sentry `SKILL-ISSUE-BACKEND-4`.)
+
 ## [1.0.2] — 2026-07-13
 
 Security & hardening slice — a full audit of the repo + Vercel and its remediation. (v1.0.1 was the operational launch-ops milestone — the skillissue.tech domain cutover, tracked in `docs/LAUNCH.md` — and did not ship as a separate code release.)
