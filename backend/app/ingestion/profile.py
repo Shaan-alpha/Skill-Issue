@@ -171,12 +171,9 @@ async def _ingest_external_signals(username: str, gh: GitHubClient) -> dict[str,
     try:
         reviews = await gh.graphql(EXTERNAL_REVIEW_COUNT, {"login": username})
         review_user = reviews.get("user") or {}
-        review_contributions = (
-            (review_user.get("contributionsCollection") or {}).get(
-                "pullRequestReviewContributions"
-            )
-            or {}
-        )
+        review_contributions = (review_user.get("contributionsCollection") or {}).get(
+            "pullRequestReviewContributions"
+        ) or {}
         signals["external_reviews"] = review_contributions.get("totalCount", 0)
     except Exception:
         logger.warning(

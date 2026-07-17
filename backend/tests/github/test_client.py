@@ -314,11 +314,17 @@ async def test_graphql_returns_partial_data_when_errors_present() -> None:
         return_value=Response(
             200,
             json={
-                "data": {"user": {"pullRequests": {"totalCount": 42}, "contributionsCollection": None}},
+                "data": {
+                    "user": {"pullRequests": {"totalCount": 42}, "contributionsCollection": None}
+                },
                 "errors": [
                     {
                         "type": "RESOURCE_LIMITS_EXCEEDED",
-                        "path": ["user", "contributionsCollection", "pullRequestReviewContributions"],
+                        "path": [
+                            "user",
+                            "contributionsCollection",
+                            "pullRequestReviewContributions",
+                        ],
                         "message": "Resource limits for this query exceeded.",
                     }
                 ],
