@@ -19,6 +19,26 @@ Format:
 
 ---
 
+## 2026-07-18 — Claude (Opus 4.8) with Shaan — Hotfix v1.0.3: `/analyze` survives GitHub GraphQL `RESOURCE_LIMITS_EXCEEDED` on whale accounts
+
+**Slice:** v1.0.3 (hotfix — reliability only, no product surface)
+**Done:** Triaged Sentry `SKILL-ISSUE-BACKEND-4` (a production `RuntimeError` on `1.0.2`, fired by `GET /analyze/antfu`). Root cause was two-layered:
+- GitHub's GraphQL rejected the combined `EXTERNAL_PRS` query with `RESOURCE_LIMITS_EXCEEDED` on `contributionsCollection.pullRequestReviewContributions.totalCount` — the query is too expensive for a hyper-active account.
+- `GitHubClient.graphql` raised on the mere presence of an `errors` key, discarding GitHub's *partial* `data` and turning a one-field rejection into a full 500 (caught by the `_live_ingest` catch-all → "Unexpected error analyzing antfu" → Sentry).
+
+Fix (branch `fix/analyze-graphql-resource-limits`), three parts:
+- **A —** `graphql()` now only raises when `data` is null; a partial payload + per-field `errors` is returned with a warning logged (`client.py`).
+- **B —** `_ingest_external_signals` wraps the external fetch so any failure degrades to conservative defaults instead of 500-ing the analysis (`ingestion/profile.py`).
+- **C —** split the pricey review count into its own `EXTERNAL_REVIEW_COUNT` query and fetch the two halves independently, so a review-count rejection keeps the merged-PR count + badges intact — only the review count degrades to 0.
+
+Tests: 2 new `graphql()` branch tests (partial vs fatal) + 2 ingestion regression tests (both degradation directions). Full backend suite `295 passed, 69 skipped`; ruff clean. Version bumped `1.0.2 → 1.0.3` across the four literals (`backend/pyproject.toml`, `app/settings.py`, `frontend/package.json`, `uv.lock` relocked); `CHANGELOG.md [1.0.3]`; `PLAN.md` v1.0.3 hotfix slice.
+**Decisions:** Chose degrade-to-default over hard-failing because every field in `_ingest_external_signals` is a *bonus* scoring signal — a whale profile is better served by a complete report with an approximate (0) review count than by a 500. Kept the merged-PR page size at `first: 100`; the split (Fix C) was the targeted lever, not shrinking the PR query.
+**Learned / surprises:** GitHub GraphQL returns HTTP 200 with `{data: <partial>, errors: [...]}` for `RESOURCE_LIMITS_EXCEEDED` — our all-or-nothing `"errors" in data` check was the real bug amplifier; the query cost was just the trigger. `handled = yes` in Sentry confirmed it was our catch-all, not an uncaught crash.
+**Blocked / open:** Prod verification pending deploy — confirm `GET /analyze/antfu` returns 200 with a populated report (review count may read 0, by design). Sentry issue can be resolved after that deploy.
+**Next:** Push branch → open PR → after review + green CI, merge → deploy → verify antfu. **Paused before `git tag v1.0.3` / GitHub release for operator go-ahead, per the slice workflow.**
+
+---
+
 ## 2026-07-13 — Claude (Opus 4.8) with Shaan — Security & hardening audit: dead cron fixed, 7 backend CVEs patched, CSRF + supply-chain hardening
 
 **Slice:** v1.0.2 (unreleased — security & hardening; distinct from the in-flight v1.0.1 Launch Ops slice)

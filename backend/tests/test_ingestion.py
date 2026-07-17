@@ -97,6 +97,8 @@ def _mock_graphql(
     external_prs: int = 0,
     external_reviews: int = 0,
 ) -> None:
+    # ingest_profile issues three GraphQL POSTs in order: PINNED_REPOS, EXTERNAL_PRS,
+    # then EXTERNAL_REVIEW_COUNT (the review count is a separate isolated query).
     respx.post("https://api.github.com/graphql").mock(
         side_effect=[
             Response(
@@ -120,9 +122,18 @@ def _mock_graphql(
                             "isGitHubStar": False,
                             "isDeveloperProgramMember": True,
                             "pullRequests": {"totalCount": external_prs, "nodes": []},
+                        }
+                    }
+                },
+            ),
+            Response(
+                200,
+                json={
+                    "data": {
+                        "user": {
                             "contributionsCollection": {
                                 "pullRequestReviewContributions": {"totalCount": external_reviews}
-                            },
+                            }
                         }
                     }
                 },
@@ -212,6 +223,109 @@ async def test_ingest_profile_populates_languages_readme_and_external_counts() -
     assert profile.external_reviews == 4
     assert profile.has_sponsors_listing is True
     assert profile.is_developer_program_member is True
+
+
+_RESOURCE_LIMIT_ERROR = {
+    "data": None,
+    "errors": [
+        {
+            "type": "RESOURCE_LIMITS_EXCEEDED",
+            "path": ["user", "contributionsCollection", "pullRequestReviewContributions"],
+            "message": "Resource limits for this query exceeded.",
+        }
+    ],
+}
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_ingest_profile_keeps_pr_count_when_review_query_hits_resource_limit() -> None:
+    """Regression for SKILL-ISSUE-BACKEND-4: GitHub rejects the isolated review-count
+    query with RESOURCE_LIMITS_EXCEEDED for hyper-active accounts (e.g. antfu). Because
+    the review count lives in its own query (Fix C), the merged-PR count and account
+    badges survive — only the review count degrades to 0, and no 500 reaches the user."""
+    repos_payload = [_fake_repo("alpha-api", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_commits(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    # POSTs in order: PINNED_REPOS (ok), EXTERNAL_PRS (ok, 137 merged PRs),
+    # EXTERNAL_REVIEW_COUNT (rejected with RESOURCE_LIMITS_EXCEEDED).
+    respx.post("https://api.github.com/graphql").mock(
+        side_effect=[
+            Response(200, json={"data": {"user": {"pinnedItems": {"nodes": []}}}}),
+            Response(
+                200,
+                json={
+                    "data": {
+                        "user": {
+                            "hasSponsorsListing": True,
+                            "isGitHubStar": True,
+                            "isDeveloperProgramMember": False,
+                            "pullRequests": {"totalCount": 137, "nodes": []},
+                        }
+                    }
+                },
+            ),
+            Response(200, json=_RESOURCE_LIMIT_ERROR),
+        ]
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.username == "octocat"
+    # Merged-PR count and badges survived the review-count rejection…
+    assert profile.external_prs_merged == 137
+    assert profile.has_sponsors_listing is True
+    assert profile.is_github_star is True
+    # …and only the review count degraded to 0 rather than 500-ing the request.
+    assert profile.external_reviews == 0
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_ingest_profile_keeps_review_count_when_pr_query_fails() -> None:
+    """The split degrades both directions independently: if the EXTERNAL_PRS half
+    fails entirely, the review count (its own query) still comes through."""
+    repos_payload = [_fake_repo("alpha-api", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_commits(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    respx.post("https://api.github.com/graphql").mock(
+        side_effect=[
+            Response(200, json={"data": {"user": {"pinnedItems": {"nodes": []}}}}),
+            Response(200, json=_RESOURCE_LIMIT_ERROR),
+            Response(
+                200,
+                json={
+                    "data": {
+                        "user": {
+                            "contributionsCollection": {
+                                "pullRequestReviewContributions": {"totalCount": 9}
+                            }
+                        }
+                    }
+                },
+            ),
+        ]
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.username == "octocat"
+    # EXTERNAL_PRS half degraded to defaults…
+    assert profile.external_prs_merged == 0
+    assert profile.external_orgs == set()
+    assert profile.has_sponsors_listing is False
+    # …but the independent review-count query still delivered.
+    assert profile.external_reviews == 9
 
 
 @pytest.mark.asyncio

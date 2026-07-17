@@ -776,6 +776,24 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 ---
 
+## v1.0.3 — Hotfix: `/analyze` survives GitHub GraphQL resource limits (shipped 2026-07-18)
+
+**Goal:** Stop `/analyze/{username}` 500-ing for hyper-active accounts (e.g. `antfu`) whose contribution data trips GitHub's GraphQL query-cost guard (`RESOURCE_LIMITS_EXCEEDED`). Surfaced by Sentry `SKILL-ISSUE-BACKEND-4` in production on `1.0.2`.
+
+**Shape:** one `fix/analyze-graphql-resource-limits` branch; reliability only, no user-facing surface.
+
+**Delivered:**
+- **Client tolerates partial GraphQL responses** — `GitHubClient.graphql` now only raises when GitHub returns no `data` at all; a partial payload accompanied by a per-field `errors` entry is returned (with a warning logged) instead of being discarded.
+- **Isolated the expensive field** — the `pullRequestReviewContributions.totalCount` read is split out of `EXTERNAL_PRS` into its own `EXTERNAL_REVIEW_COUNT` query, so a rejection there no longer takes the merged-PR count / account badges down with it.
+- **Graceful degradation** — `_ingest_external_signals` fetches the two halves independently; any failure degrades that half to a conservative default (0 / False / empty) rather than failing the whole analysis.
+
+**Exit criteria:**
+- [x] Regression tests: partial-vs-fatal GraphQL branches, plus both degradation directions in ingestion. Full suite green (`295 passed`), ruff clean.
+- [ ] PR reviewed; CI green; prod deploy verified against a whale account (`/analyze/antfu` returns 200).
+- [ ] `CHANGELOG.md` `[1.0.3]`; tag `v1.0.3`; release. *(paused for operator go-ahead, per the slice workflow.)*
+
+---
+
 ## v1.1.0 — Progress Pulse (opt-in monthly score digest)
 
 **Goal:** The retention loop. Signed-in users opt in (typed email, double opt-in — OAuth scope stays `read:user`) to a monthly email showing how their score moved: total/tier/bucket deltas + badges gained/lost, deterministic content only, no LLM. Email provider: originally the pack's Mailgun offer, but Sinch terminated new student claims (found 2026-07-11) — the slice's sender abstraction stands; pick a free-tier provider (likely Resend, 3K/mo) at implementation time, sending from `mg.skillissue.tech`. Implements the "Engineering Evolution Tracking" idea below in email form.
