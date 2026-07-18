@@ -19,19 +19,23 @@ export const config: VercelConfig = {
     },
   ],
   git: {
+    // NOTE: these keys are matched with minimatch, where a single `*` does NOT
+    // cross a `/`. Branch names are frequently multi-segment — dependabot uses
+    // `dependabot/<ecosystem>/<dir>/<pkg>` — so `dependabot/*` never matched and
+    // the whole flock still deployed, tripping the concurrent-build limit
+    // (canceled/ERROR previews). Use the `**` globstar to match every segment.
     deploymentEnabled: {
-      'feat/*': false,
-      'fix/*': false,
-      'chore/*': false,
-      'docs/*': false,
-      'ops/*': false,
-      'style/*': false,
-      'refactor/*': false,
-      'test/*': false,
+      'feat/**': false,
+      'fix/**': false,
+      'chore/**': false,
+      'docs/**': false,
+      'ops/**': false,
+      'style/**': false,
+      'refactor/**': false,
+      'test/**': false,
       // Dependabot PRs are validated by CI (GitHub Actions) — they don't need
-      // a Vercel preview, and letting the whole flock deploy at once trips the
-      // concurrent-build limit (canceled/ERROR previews). CI is the gate.
-      'dependabot/*': false,
+      // a Vercel preview. CI is the gate.
+      'dependabot/**': false,
     },
   },
 };
