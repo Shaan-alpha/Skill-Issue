@@ -15,7 +15,7 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 Hotfix — `/analyze/{username}` no longer fails for hyper-active GitHub accounts whose contribution data trips GitHub's GraphQL query-cost limit.
 
 ### Fixed
-- **Analyzing very active developers works again.** For accounts with an enormous volume of PR reviews (e.g. `antfu`), GitHub's GraphQL API rejected our external-contributions query with `RESOURCE_LIMITS_EXCEEDED`, and the backend turned that into a 500. Two changes fix it: the GitHub client now keeps GitHub's *partial* responses (data returned alongside a single per-field error) instead of discarding the whole thing, and the expensive PR-review count is now fetched in its own isolated query — so when GitHub refuses to compute it, the merged-PR count and account badges still come through and only the review count degrades to 0. (Sentry `SKILL-ISSUE-BACKEND-4`.)
+- **Analyzing very active developers works again.** For accounts with an enormous volume of PR reviews (e.g. `antfu`), GitHub's GraphQL API rejects our `contributionsCollection` queries with `RESOURCE_LIMITS_EXCEEDED`, and the backend turned that into a 500. The fix spans both places those queries run: the GitHub client now keeps GitHub's *partial* responses (data returned alongside a single per-field error) instead of discarding the whole thing; the expensive PR-review count in ingestion is fetched in its own isolated query (so the merged-PR count and account badges still come through, only the review count degrades to 0); and the scoring engine's review-depth and cross-repo contribution signals now null-guard the same partial data and degrade to "no signal" instead of crashing. (Sentry `SKILL-ISSUE-BACKEND-4`.)
 
 ## [1.0.2] — 2026-07-13
 

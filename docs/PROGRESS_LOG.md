@@ -19,6 +19,18 @@ Format:
 
 ---
 
+## 2026-07-18 — Claude (Opus 4.8) with Shaan — v1.0.3 follow-up: the RESOURCE_LIMITS fix was incomplete — scoring engine hit the same field
+
+**Slice:** v1.0.3 (same hotfix, second leg — still unreleased/untagged)
+**Done:** First v1.0.3 pass hardened `ingest_profile`, but prod `GET /analyze/antfu` still 500'd (user hit it live; frontend showed "Analysis failed", REF/digest `2891733077`). Pulled Vercel runtime logs for the failing request: two `Partial GraphQL response; continuing with partial data` warnings (the client fix working), then an unhandled ASGI exception right after the second one — the `REVIEW_DEPTH` query in `get_review_depth`. Root cause: the **scoring engine** (`app/scoring/depth.py` → `get_review_depth`, `get_contribution_repo_count`) queries the *same* `contributionsCollection` field that trips the limit, and (a) it runs inside `run_scoring_engine`, which is **outside** the `_live_ingest` try/except my first pass leaned on, and (b) both client methods used unsafe chained `.get(...)` that blew up iterating a null `nodes` from GitHub's partial response (`TypeError`/`AttributeError`). antfu is high-tier, so scoring reaches both calls.
+Fix: wrapped both `GitHubClient.get_review_depth` and `get_contribution_repo_count` in try/except (degrade to `None`/`0`) and null-guarded every `.get(...)` intermediate with `or {}` / `or []`. Added 4 regression tests (partial-null + fatal-error for each). Full suite `300 passed`; ruff format+lint clean. Folded into the still-unreleased v1.0.3 (CHANGELOG `[1.0.3]` bullet expanded to cover the scoring path).
+**Decisions:** Hardened at the client-method choke point rather than the call sites — the scorers already treat `None`/`0` as "no signal", so degradation is invisible to scoring. Kept these as bonus signals (no retry/alternate query) since they're depth-tier extras, not core.
+**Learned / surprises:** The first fix was verified only by unit tests + the merge deploy going READY — **not** by actually exercising antfu in prod. That gap let an incomplete fix ship. Lesson: for a "specific account 500s" bug, the fix isn't done until that account returns 200 in prod. Vercel runtime logs (not just Sentry) were the fastest way to see the real per-request failure point.
+**Blocked / open:** Verify `GET /analyze/antfu` → 200 in prod **after this deploy** before calling it done. Then tag v1.0.3 + resolve Sentry `SKILL-ISSUE-BACKEND-4`.
+**Next:** PR → CI → merge → **verify antfu in prod this time** → then release ritual (paused for go-ahead on the tag).
+
+---
+
 ## 2026-07-18 — Claude (Opus 4.8) with Shaan — Hotfix v1.0.3: `/analyze` survives GitHub GraphQL `RESOURCE_LIMITS_EXCEEDED` on whale accounts
 
 **Slice:** v1.0.3 (hotfix — reliability only, no product surface)

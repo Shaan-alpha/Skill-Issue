@@ -243,44 +243,66 @@ class GitHubClient:
         return [str(c.get("commit", {}).get("message", "")) for c in resp.json()]
 
     async def get_review_depth(self, username: str) -> int | None:
-        """Return the avg bodyText length across the 25 most-recent reviews, or None."""
+        """Return the avg bodyText length across the 25 most-recent reviews, or None.
+
+        This is a bonus depth signal, so it degrades to None rather than failing the
+        analysis. GitHub rejects this `contributionsCollection` query with
+        RESOURCE_LIMITS_EXCEEDED for hyper-active accounts (SKILL-ISSUE-BACKEND-4) —
+        either fully (graphql() raises) or with partial data whose `nodes` field is
+        null — so every access below is null-guarded and the call is wrapped.
+        """
         from app.github.queries import REVIEW_DEPTH
 
-        data = await self.graphql(REVIEW_DEPTH, {"login": username})
-        nodes = (
-            data.get("user", {})
-            .get("contributionsCollection", {})
-            .get("pullRequestReviewContributions", {})
-            .get("nodes", [])
-        )
-        bodies = [str(n.get("pullRequestReview", {}).get("bodyText") or "") for n in nodes]
+        try:
+            data = await self.graphql(REVIEW_DEPTH, {"login": username})
+        except Exception:
+            logger.warning(
+                "Review-depth query failed for %s; skipping signal", username, exc_info=True
+            )
+            return None
+        user = data.get("user") or {}
+        contributions = user.get("contributionsCollection") or {}
+        review_contributions = contributions.get("pullRequestReviewContributions") or {}
+        nodes = review_contributions.get("nodes") or []
+        bodies = [str((n.get("pullRequestReview") or {}).get("bodyText") or "") for n in nodes]
         bodies = [b for b in bodies if b]
         if not bodies:
             return None
         return sum(len(b) for b in bodies) // len(bodies)
 
     async def get_contribution_repo_count(self, username: str, *, min_commits: int = 10) -> int:
-        """Return the number of repos the user contributed >= min_commits to in the last year."""
+        """Return the number of repos the user contributed >= min_commits to in the last year.
+
+        Bonus depth signal — degrades to 0 rather than failing the analysis when
+        GitHub can't resolve this `contributionsCollection` query (the same
+        RESOURCE_LIMITS_EXCEEDED rejection hyper-active accounts trigger).
+        """
         from datetime import UTC, datetime, timedelta
 
         from app.github.queries import CONTRIBUTION_REPOS
 
         now = datetime.now(UTC)
-        data = await self.graphql(
-            CONTRIBUTION_REPOS,
-            {
-                "login": username,
-                "from": (now - timedelta(days=365)).isoformat(),
-                "to": now.isoformat(),
-            },
-        )
-        repos = (
-            data.get("user", {})
-            .get("contributionsCollection", {})
-            .get("commitContributionsByRepository", [])
-        )
+        try:
+            data = await self.graphql(
+                CONTRIBUTION_REPOS,
+                {
+                    "login": username,
+                    "from": (now - timedelta(days=365)).isoformat(),
+                    "to": now.isoformat(),
+                },
+            )
+        except Exception:
+            logger.warning(
+                "Contribution-repo-count query failed for %s; defaulting to 0",
+                username,
+                exc_info=True,
+            )
+            return 0
+        user = data.get("user") or {}
+        contributions = user.get("contributionsCollection") or {}
+        repos = contributions.get("commitContributionsByRepository") or []
         return sum(
-            1 for r in repos if r.get("contributions", {}).get("totalCount", 0) >= min_commits
+            1 for r in repos if (r.get("contributions") or {}).get("totalCount", 0) >= min_commits
         )
 
     async def get_profile_readme(self, username: str) -> str | None:

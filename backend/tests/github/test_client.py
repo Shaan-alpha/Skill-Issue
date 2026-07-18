@@ -351,3 +351,72 @@ async def test_graphql_raises_only_when_no_data_returned() -> None:
     async with GitHubClient(token="ghs_test") as gh:
         with pytest.raises(RuntimeError, match="GraphQL error"):
             await gh.graphql("query {}", {"login": "ghost"})
+
+
+# Regression for SKILL-ISSUE-BACKEND-4 (scoring-engine leg): the review-depth and
+# contribution-count queries hit the same `contributionsCollection` field that GitHub
+# rejects for hyper-active accounts. They must degrade, not 500 the whole analysis.
+
+_REVIEW_RESOURCE_LIMIT = {
+    "data": {
+        "user": {"contributionsCollection": {"pullRequestReviewContributions": {"nodes": None}}}
+    },
+    "errors": [
+        {
+            "type": "RESOURCE_LIMITS_EXCEEDED",
+            "path": ["user", "contributionsCollection", "pullRequestReviewContributions", "nodes"],
+            "message": "Resource limits for this query exceeded.",
+        }
+    ],
+}
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_get_review_depth_returns_none_on_partial_null_nodes() -> None:
+    """Partial data with null `nodes` (the exact prod shape) must return None, not
+    crash iterating None."""
+    respx.post("https://api.github.com/graphql").mock(
+        return_value=Response(200, json=_REVIEW_RESOURCE_LIMIT)
+    )
+    async with GitHubClient(token="ghs_test") as gh:
+        assert await gh.get_review_depth("antfu") is None
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_get_review_depth_returns_none_on_fatal_error() -> None:
+    """A fully fatal GraphQL rejection (no data) degrades to None."""
+    respx.post("https://api.github.com/graphql").mock(
+        return_value=Response(200, json={"data": None, "errors": [{"message": "nope"}]})
+    )
+    async with GitHubClient(token="ghs_test") as gh:
+        assert await gh.get_review_depth("antfu") is None
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_get_contribution_repo_count_returns_zero_on_partial_null() -> None:
+    """Partial data with a null contributions collection must return 0."""
+    respx.post("https://api.github.com/graphql").mock(
+        return_value=Response(
+            200,
+            json={
+                "data": {"user": {"contributionsCollection": None}},
+                "errors": [{"type": "RESOURCE_LIMITS_EXCEEDED", "message": "exceeded"}],
+            },
+        )
+    )
+    async with GitHubClient(token="ghs_test") as gh:
+        assert await gh.get_contribution_repo_count("antfu", min_commits=10) == 0
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_get_contribution_repo_count_returns_zero_on_fatal_error() -> None:
+    """A fully fatal GraphQL rejection (no data) degrades to 0."""
+    respx.post("https://api.github.com/graphql").mock(
+        return_value=Response(200, json={"data": None, "errors": [{"message": "nope"}]})
+    )
+    async with GitHubClient(token="ghs_test") as gh:
+        assert await gh.get_contribution_repo_count("antfu", min_commits=10) == 0
