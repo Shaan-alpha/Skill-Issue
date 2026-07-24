@@ -127,4 +127,9 @@ async def test_cron_correct_bearer_runs_chunk(monkeypatch):
     assert body["skipped"] == 0
     assert body["rate_limited"] == 0
     assert body["deadline_reached"] is False
+    # v1.0.7 SI-18: the who-analyzed-whom mapping must not ride in the response
+    # body (it would land in Vercel/CDN access logs + Sentry request captures).
+    assert "outcomes" not in body
+    assert "owner_user_id" not in r.text
+    assert "target_login" not in r.text
     assert body["purged_sessions"] == 3
