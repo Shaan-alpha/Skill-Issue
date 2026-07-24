@@ -19,6 +19,17 @@ Format:
 
 ---
 
+## 2026-07-25 — Claude (Opus 4.8) with Shaan — v1.0.6: shared-token quota breaker (SI-03 ext)
+
+**Slice:** v1.0.6 (implemented, unreleased/untagged — paused for operator go-ahead)
+**Done:** Shipped the deferred extension half of SI-03 — a circuit breaker for the shared GitHub token. `GitHubClient` (new `is_shared_token` flag) observes `X-RateLimit-Remaining` on live shared-token responses and writes a low-water mark to Redis, but **only below a 1000 watch threshold** so normal high-quota traffic adds zero Redis writes. `_live_ingest` reads the mark via `shared_token_quota_ok` and sheds new **anonymous** analyses (503 `service_busy`, event `analyze.shared_token_breaker`) when remaining < `gh_shared_token_min_remaining` (default 500), before any GitHub call. Signed-in users (own token) bypass; cache-off → breaker off (per-analysis cap still applies). TDD throughout; backend `327 passed` (70 DB-skipped), frontend unchanged/green.
+**Decisions:** Scope = breaker ONLY (user's call). **Dropped SI-07 ext (SSE stream coalescing)** — marginal value (the v1.0.5 abort-refund already closed the abuse) vs. high SSE complexity. **Deferred SI-08 ext (OG store-gating)** as a product decision — already contained by v1.0.5 attribution; store-gating would change link-preview behavior for never-analyzed users. Watch-threshold design keeps the breaker's Redis cost near-zero except under genuine low-quota/high-load.
+**Learned / surprises:** `X-RateLimit-Remaining` is visible on live `_request` responses but was never read; `_CachedResponse.headers={}` so the observe naturally excludes cache hits. The breaker is best-effort (a burst can still pass the entry check), but paired with the v1.0.5 per-analysis cap it substantially cuts exhaustion risk.
+**Blocked / open:** PR → CI (audit gate still `critical`) → prod-verify, then tag `v1.0.6` — **paused for operator go-ahead**. Also still open: restore the `npm audit` gate to `high` once Next.js patches; the `.env`-`repr` secret-leak bonus finding.
+**Next:** Open the PR. After this, the audit's medium/low remediation backlog is essentially cleared (v1.0.4 + v1.0.5 + v1.0.6); remaining items are the low/info hygiene set and the deferred product-decision extensions.
+
+---
+
 ## 2026-07-24 — Claude (Opus 4.8) with Shaan — v1.0.5: ingest amplification containment (cores)
 
 **Slice:** v1.0.5 (implemented, unreleased/untagged — paused for operator go-ahead)

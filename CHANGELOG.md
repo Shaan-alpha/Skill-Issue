@@ -10,6 +10,13 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ## [Unreleased]
 
+## [1.0.6] — 2026-07-25
+
+Ingest hardening follow-up — a circuit breaker for the shared GitHub API budget.
+
+### Security
+- **When the shared GitHub API budget runs low, new anonymous analyses are briefly turned away with a "service busy" message** instead of letting the budget hit zero and failing every anonymous analysis. Signed-in users (who use their own GitHub connection) are unaffected.
+
 ## [1.0.5] — 2026-07-24
 
 Ingest hardening slice (audit Workstream C) — bounds how much work one analysis can trigger, so a trickle of traffic can't exhaust shared resources. No visible feature changes.

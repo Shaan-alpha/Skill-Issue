@@ -53,7 +53,7 @@
 | **v1.0.3** | Hotfix — `/analyze` survives GitHub GraphQL resource limits | ✅ shipped |
 | **v1.0.4** | Cost-control fairness & hardening — 2026-07-24 audit (per-subject LLM budget, fail-closed limits, spoof-proof IP, Sentry scrub, CI perms) | ✅ shipped |
 | **v1.0.5** | Ingest amplification containment (cores) — call cap, Retry-After/deadline, budget refund on abort, OG attribution, holder-checked lock | ✅ shipped |
-| **v1.0.6** | Ingest containment extensions — shared-token quota breaker, SSE stream coalescing, OG store-gating | 🔜 planned |
+| **v1.0.6** | Shared-token quota breaker (SI-03 ext) — sheds new anon analyses before the shared GitHub token is exhausted. SSE coalescing dropped; OG store-gating deferred | ✅ shipped |
 
 ---
 
@@ -845,16 +845,23 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 ---
 
-## v1.0.6 — Ingest containment extensions (planned)
+## v1.0.6 — Shared-token quota breaker
 
-**Goal:** The complex halves deferred from v1.0.5 (each carries real complexity or a product-behavior change, so they get their own slice).
+**Goal:** Close the platform-wide DoS the v1.0.5 per-analysis cap doesn't: ~30–50 concurrent distinct anon analyses can still drain the shared GitHub token's ~5000/hr, failing all anonymous analyses. Scope decision (user): ship **only** the quota breaker; drop/defer the other two deferred extensions.
 
-**Planned scope (from the audit):**
-- **SI-03 ext** — shared-token quota breaker: read GitHub's `X-RateLimit-Remaining`, persist to Redis, shed anon load before the shared token is exhausted (needs an `is_shared_token` discriminator on `GitHubClient`).
-- **SI-07 ext** — concurrent narrative stream coalescing (SSE-aware singleflight so N viewers of the same profile don't each spend a slot + an LLM stream).
-- **SI-08 ext** — store-gating OG/card behind an already-stored analysis (product decision: previews for never-analyzed users would show a fallback).
+**Design spec:** [`docs/superpowers/specs/2026-07-25-v1.0.6-shared-token-quota-breaker-design.md`](./docs/superpowers/specs/2026-07-25-v1.0.6-shared-token-quota-breaker-design.md). **Plan:** [`docs/superpowers/plans/2026-07-25-v1.0.6-shared-token-quota-breaker.md`](./docs/superpowers/plans/2026-07-25-v1.0.6-shared-token-quota-breaker.md).
 
-**Exit criteria:** _(to be written into a v1.0.6 design spec before implementation.)_
+**Delivered:**
+- **SI-03 ext** — `GitHubClient` observes `X-RateLimit-Remaining` on live shared-token responses and writes a low-water mark to Redis (only below a 1000 watch threshold, so high-quota traffic is free). `_live_ingest` reads it and sheds new **anonymous** analyses with 503 `service_busy` when remaining is below `gh_shared_token_min_remaining` (default 500), before any GitHub call. Signed-in users (own token) bypass; cache-unavailable → breaker off (per-analysis cap still applies).
+
+**Deferred / dropped (disposition of the other Workstream-C extensions):**
+- **SI-07 ext (SSE stream coalescing) — DROPPED.** Marginal value (only helps concurrent same-profile+mode viewers in a seconds-wide window; the v1.0.5 abort-refund already closed the real abuse) versus high SSE-streaming complexity/risk.
+- **SI-08 ext (OG store-gating) — DEFERRED (product decision).** Already contained by v1.0.5's OG attribution (OG ingests now hit the anon limiter). Store/cache-gating would change link-preview behavior for never-analyzed users (a growth-loop tradeoff); revisit only if desired.
+
+**Exit criteria:**
+- [x] Backend `ruff` clean, `pytest -q` non-DB suite green (327 passed). Frontend unchanged; gate green.
+- [ ] PR reviewed; CI green; prod deploy verified. *(paused for operator go-ahead before tag/release.)*
+- [ ] `CHANGELOG.md` `[1.0.6]`; tag `v1.0.6`; release.
 
 ---
 
