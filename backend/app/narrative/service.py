@@ -1,6 +1,7 @@
 import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Literal
 
 from app.models import Report
@@ -32,6 +33,9 @@ class NarrativeStreamMeta:
     is_fallback: bool = False
     fallback_reason: Literal["budget", "error"] | None = None
     cache_hit: bool = False
+    # v1.0.5 SI-07: the UTC day a budget slot was consumed, so an abort refund
+    # targets the correct day key across a midnight rollover.
+    consumed_day: str | None = None
 
 
 class NarrativeService:
@@ -82,6 +86,11 @@ class NarrativeService:
             yield fallback_narrative(mode, report, reason="budget")
             return
 
+        # Budget slot consumed — record the UTC day so an abort refund targets
+        # the correct day key (v1.0.5 SI-07).
+        if meta is not None:
+            meta.consumed_day = datetime.now(UTC).strftime("%Y-%m-%d")
+
         # 3. Stream from LLM
         messages = build_messages(mode, report)
         acc: list[str] = []
@@ -105,3 +114,8 @@ class NarrativeService:
         # 4. Cache successful result
         full_text = "".join(acc)
         await self._cache.aput(cache_key, full_text)
+
+    async def refund(self, *, subject: str | None = None, consumed_day: str | None = None) -> None:
+        """Refund a budget slot consumed by a stream the client aborted before
+        completion (v1.0.5 SI-07)."""
+        await self._budget.arefund(subject=subject, consumed_day=consumed_day)
