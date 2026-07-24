@@ -84,6 +84,20 @@ def _retry_after_seconds(resp: httpx.Response, *, ceiling: float) -> float:
 # so normal high-quota traffic writes nothing.
 _SHARED_QUOTA_WATCH = 1000
 
+# v1.0.7 SI-35: cap README base64 blobs before decode (~1.4MB base64 -> ~1MB
+# decoded, above GitHub's own ~1MB blob cap) so a future upstream change can't
+# hand us an unbounded blob.
+_README_B64_MAX = 1_400_000
+
+
+def _decode_readme_content(content: str) -> str:
+    """Base64-decode a GitHub README `content` blob, size-capped and error-safe
+    (v1.0.7 SI-35). Never raises — returns "" on a malformed/oversized blob."""
+    try:
+        return base64.b64decode(content[:_README_B64_MAX]).decode("utf-8", errors="ignore")
+    except Exception:
+        return ""
+
 
 async def record_shared_quota(cache: RedisCache, remaining: int) -> None:
     """Best-effort write of the shared token's low-water remaining quota."""
@@ -314,7 +328,7 @@ class GitHubClient:
             return ""
         resp.raise_for_status()
         content = resp.json().get("content", "")
-        return base64.b64decode(content).decode("utf-8", errors="ignore")
+        return _decode_readme_content(content)
 
     async def list_recent_commits_sample(
         self, owner: str, repo: str, *, limit: int = 100
@@ -404,7 +418,7 @@ class GitHubClient:
         resp.raise_for_status()
 
         content = resp.json().get("content", "")
-        return base64.b64decode(content).decode("utf-8", errors="ignore")
+        return _decode_readme_content(content)
 
     async def graphql(self, query: str, variables: dict[str, Any]) -> dict[str, Any]:
         resp = await self._request(

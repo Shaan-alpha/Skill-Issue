@@ -489,3 +489,19 @@ async def test_non_shared_token_never_records(fake_cache) -> None:
     async with GitHubClient(token="t", cache=fake_cache, is_shared_token=False) as gh:
         await gh.get_user("a")
     assert await fake_cache.get_json(NAMESPACE_GH, GH_SHARED_QUOTA_KEY) is None
+
+
+def test_decode_readme_caps_oversized_content() -> None:
+    import base64
+
+    from app.github.client import _README_B64_MAX, _decode_readme_content
+
+    # Normal READMEs decode unchanged.
+    normal = base64.b64encode(b"# Hello\nWorld").decode()
+    assert _decode_readme_content(normal) == "# Hello\nWorld"
+
+    # An oversized (but valid) base64 blob is bounded and never raises.
+    big = base64.b64encode(b"x" * 3_000_000).decode()  # ~4MB of base64
+    out = _decode_readme_content(big)
+    assert isinstance(out, str)
+    assert len(out) <= _README_B64_MAX
