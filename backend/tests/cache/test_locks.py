@@ -109,6 +109,27 @@ async def test_caller_proceeds_when_redis_fails(fake_cache: RedisCache, fake_red
         assert got is False
 
 
+async def test_lock_ttl_is_sixty() -> None:
+    # v1.0.5 SI-09: TTL must outlive a worst-case (deadline-bounded) cold ingest.
+    from app.cache.keys import TTL_LOCK_SECONDS
+
+    assert TTL_LOCK_SECONDS == 60
+
+
+@pytest.mark.asyncio
+async def test_holder_release_is_holder_checked(fake_cache: RedisCache, fake_redis) -> None:
+    """v1.0.5 SI-09: a holder must only delete the lock IT owns. If its TTL
+    expires mid-ingest and a successor re-acquires, the original holder's
+    release must NOT delete the successor's lock."""
+    full = "si:v1:lock:report:octocat"
+    async with singleflight(fake_cache, "report", "octocat") as got:
+        assert got is True
+        # Simulate: holder A's TTL fired and successor B re-acquired the key.
+        await fake_redis.set(full, "holderB")
+    # A's release (holder-checked) must have left B's lock intact.
+    assert await fake_redis.get(full) == "holderB"
+
+
 @pytest.mark.asyncio
 async def test_waiter_breaks_out_on_timeout(fake_cache: RedisCache) -> None:
     """If the lock holder never releases within max_wait, the waiter falls

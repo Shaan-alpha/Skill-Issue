@@ -98,6 +98,23 @@ class RedisCache:
             logger.warning("cache DEL failed for %s", full, exc_info=True)
             return 0
 
+    async def delete_if_equals(self, namespace: str, key: str, expected: str) -> bool:
+        """Delete the key only if its current value equals `expected` (holder-
+        checked release for singleflight). GET-then-conditional-DELETE — a tiny
+        race between the two ops is acceptable (fail-open convention); it still
+        prevents the cross-holder delete an unconditional DELETE allows. Returns
+        True iff we deleted."""
+        full = self._build_key(namespace, key)
+        try:
+            current = await self._redis.get(full)
+            if current != expected:
+                return False
+            await self._redis.delete(full)
+            return True
+        except Exception:
+            logger.warning("cache CAS-DEL failed for %s", full, exc_info=True)
+            return False
+
     async def incr(self, namespace: str, key: str) -> int:
         """Atomic INCR. Returns 0 on Redis failure (conservative — treat as
         not-incremented so callers don't double-count)."""
