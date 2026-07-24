@@ -13,7 +13,7 @@ async def test_uses_session_token_when_session_present(monkeypatch):
     captured: dict[str, str] = {}
 
     class FakeClient:
-        def __init__(self, token: str, *, cache=None, max_retries: int = 3):
+        def __init__(self, token: str, *, cache=None, max_retries: int = 3, max_calls=None):
             captured["token"] = token
 
         async def __aenter__(self):
@@ -45,7 +45,7 @@ async def test_falls_back_to_project_token_when_no_session(monkeypatch):
     captured: dict[str, str] = {}
 
     class FakeClient:
-        def __init__(self, token: str, *, cache=None, max_retries: int = 3):
+        def __init__(self, token: str, *, cache=None, max_retries: int = 3, max_calls=None):
             captured["token"] = token
 
         async def __aenter__(self):
@@ -70,3 +70,20 @@ async def test_falls_back_to_project_token_when_no_session(monkeypatch):
 
     await deps_mod.get_report_for_user("octocat", session=None)
     assert captured["token"] == "project-token"
+
+
+async def test_call_cap_exceeded_maps_to_503(monkeypatch):
+    from fastapi import HTTPException
+
+    import app.dependencies as deps
+    from app.github.client import GitHubCallCapExceeded
+
+    async def _boom(username, gh):
+        raise GitHubCallCapExceeded(151, 150)
+
+    monkeypatch.setattr(deps, "ingest_profile", _boom)
+    monkeypatch.setattr(deps.settings, "github_token", "t", raising=False)
+    with pytest.raises(HTTPException) as exc:
+        await deps._live_ingest("octocat", None, cache=None)
+    assert exc.value.status_code == 503
+    assert exc.value.detail["error"] == "analysis_too_large"

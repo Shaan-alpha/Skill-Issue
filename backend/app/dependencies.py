@@ -11,7 +11,7 @@ from app.auth.dependencies import optional_session
 from app.cache.client import RedisCache
 from app.cache.keys import NAMESPACE_REPORT, report_key
 from app.cache.locks import singleflight
-from app.github.client import GitHubClient
+from app.github.client import GitHubCallCapExceeded, GitHubClient
 from app.ingestion.profile import NotAnIndividualError, ingest_profile
 from app.models import Report
 from app.narrative.budget import DailyBudget
@@ -146,11 +146,18 @@ async def _live_ingest(
     if not access_token:
         raise HTTPException(status_code=500, detail="GITHUB_TOKEN not configured on backend")
 
-    async with GitHubClient(token=access_token, cache=cache) as gh:
+    async with GitHubClient(
+        token=access_token,
+        cache=cache,
+        max_calls=settings.gh_max_calls_per_analysis,
+    ) as gh:
         try:
             profile = await ingest_profile(username, gh)
         except NotAnIndividualError as e:
             raise HTTPException(status_code=422, detail=str(e)) from e
+        except GitHubCallCapExceeded:
+            logger.warning("analyze.call_cap_exceeded")
+            raise HTTPException(status_code=503, detail={"error": "analysis_too_large"}) from None
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:
                 raise HTTPException(

@@ -420,3 +420,18 @@ async def test_get_contribution_repo_count_returns_zero_on_fatal_error() -> None
     )
     async with GitHubClient(token="ghs_test") as gh:
         assert await gh.get_contribution_repo_count("antfu", min_commits=10) == 0
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_call_cap_raises_after_max_live_calls() -> None:
+    from app.github.client import GitHubCallCapExceeded
+
+    respx.get(url__regex=r"https://api\.github\.com/users/.+").mock(
+        return_value=Response(200, json={"login": "x"})
+    )
+    async with GitHubClient(token="t", max_calls=2) as gh:
+        await gh.get_user("a")  # 1
+        await gh.get_user("b")  # 2
+        with pytest.raises(GitHubCallCapExceeded):
+            await gh.get_user("c")  # 3 > cap

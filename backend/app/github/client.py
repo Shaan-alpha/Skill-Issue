@@ -46,12 +46,24 @@ class _CachedResponse:
             )
 
 
+class GitHubCallCapExceeded(Exception):
+    """Raised when a single analysis exceeds its per-analysis live-call cap
+    (v1.0.5 SI-03). One GitHubClient is built per analysis, so its live-call
+    counter bounds the fan-out of that analysis."""
+
+    def __init__(self, count: int, cap: int) -> None:
+        super().__init__(f"GitHub call cap exceeded: {count} > {cap}")
+        self.count = count
+        self.cap = cap
+
+
 class GitHubClient:
     def __init__(
         self,
         token: str | None = None,
         *,
         max_retries: int = 3,
+        max_calls: int | None = None,
         cache: RedisCache | None = None,
     ) -> None:
         headers: dict[str, str] = {
@@ -63,6 +75,8 @@ class GitHubClient:
             headers["Authorization"] = f"Bearer {token}"
         self._client = httpx.AsyncClient(headers=headers, timeout=20.0, http2=True)
         self._max_retries = max_retries
+        self._max_calls = max_calls
+        self._live_calls = 0
         self._cache = cache
 
     async def __aenter__(self) -> Self:
@@ -88,6 +102,14 @@ class GitHubClient:
                 logger.warning("cache get raised in GitHubClient", exc_info=True)
             if cached is not None:
                 return _CachedResponse(status_code=cached["status"], json_body=cached["body"])
+
+        # v1.0.5 SI-03: count only live calls (cache hits returned above are
+        # free) and hard-cap per-analysis fan-out. One GitHubClient == one
+        # analysis, so this instance counter bounds the analysis.
+        if self._max_calls is not None:
+            self._live_calls += 1
+            if self._live_calls > self._max_calls:
+                raise GitHubCallCapExceeded(self._live_calls, self._max_calls)
 
         # Live request with existing retry/rate-limit logic.
         resp: httpx.Response | None = None
