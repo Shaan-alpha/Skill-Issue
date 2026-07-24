@@ -52,7 +52,8 @@
 | **v1.0.2** | Security & hardening — 2026-07-13 audit remediation (headers, dep CVEs) | ✅ shipped |
 | **v1.0.3** | Hotfix — `/analyze` survives GitHub GraphQL resource limits | ✅ shipped |
 | **v1.0.4** | Cost-control fairness & hardening — 2026-07-24 audit (per-subject LLM budget, fail-closed limits, spoof-proof IP, Sentry scrub, CI perms) | ✅ shipped |
-| **v1.0.5** | Ingest amplification containment — 2026-07-24 audit Workstream C (call cap, Retry-After deadline, singleflight narrative, OG attribution) | 🔜 planned |
+| **v1.0.5** | Ingest amplification containment (cores) — call cap, Retry-After/deadline, budget refund on abort, OG attribution, holder-checked lock | ✅ shipped |
+| **v1.0.6** | Ingest containment extensions — shared-token quota breaker, SSE stream coalescing, OG store-gating | 🔜 planned |
 
 ---
 
@@ -824,18 +825,36 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 ---
 
-## v1.0.5 — Ingest amplification containment (planned)
+## v1.0.5 — Ingest amplification containment (cores)
 
-**Goal:** The heavier half of the 2026-07-24 audit's cost & availability cluster (Workstream C) — split out of v1.0.4 so the hottest code (GitHub client, ingest path, narrative service) gets its own review/verify cycle.
+**Goal:** Bound how much work one cold `/analyze` can trigger (audit Workstream C). Split from v1.0.4 so the hottest code got its own review/verify cycle. Scope decision (user): ship the **core** of each finding; defer the 3 complex **extensions** to v1.0.6.
+
+**Design spec:** [`docs/superpowers/specs/2026-07-24-v1.0.5-ingest-amplification-containment-design.md`](./docs/superpowers/specs/2026-07-24-v1.0.5-ingest-amplification-containment-design.md). **Plan:** [`docs/superpowers/plans/2026-07-24-v1.0.5-ingest-amplification-containment.md`](./docs/superpowers/plans/2026-07-24-v1.0.5-ingest-amplification-containment.md).
+
+**Delivered:**
+- **SI-03** — per-analysis hard live-call cap (`GH_MAX_CALLS_PER_ANALYSIS=150`, ~1.5× the ~98 legit worst case) at the `GitHubClient._request` choke point; cache hits don't count → 503 `analysis_too_large`.
+- **SI-06** — cap `Retry-After` (`10s`), parse HTTP-date safely, handle `429` (not just 403), + a `45s` ingest wall-clock deadline → 503 `analysis_timeout`.
+- **SI-07** — `DailyBudget.arefund` + `try/except GeneratorExit` in the SSE router; refunds one slot on a mid-stream abort, only when truly consumed (captures the consumed UTC-day).
+- **SI-08** — OG/card `fetchReportForUser` forwards `x-client-ip` + `x-internal-secret` so those ingests are attributed to the visitor IP and subject to the anon limiter.
+- **SI-09** — holder-checked singleflight release (`delete_if_equals`) + `TTL_LOCK_SECONDS` 30→60.
+
+**Exit criteria:**
+- [x] Backend `ruff` clean, `pytest -q` non-DB suite green (321 passed). Frontend `lint` + `tsc` + `test:run` (70) + `build` clean.
+- [ ] PR reviewed; CI green; prod deploy verified. *(paused for operator go-ahead before tag/release.)*
+- [ ] `CHANGELOG.md` `[1.0.5]`; tag `v1.0.5`; release.
+
+---
+
+## v1.0.6 — Ingest containment extensions (planned)
+
+**Goal:** The complex halves deferred from v1.0.5 (each carries real complexity or a product-behavior change, so they get their own slice).
 
 **Planned scope (from the audit):**
-- **SI-03** — hard cap total GitHub calls per analysis + shared-token quota breaker for the anon path.
-- **SI-06** — cap `Retry-After` sleep, bound cumulative backoff, parse HTTP-date safely, add an ingest wall-clock deadline.
-- **SI-07** — singleflight narrative generation keyed on the cache key; refund the budget slot on mid-stream abort.
-- **SI-08** — OG/card server fetches forward `x-client-ip` + `x-internal-secret` so they're attributed and limited.
-- **SI-09** — size the singleflight lock TTL to the new ingest deadline.
+- **SI-03 ext** — shared-token quota breaker: read GitHub's `X-RateLimit-Remaining`, persist to Redis, shed anon load before the shared token is exhausted (needs an `is_shared_token` discriminator on `GitHubClient`).
+- **SI-07 ext** — concurrent narrative stream coalescing (SSE-aware singleflight so N viewers of the same profile don't each spend a slot + an LLM stream).
+- **SI-08 ext** — store-gating OG/card behind an already-stored analysis (product decision: previews for never-analyzed users would show a fallback).
 
-**Exit criteria:** _(to be written into a v1.0.5 design spec before implementation.)_
+**Exit criteria:** _(to be written into a v1.0.6 design spec before implementation.)_
 
 ---
 

@@ -10,6 +10,17 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ## [Unreleased]
 
+## [1.0.5] — 2026-07-24
+
+Ingest hardening slice (audit Workstream C) — bounds how much work one analysis can trigger, so a trickle of traffic can't exhaust shared resources. No visible feature changes.
+
+### Security
+- **Each profile analysis now has a hard ceiling on how many GitHub API calls it can make**, so a single request can't run away with the shared API budget.
+- **Analyses that stall now time out cleanly** instead of holding a server worker open, and rate-limit backoff is capped rather than unbounded.
+- **The AI daily budget is refunded when a visitor closes the page mid-generation**, so abandoned requests no longer eat into everyone's allowance.
+- **Link-preview (Open Graph) image requests are now rate-limited like a normal analysis**, closing an unauthenticated amplification path.
+- **Hardened the internal request-coalescing lock** so concurrent requests for the same profile can't trigger duplicate work.
+
 ## [1.0.4] — 2026-07-24
 
 Security & cost-control hardening slice, from a full security audit of the platform. No visible feature changes — everything here makes the service harder to abuse and cheaper to run under load.
