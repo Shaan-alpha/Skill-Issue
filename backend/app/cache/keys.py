@@ -37,6 +37,12 @@ TTL_LOCK_SECONDS = 60  # singleflight lock — outlives the ANALYZE_INGEST_DEADL
 TTL_NARRATIVE_SECONDS = 86_400  # 24 hours
 TTL_BUDGET_KEY_SECONDS = 90_000  # 25 hours — outlives the UTC day rollover
 
+# v1.0.6 — shared-token quota breaker: fixed key under NAMESPACE_GH holding the
+# shared token's low-water remaining quota; TTL just over GitHub's 1h window so
+# a stale low value self-clears after the token resets.
+GH_SHARED_QUOTA_KEY = "shared_quota"
+TTL_SHARED_QUOTA_SECONDS = 3700
+
 
 # --- Per-endpoint GitHub TTLs ---
 # Matched in order; first hit wins.

@@ -450,3 +450,42 @@ def test_retry_after_seconds_caps_and_parses() -> None:
     # HTTP-date / garbage must not crash and stays bounded by the ceiling.
     assert _retry_after_seconds(_resp("Wed, 21 Oct 2099 07:28:00 GMT"), ceiling=10.0) == 10.0
     assert _retry_after_seconds(_resp("not-a-number"), ceiling=10.0) <= 10.0
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_shared_token_records_low_quota(fake_cache) -> None:
+    from app.cache.keys import GH_SHARED_QUOTA_KEY, NAMESPACE_GH
+
+    respx.get(url__regex=r".*/users/.+").mock(
+        return_value=Response(200, json={"login": "x"}, headers={"X-RateLimit-Remaining": "300"})
+    )
+    async with GitHubClient(token="t", cache=fake_cache, is_shared_token=True) as gh:
+        await gh.get_user("a")
+    assert await fake_cache.get_json(NAMESPACE_GH, GH_SHARED_QUOTA_KEY) == {"remaining": 300}
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_high_quota_is_not_recorded(fake_cache) -> None:
+    from app.cache.keys import GH_SHARED_QUOTA_KEY, NAMESPACE_GH
+
+    respx.get(url__regex=r".*/users/.+").mock(
+        return_value=Response(200, json={"login": "x"}, headers={"X-RateLimit-Remaining": "4999"})
+    )
+    async with GitHubClient(token="t", cache=fake_cache, is_shared_token=True) as gh:
+        await gh.get_user("a")
+    assert await fake_cache.get_json(NAMESPACE_GH, GH_SHARED_QUOTA_KEY) is None
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_non_shared_token_never_records(fake_cache) -> None:
+    from app.cache.keys import GH_SHARED_QUOTA_KEY, NAMESPACE_GH
+
+    respx.get(url__regex=r".*/users/.+").mock(
+        return_value=Response(200, json={"login": "x"}, headers={"X-RateLimit-Remaining": "10"})
+    )
+    async with GitHubClient(token="t", cache=fake_cache, is_shared_token=False) as gh:
+        await gh.get_user("a")
+    assert await fake_cache.get_json(NAMESPACE_GH, GH_SHARED_QUOTA_KEY) is None

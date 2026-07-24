@@ -13,7 +13,15 @@ async def test_uses_session_token_when_session_present(monkeypatch):
     captured: dict[str, str] = {}
 
     class FakeClient:
-        def __init__(self, token: str, *, cache=None, max_retries: int = 3, max_calls=None):
+        def __init__(
+            self,
+            token: str,
+            *,
+            cache=None,
+            max_retries: int = 3,
+            max_calls=None,
+            is_shared_token=False,
+        ):
             captured["token"] = token
 
         async def __aenter__(self):
@@ -45,7 +53,15 @@ async def test_falls_back_to_project_token_when_no_session(monkeypatch):
     captured: dict[str, str] = {}
 
     class FakeClient:
-        def __init__(self, token: str, *, cache=None, max_retries: int = 3, max_calls=None):
+        def __init__(
+            self,
+            token: str,
+            *,
+            cache=None,
+            max_retries: int = 3,
+            max_calls=None,
+            is_shared_token=False,
+        ):
             captured["token"] = token
 
         async def __aenter__(self):
@@ -105,3 +121,56 @@ async def test_ingest_deadline_maps_to_503(monkeypatch):
         await deps._live_ingest_bounded("octocat", None, cache=None)
     assert exc.value.status_code == 503
     assert exc.value.detail["error"] == "analysis_timeout"
+
+
+async def test_shared_breaker_sheds_anon_below_floor(monkeypatch, fake_cache):
+    from fastapi import HTTPException
+
+    import app.dependencies as deps
+    from app.cache.keys import GH_SHARED_QUOTA_KEY, NAMESPACE_GH
+
+    await fake_cache.set_json(NAMESPACE_GH, GH_SHARED_QUOTA_KEY, {"remaining": 100})
+    monkeypatch.setattr(deps.settings, "github_token", "shared-tok", raising=False)
+    monkeypatch.setattr(deps.settings, "gh_shared_token_min_remaining", 500, raising=False)
+
+    called = {"ingest": False}
+
+    async def _ingest(username, gh):
+        called["ingest"] = True
+        return object()
+
+    monkeypatch.setattr(deps, "ingest_profile", _ingest)
+
+    with pytest.raises(HTTPException) as exc:
+        await deps._live_ingest("octocat", None, cache=fake_cache)
+    assert exc.value.status_code == 503
+    assert exc.value.detail["error"] == "service_busy"
+    assert called["ingest"] is False  # shed before any GitHub call
+
+
+async def test_shared_breaker_bypasses_signed_in(monkeypatch, fake_cache):
+    from unittest.mock import MagicMock
+
+    import app.dependencies as deps
+    from app.cache.keys import GH_SHARED_QUOTA_KEY, NAMESPACE_GH
+
+    await fake_cache.set_json(NAMESPACE_GH, GH_SHARED_QUOTA_KEY, {"remaining": 100})
+    monkeypatch.setattr(deps.settings, "github_token", "shared-tok", raising=False)
+    monkeypatch.setattr(deps.settings, "gh_shared_token_min_remaining", 500, raising=False)
+
+    sentinel = object()
+
+    async def _ingest(username, gh):
+        return MagicMock()
+
+    async def _score(profile, gh):
+        return sentinel
+
+    monkeypatch.setattr(deps, "ingest_profile", _ingest)
+    monkeypatch.setattr(deps, "run_scoring_engine", _score)
+
+    class FakeSession:
+        access_token = "user-tok"  # own token -> not shared -> bypass breaker
+
+    out = await deps._live_ingest("octocat", FakeSession(), cache=fake_cache)
+    assert out is sentinel
