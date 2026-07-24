@@ -12,7 +12,7 @@ from app.auth.dependencies import optional_session
 from app.cache.client import RedisCache
 from app.cache.keys import NAMESPACE_REPORT, report_key
 from app.cache.locks import singleflight
-from app.github.client import GitHubCallCapExceeded, GitHubClient
+from app.github.client import GitHubCallCapExceeded, GitHubClient, shared_token_quota_ok
 from app.ingestion.profile import NotAnIndividualError, ingest_profile
 from app.models import Report
 from app.narrative.budget import DailyBudget
@@ -165,10 +165,21 @@ async def _live_ingest(
     if not access_token:
         raise HTTPException(status_code=500, detail="GITHUB_TOKEN not configured on backend")
 
+    # v1.0.6 SI-03 ext: shed NEW anonymous analyses (those on the shared token)
+    # when its observed remaining quota is below the reserve, so it isn't fully
+    # exhausted. Shed before any GitHub call. Signed-in users (own token) bypass.
+    is_shared = bool(settings.github_token) and access_token == settings.github_token
+    if is_shared and not await shared_token_quota_ok(
+        cache, min_remaining=settings.gh_shared_token_min_remaining
+    ):
+        logger.warning("analyze.shared_token_breaker")
+        raise HTTPException(status_code=503, detail={"error": "service_busy"})
+
     async with GitHubClient(
         token=access_token,
         cache=cache,
         max_calls=settings.gh_max_calls_per_analysis,
+        is_shared_token=is_shared,
     ) as gh:
         try:
             profile = await ingest_profile(username, gh)
