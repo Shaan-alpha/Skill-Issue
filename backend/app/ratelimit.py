@@ -11,6 +11,7 @@ from app import settings as settings_module
 from app.auth.dependencies import optional_session
 from app.cache.rate_limit import try_increment_counter
 from app.dependencies import get_cache
+from app.ratelimit_fallback import in_process_limiter
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -85,18 +86,17 @@ def make_rate_limiter(
 
     Signed-in callers are capped per-user (`user:<id>`); anonymous callers
     per-IP (`ip:<addr>`). `via_trusted_proxy=True` (analyze, reached through the
-    RSC proxy) skips anonymous enforcement when `internal_proxy_secret` is unset,
-    so website visitors aren't collapsed into one Vercel-infra-IP bucket.
+    RSC proxy) falls back to a conservative shared `ip:unattributed` backstop
+    when `internal_proxy_secret` is unset (v1.0.4 SI-05), so website visitors
+    aren't collapsed into strict per-IP throttling yet the endpoint is never
+    left entirely uncapped. When the cache is unreachable, both paths degrade to
+    an in-process limiter rather than failing open (v1.0.4 SI-01).
     """
 
     async def _dependency(
         request: Request,
         session: Annotated[object | None, Depends(optional_session)] = None,
     ) -> None:
-        cache = get_cache()
-        if cache is None:
-            return  # cache unconfigured -> fail-open (no limiting)
-
         settings = settings_module.settings
         if session is not None:
             subject = f"user:{session.user.id}"
@@ -122,14 +122,29 @@ def make_rate_limiter(
                 subject_type = "ip"
 
         now = datetime.now(UTC)
-        result = await try_increment_counter(
-            cache,
-            name=name,
-            subject=subject,
-            limit=limit,
-            hour_bucket=hour_bucket(now),
-        )
-        if not result.allowed:
+        bucket = hour_bucket(now)
+        cache = get_cache()
+        if cache is None:
+            # SI-01: no Redis -> conservative in-process limiter, not fail-open.
+            allowed = in_process_limiter.check(
+                name=name, subject=subject, limit=limit, bucket=bucket
+            )
+            if not allowed:
+                logger.warning("rate_limit.degraded_local name=%s reason=cache_unconfigured", name)
+        else:
+            result = await try_increment_counter(
+                cache, name=name, subject=subject, limit=limit, hour_bucket=bucket
+            )
+            if result.current == 0:
+                # Redis-error sentinel (RedisCache.incr returned 0). Degrade to
+                # the in-process limiter instead of failing open (SI-01).
+                allowed = in_process_limiter.check(
+                    name=name, subject=subject, limit=limit, bucket=bucket
+                )
+                logger.warning("rate_limit.degraded_local name=%s reason=redis_error", name)
+            else:
+                allowed = result.allowed
+        if not allowed:
             retry_after = seconds_until_next_hour(now)
             logger.warning(
                 "rate_limit.throttled name=%s subject_type=%s limit=%s",

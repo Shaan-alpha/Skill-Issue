@@ -73,19 +73,35 @@ async def test_narrative_enforces_anon_even_without_secret(monkeypatch, fake_cac
     assert exc.value.status_code == 429
 
 
-async def test_fail_open_when_cache_unconfigured(monkeypatch):
+async def test_cache_unconfigured_falls_back_to_in_process(monkeypatch):
+    # SI-01: cache unconfigured no longer fails OPEN — it degrades to the
+    # in-process limiter (conservative), so a 0/limit still blocks.
+    from app.ratelimit import in_process_limiter
+
+    in_process_limiter._counts.clear()
     monkeypatch.setattr("app.ratelimit.get_cache", lambda: None)
-    monkeypatch.setattr(settings_module.settings, "analyze_anon_per_ip_per_hour", 0)
-    req = make_request({"x-real-ip": "1.1.1.1"})
-    # Cache None → no limiting at all, even with a 0 cap.
+    monkeypatch.setattr(settings_module.settings, "internal_proxy_secret", "s")
+    monkeypatch.setattr(settings_module.settings, "analyze_anon_per_ip_per_hour", 2)
+    req = make_request({"x-forwarded-for": "10.0.0.1"})
     await analyze_rate_limiter(req, session=None)
+    await analyze_rate_limiter(req, session=None)
+    with pytest.raises(HTTPException) as exc:
+        await analyze_rate_limiter(req, session=None)
+    assert exc.value.status_code == 429
 
 
-async def test_fail_open_on_redis_error(monkeypatch, fake_cache, fake_redis):
+async def test_redis_error_falls_back_to_in_process(monkeypatch, fake_cache, fake_redis):
+    # SI-01: a Redis error degrades to the in-process limiter instead of
+    # allowing everything (previously fail-open).
+    from app.ratelimit import in_process_limiter
+
+    in_process_limiter._counts.clear()
     monkeypatch.setattr("app.ratelimit.get_cache", lambda: fake_cache)
     monkeypatch.setattr(settings_module.settings, "internal_proxy_secret", "s")
     monkeypatch.setattr(settings_module.settings, "analyze_anon_per_ip_per_hour", 1)
-    req = make_request({"x-real-ip": "1.1.1.1"})
-    fake_redis.fail_next = 100  # every INCR errors → RedisCache returns 0 → allow
-    for _ in range(5):
-        await analyze_rate_limiter(req, session=None)
+    req = make_request({"x-forwarded-for": "10.0.0.2"})
+    fake_redis.fail_next = 100  # every INCR errors → RedisCache returns 0 → in-process fallback
+    await analyze_rate_limiter(req, session=None)  # in-process 1/1
+    with pytest.raises(HTTPException) as exc:
+        await analyze_rate_limiter(req, session=None)  # 2 > 1 → 429
+    assert exc.value.status_code == 429
