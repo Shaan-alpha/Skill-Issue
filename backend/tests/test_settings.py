@@ -49,3 +49,7 @@ def test_v1_0_5_amplification_defaults():
     assert s.gh_max_calls_per_analysis == 150
     assert s.github_retry_after_ceiling_seconds == 10.0
     assert s.analyze_ingest_deadline_seconds == 45.0
+
+
+def test_v1_0_6_breaker_default():
+    assert Settings().gh_shared_token_min_remaining == 500

@@ -94,6 +94,12 @@ class Settings(BaseSettings):
     # Above a legit cold ingest, well below Vercel's 300s function timeout.
     analyze_ingest_deadline_seconds: float = 45.0
 
+    # v1.0.6 — shared-token quota breaker. Shed NEW anonymous analyses when the
+    # shared GitHub token's observed remaining quota drops below this reserve,
+    # so it isn't fully exhausted (which would fail all anon analyses). Signed-in
+    # users bring their own token and bypass. Cache-unavailable => breaker off.
+    gh_shared_token_min_remaining: int = 500
+
     # v0.8.6 — on-demand /share/[slug] ISR revalidation
     # FRONTEND_BASE_URL: backend posts to {FRONTEND_BASE_URL}/api/revalidate
     # after every share toggle to bust the per-slug cache tag.
