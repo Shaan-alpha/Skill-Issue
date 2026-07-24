@@ -10,6 +10,21 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ## [Unreleased]
 
+## [1.0.4] — 2026-07-24
+
+Security & cost-control hardening slice, from a full security audit of the platform. No visible feature changes — everything here makes the service harder to abuse and cheaper to run under load.
+
+### Changed
+- **AI narratives now have a per-visitor daily allowance.** A single heavy user (or a script) can no longer burn through the day's AI generation for everyone — each visitor and each signed-in account gets its own daily budget on top of a global ceiling, and signed-in users get a larger allowance.
+
+### Security
+- **Rate limiting and the AI spend cap now fail *closed*.** If the cache layer is unreachable, the service falls back to conservative in-process limits instead of removing all limits.
+- **Anonymous analysis is always rate-limited** now, even in a deployment that hasn't set the internal proxy secret — a conservative backstop replaces the previous "skip".
+- **The visitor's IP is read from the platform's spoof-proof header**, so per-IP limits can't be evaded by forging a header.
+- **Internal request secrets and visitor IP addresses are stripped from error reports** before they reach our error-tracking service.
+- **A corrupted or key-rotated login session now prompts a clean re-login** instead of returning a server error.
+- **Continuous-integration runs with least-privilege permissions**, and the example environment file no longer ships an insecure cookie default.
+
 ## [1.0.3] — 2026-07-18
 
 Hotfix — `/analyze/{username}` no longer fails for hyper-active GitHub accounts whose contribution data trips GitHub's GraphQL query-cost limit.

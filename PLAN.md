@@ -48,6 +48,11 @@
 | **v0.9.7** | Privacy policy + terms + global footer | ✅ shipped |
 | **v0.9.8** | Launch landing sections (examples + how-it-works + star CTA) | ✅ shipped |
 | **v1.0.0** | First stable release (launch polish) — public-launch ops in docs/LAUNCH.md | ✅ shipped |
+| **v1.0.1** | Launch Ops — GitHub Education perks + domain cutover (docs/LAUNCH.md) | ✅ shipped |
+| **v1.0.2** | Security & hardening — 2026-07-13 audit remediation (headers, dep CVEs) | ✅ shipped |
+| **v1.0.3** | Hotfix — `/analyze` survives GitHub GraphQL resource limits | ✅ shipped |
+| **v1.0.4** | Cost-control fairness & hardening — 2026-07-24 audit (per-subject LLM budget, fail-closed limits, spoof-proof IP, Sentry scrub, CI perms) | ✅ shipped |
+| **v1.0.5** | Ingest amplification containment — 2026-07-24 audit Workstream C (call cap, Retry-After deadline, singleflight narrative, OG attribution) | 🔜 planned |
 
 ---
 
@@ -791,6 +796,46 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 - [x] Regression tests: partial-vs-fatal GraphQL branches, plus both degradation directions in ingestion. Full suite green (`295 passed`), ruff clean.
 - [ ] PR reviewed; CI green; prod deploy verified against a whale account (`/analyze/antfu` returns 200).
 - [ ] `CHANGELOG.md` `[1.0.3]`; tag `v1.0.3`; release. *(paused for operator go-ahead, per the slice workflow.)*
+
+---
+
+## v1.0.4 — Cost-control fairness & security hardening (audit Batch 1 + lower-risk Batch 2)
+
+**Goal:** Remediate the cheap, low-risk cost & availability findings from the 2026-07-24 full security audit, plus the config/CI/observability quick wins. No user-facing feature changes.
+
+**Design spec:** [`docs/superpowers/specs/2026-07-24-v1.0.4-cost-control-hardening-design.md`](./docs/superpowers/specs/2026-07-24-v1.0.4-cost-control-hardening-design.md). **Plan:** [`docs/superpowers/plans/2026-07-24-v1.0.4-cost-control-hardening.md`](./docs/superpowers/plans/2026-07-24-v1.0.4-cost-control-hardening.md).
+
+**Shape:** one `fix/v1.0.4-cost-control-hardening` branch. 8 findings across the rate limiter, LLM budget, session decrypt, Sentry scrub, CI, and `.env.example`.
+
+**Delivered:**
+- **SI-02 — per-subject LLM budget.** Global daily ceiling (500) plus per-IP (10) and per-user (40) daily caps; a real LLM call runs only if both dimensions have room. Reserve-then-release keeps counters accurate.
+- **SI-04 — spoof-proof client IP.** `client_ip()` trusts Vercel's overwritten `x-forwarded-for` (configurable via `TRUSTED_CLIENT_IP_HEADER`) and no longer trusts `x-real-ip`.
+- **SI-05 — fail-closed anon `/analyze`.** When `INTERNAL_PROXY_SECRET` is unset, a conservative shared `ip:unattributed` backstop (300/hr) replaces the previous "skip".
+- **SI-01 — fail-closed cost controls.** A cache outage degrades the rate limiter and LLM budget to conservative in-process fallbacks (`rate_limit.degraded_local` / `narrative.budget.degraded_local`) instead of unlimited.
+- **SI-11 — Sentry scrub** of `x-internal-secret`, `x-revalidate-secret`, and IP headers (backend + frontend).
+- **SI-12 — CI least privilege** (`permissions: contents: read`).
+- **SI-13 — `.env.example`** no longer ships an active `COOKIE_SECURE=false`.
+- **SI-22 — session decrypt** failure returns `None` (clean re-login) instead of a 500.
+
+**Exit criteria:**
+- [x] Backend `ruff` clean, `pytest -q` non-DB suite green (310 passed). Frontend `lint` + `tsc` + `test:run` + `build` clean.
+- [ ] PR reviewed; CI green; prod deploy verified. *(paused for operator go-ahead before tag/release, per the slice workflow.)*
+- [ ] `CHANGELOG.md` `[1.0.4]`; tag `v1.0.4`; release.
+
+---
+
+## v1.0.5 — Ingest amplification containment (planned)
+
+**Goal:** The heavier half of the 2026-07-24 audit's cost & availability cluster (Workstream C) — split out of v1.0.4 so the hottest code (GitHub client, ingest path, narrative service) gets its own review/verify cycle.
+
+**Planned scope (from the audit):**
+- **SI-03** — hard cap total GitHub calls per analysis + shared-token quota breaker for the anon path.
+- **SI-06** — cap `Retry-After` sleep, bound cumulative backoff, parse HTTP-date safely, add an ingest wall-clock deadline.
+- **SI-07** — singleflight narrative generation keyed on the cache key; refund the budget slot on mid-stream abort.
+- **SI-08** — OG/card server fetches forward `x-client-ip` + `x-internal-secret` so they're attributed and limited.
+- **SI-09** — size the singleflight lock TTL to the new ingest deadline.
+
+**Exit criteria:** _(to be written into a v1.0.5 design spec before implementation.)_
 
 ---
 
