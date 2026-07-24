@@ -148,6 +148,7 @@ Backend `logger.warning` lines only (log-only, matching the rate-limit approach)
 | `analyze.call_cap_exceeded` | warn | One analysis exceeded `gh_max_calls_per_analysis` live GitHub calls → 503 `analysis_too_large` (SI-03) | _(none)_ |
 | `analyze.ingest_deadline` | warn | An ingest exceeded `analyze_ingest_deadline_seconds` → 503 `analysis_timeout` (SI-06) | _(none)_ |
 | `narrative.budget.refunded_on_abort` | warn | A client aborted the SSE stream mid-generation; one consumed LLM budget slot was refunded (SI-07) | _(none)_ |
+| `analyze.shared_token_breaker` | warn | A new anonymous analysis was shed (503 `service_busy`) because the shared GitHub token's remaining quota was below `gh_shared_token_min_remaining` (v1.0.6 SI-03 ext) | _(none)_ |
 
 ## Session Replay (v1.0.1)
 
