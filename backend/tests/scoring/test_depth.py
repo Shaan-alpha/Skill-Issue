@@ -106,3 +106,14 @@ async def test_staff_tier_adds_commit_quality_and_cross_repo() -> None:
     assert isinstance(profile.commit_message_quality, int)
     assert 0 <= profile.commit_message_quality <= 100
     assert profile.cross_repo_contribution_count == 12
+
+
+def test_commit_message_quality_bounds_and_edge_cases() -> None:
+    from app.scoring.depth import _commit_message_quality
+
+    assert _commit_message_quality(["feat: add thing"]) == 100  # conventional
+    assert _commit_message_quality(["x" * 60]) == 100  # long first line
+    assert _commit_message_quality([""]) == 0  # empty must not IndexError
+    # Pathological long/scope message: no crash, bounded processing.
+    huge = "feat(" + "a" * 10_000 + "): " + "z" * 100_000
+    assert isinstance(_commit_message_quality([huge]), int)
