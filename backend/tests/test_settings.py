@@ -64,3 +64,17 @@ def test_secrets_not_in_repr(monkeypatch):
     assert "ghp_SUPERSECRET" not in r
     assert "sk-SUPERSECRET" not in r
     assert "cronSUPERSECRET" not in r
+
+
+def test_cors_wildcard_rejected():
+    import pytest
+    from pydantic import ValidationError
+
+    # A credentialed wildcard origin is the classic CORS hole; refuse it at boot.
+    with pytest.raises(ValidationError):
+        Settings(cors_allow_origins="https://ok.com,*")
+
+
+def test_cors_normal_origins_ok():
+    s = Settings(cors_allow_origins="https://ok.com,https://also.com")
+    assert "ok.com" in s.cors_allow_origins

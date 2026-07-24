@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 VERSION = "1.0.6"
@@ -145,6 +145,18 @@ class Settings(BaseSettings):
     # (pool_size + max_overflow) x peak_instances < 105.
     db_pool_size: int = 5
     db_max_overflow: int = 5
+
+    @model_validator(mode="after")
+    def _reject_credentialed_cors_wildcard(self) -> "Settings":
+        # v1.0.7 SI-14: CORS runs with allow_credentials=True, so a `*` origin
+        # would reflect the request Origin + credentials — the classic hole.
+        # Refuse it at boot instead of silently shipping it.
+        if any(o.strip() == "*" for o in self.cors_allow_origins.split(",")):
+            raise ValueError(
+                "CORS_ALLOW_ORIGINS must not contain '*' (credentials are enabled); "
+                "list explicit https origins."
+            )
+        return self
 
 
 settings = Settings()
