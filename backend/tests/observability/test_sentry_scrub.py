@@ -28,6 +28,32 @@ def test_scrub_removes_authorization_header():
     assert scrubbed["request"]["headers"] == {}
 
 
+def test_scrub_strips_internal_and_ip_headers():
+    event = {
+        "request": {
+            "headers": {
+                "X-Internal-Secret": "supersecret",
+                "X-Revalidate-Secret": "revsecret",
+                "X-Client-IP": "9.9.9.9",
+                "X-Forwarded-For": "9.9.9.9",
+                "X-Real-IP": "9.9.9.9",
+                "Accept": "application/json",
+            }
+        }
+    }
+    out = scrub_event(copy.deepcopy(event), {})
+    headers = out["request"]["headers"]
+    assert "Accept" in headers
+    for gone in (
+        "X-Internal-Secret",
+        "X-Revalidate-Secret",
+        "X-Client-IP",
+        "X-Forwarded-For",
+        "X-Real-IP",
+    ):
+        assert gone not in headers
+
+
 def test_scrub_removes_set_cookie_response_header():
     event = {
         "extra": {
