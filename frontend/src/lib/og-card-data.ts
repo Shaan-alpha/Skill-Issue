@@ -1,5 +1,6 @@
 import "server-only";
 import { cacheLife, cacheTag } from "next/cache";
+import { headers } from "next/headers";
 import type { Report, SharedAnalysisPayload } from "@/types";
 
 function backendBase(): string {
@@ -10,10 +11,23 @@ function backendBase(): string {
 }
 
 export async function fetchReportForUser(username: string): Promise<Report | null> {
+  // v1.0.5 SI-08: attribute proxied OG/card ingests to the real visitor IP and
+  // carry the internal proxy secret, so these unauthenticated routes are subject
+  // to the anon /analyze limiter instead of the shared Vercel-egress bucket.
+  const h = await headers();
+  const clientIp = (
+    h.get("x-forwarded-for")?.split(",")[0] ??
+    h.get("x-real-ip") ??
+    ""
+  ).trim();
+  const fwd: Record<string, string> = {};
+  const secret = process.env.INTERNAL_PROXY_SECRET; // server-only, never NEXT_PUBLIC
+  if (secret) fwd["x-internal-secret"] = secret;
+  if (clientIp) fwd["x-client-ip"] = clientIp;
   try {
     const r = await fetch(
       `${backendBase()}/analyze/${encodeURIComponent(username)}`,
-      { cache: "no-store" },
+      { cache: "no-store", headers: fwd },
     );
     if (!r.ok) return null;
     return (await r.json()) as Report;
