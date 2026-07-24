@@ -139,6 +139,16 @@ Backend emits structured `logger.warning` lines only — no Sentry capture, no P
 | `narrative.budget.degraded_local` | warn | The LLM daily budget used the in-process fallback because Redis errored (v1.0.4 SI-01) | `reason=redis_error` |
 | `session.decrypt_failed` | warn | A session's stored token failed to decrypt (key rotation / corrupt row); the session is treated as invalid → clean re-login (v1.0.4 SI-22) | _(none — no id or ciphertext logged)_ |
 
+### Ingest containment taxonomy (v1.0.5)
+
+Backend `logger.warning` lines only (log-only, matching the rate-limit approach). No username/IP in the body.
+
+| Event | Level | Fired when | Fields |
+| --- | --- | --- | --- |
+| `analyze.call_cap_exceeded` | warn | One analysis exceeded `gh_max_calls_per_analysis` live GitHub calls → 503 `analysis_too_large` (SI-03) | _(none)_ |
+| `analyze.ingest_deadline` | warn | An ingest exceeded `analyze_ingest_deadline_seconds` → 503 `analysis_timeout` (SI-06) | _(none)_ |
+| `narrative.budget.refunded_on_abort` | warn | A client aborted the SSE stream mid-generation; one consumed LLM budget slot was refunded (SI-07) | _(none)_ |
+
 ## Session Replay (v1.0.1)
 
 Frontend Sentry records a masked DOM replay of sessions, so an error report

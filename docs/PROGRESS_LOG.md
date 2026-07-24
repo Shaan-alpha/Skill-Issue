@@ -19,6 +19,17 @@ Format:
 
 ---
 
+## 2026-07-24 — Claude (Opus 4.8) with Shaan — v1.0.5: ingest amplification containment (cores)
+
+**Slice:** v1.0.5 (implemented, unreleased/untagged — paused for operator go-ahead)
+**Done:** Second remediation slice from the 2026-07-24 audit (Workstream C). Ran an exhaustive 4-agent map of the ingest surface first (fan-out, client retry/breaker, narrative abort-drift, OG attribution) — cross-check caught a mapper arithmetic error (claimed ~128 calls/analysis; the correct worst case is **~98**, base 56 + Professional 30 + Senior 6 + Staff 6). Shipped the 5 **cores**, deferred 3 complex **extensions** to v1.0.6 (user's scope call). Each TDD: SI-03 per-analysis live-call cap (150) at `GitHubClient._request` → 503; SI-06 capped/HTTP-date-safe `Retry-After` + `429` handling + a `_live_ingest_bounded` 45s deadline → 503; SI-07 `DailyBudget.arefund` + `try/except GeneratorExit` in the SSE router (refund only when truly consumed; `consumed_day` on meta guards the midnight edge); SI-08 `fetchReportForUser` forwards `x-client-ip`+`x-internal-secret`; SI-09 `RedisCache.delete_if_equals` holder-checked release + `TTL_LOCK_SECONDS` 30→60. Backend `321 passed` (70 DB-skipped), frontend lint/tsc/70 tests/build clean.
+**Decisions:** Cores-only scope (defer breaker, SSE stream-coalescing, OG store-gating to v1.0.6) — each extension carries real complexity or a product-behavior change. SI-08's `"use cache"` dedup was dropped because Next 16 `"use cache"` can't read request-time `headers()` (incompatible with the attribution forward); backend 6h report cache + 300s OG `s-maxage` already dedup. Cap set at 150 (~1.5× the ~98 legit max) so no real account trips it.
+**Learned / surprises:** The depth-enrichment `asyncio.gather`s in `scoring/depth.py` bypass the ingest semaphore entirely (a 30-call burst for Professional+). The singleflight release was an *unconditional* delete (holder_id generated but never checked), so a slow holder could delete a successor's lock — SI-09 was worse than "duplicate ingest".
+**Blocked / open:** PR → CI (note: `npm audit` gate still at `critical`) → prod-verify, then tag `v1.0.5` — **paused for operator go-ahead**. v1.0.6 extensions pre-registered in PLAN.md.
+**Next:** Open the PR; after prod-verify + release, decide whether to pick up v1.0.6 or the deferred low/info audit items.
+
+---
+
 ## 2026-07-24 — Claude (Opus 4.8) with Shaan — CI: temporarily lower npm-audit gate to `critical` (unpatched Next.js CVEs)
 
 **Slice:** chore(ci) — unblocks all PRs, incl. v1.0.4

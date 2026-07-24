@@ -33,7 +33,7 @@ REPORT_SCHEMA_VERSION = 1
 # --- TTLs (seconds) ---
 
 TTL_REPORT_SECONDS = 21_600  # 6 hours
-TTL_LOCK_SECONDS = 30  # singleflight lock — outlives a real ingest
+TTL_LOCK_SECONDS = 60  # singleflight lock — outlives the ANALYZE_INGEST_DEADLINE (v1.0.5 SI-09)
 TTL_NARRATIVE_SECONDS = 86_400  # 24 hours
 TTL_BUDGET_KEY_SECONDS = 90_000  # 25 hours — outlives the UTC day rollover
 

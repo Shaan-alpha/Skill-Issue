@@ -95,3 +95,18 @@ class DailyBudget:
 
         remaining = max(self._limit - gcount, 0)
         return True, remaining, resets
+
+    async def arefund(self, *, subject: str | None = None, consumed_day: str | None = None) -> None:
+        """Give back a slot consumed by atry_consume (v1.0.5 SI-07) — e.g. when a
+        client aborts the SSE stream before the narrative was produced.
+        Decrements the SAME day key(s) that were consumed; `consumed_day`
+        (captured at consume time) guards a refund landing across the UTC
+        midnight rollover from mis-decrementing the wrong day."""
+        if self._redis is None:
+            with self._lock:
+                self._remaining = min(self._remaining + 1, self._limit)
+            return
+        day = consumed_day or self._utc_day(self._clock())
+        await self._redis.decr(NAMESPACE_BUDGET, f"narrative:{day}")
+        if subject is not None:
+            await self._redis.decr(NAMESPACE_BUDGET, f"narrative:{subject}:{day}")

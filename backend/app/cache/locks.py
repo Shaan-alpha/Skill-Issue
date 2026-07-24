@@ -64,7 +64,7 @@ async def singleflight(
         finally:
             # Best-effort release. Even if delete fails (Redis unreachable),
             # the TTL guarantees the lock eventually clears.
-            await cache.delete(NAMESPACE_LOCK, lock_key)
+            await cache.delete_if_equals(NAMESPACE_LOCK, lock_key, holder_id)
         return
 
     # Someone else holds the lock — wait for them.
@@ -77,7 +77,7 @@ async def singleflight(
             try:
                 yield True
             finally:
-                await cache.delete(NAMESPACE_LOCK, lock_key)
+                await cache.delete_if_equals(NAMESPACE_LOCK, lock_key, holder_id)
             return
 
     logger.warning(

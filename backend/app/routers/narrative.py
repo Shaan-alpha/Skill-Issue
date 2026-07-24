@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Annotated, Literal
 from urllib.parse import urlparse
@@ -23,6 +24,8 @@ from app.persistence.analyses import record_run, upsert_analysis
 from app.persistence.narratives import save_narrative
 from app.ratelimit import narrative_rate_limiter, resolve_budget_subject
 from app.settings import settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["narrative"])
 
@@ -84,12 +87,21 @@ async def get_narrative(
         acc: list[str] = []
         meta = NarrativeStreamMeta()
         started_at = datetime.now(UTC)
-        async for chunk in service.stream_narrative(
-            typed_mode, report, meta=meta, subject=subject, subject_limit=subject_limit
-        ):
-            acc.append(chunk)
-            payload = json.dumps({"chunk": chunk})
-            yield f"data: {payload}\n\n"
+        try:
+            async for chunk in service.stream_narrative(
+                typed_mode, report, meta=meta, subject=subject, subject_limit=subject_limit
+            ):
+                acc.append(chunk)
+                payload = json.dumps({"chunk": chunk})
+                yield f"data: {payload}\n\n"
+        except GeneratorExit:
+            # Client aborted mid-stream (v1.0.5 SI-07): refund the LLM slot IFF
+            # one was truly consumed — not on a cache hit, not on the budget
+            # fallback (nothing consumed there).
+            if not meta.cache_hit and meta.fallback_reason != "budget":
+                logger.warning("narrative.budget.refunded_on_abort")
+                await service.refund(subject=subject, consumed_day=meta.consumed_day)
+            raise
 
         # Skip the persist branch for cross-site navigations (CSRF): this is a
         # GET with a SameSite=Lax cookie, so a top-level navigation from another

@@ -93,3 +93,11 @@ async def test_decr_after_incr(fake_cache) -> None:
     await fake_cache.incr("budget", "k")
     await fake_cache.incr("budget", "k")
     assert await fake_cache.decr("budget", "k") == 1
+
+
+@pytest.mark.asyncio
+async def test_delete_if_equals_only_on_match(fake_cache) -> None:
+    await fake_cache.set_nx("lock", "k", "holderA", ttl_seconds=60)
+    assert await fake_cache.delete_if_equals("lock", "k", "holderZ") is False  # mismatch
+    assert await fake_cache.delete_if_equals("lock", "k", "holderA") is True  # match
+    assert await fake_cache.delete_if_equals("lock", "k", "holderA") is False  # already gone

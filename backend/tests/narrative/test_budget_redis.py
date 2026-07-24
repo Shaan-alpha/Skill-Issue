@@ -63,3 +63,30 @@ async def test_redis_error_falls_back_to_in_process(fake_cache: RedisCache, fake
     assert (await b.atry_consume(subject="ip:z", subject_limit=1))[0] is True  # in-process 1/2
     assert (await b.atry_consume(subject="ip:z", subject_limit=1))[0] is True  # in-process 2/2
     assert (await b.atry_consume(subject="ip:z", subject_limit=1))[0] is False  # 3 > 2
+
+
+@pytest.mark.asyncio
+async def test_arefund_nets_zero_after_consume(fake_cache: RedisCache) -> None:
+    from datetime import UTC, datetime
+
+    from app.narrative.budget import DailyBudget
+
+    b = DailyBudget(
+        limit=100, clock=lambda: datetime(2026, 7, 24, 12, tzinfo=UTC), redis=fake_cache
+    )
+    await b.atry_consume(subject="ip:1.2.3.4", subject_limit=10)  # global=1, subject=1
+    await b.arefund(subject="ip:1.2.3.4", consumed_day="2026-07-24")  # both back to 0
+    # A fresh subject consuming should see remaining == limit-1 (proves global refunded).
+    _allowed, remaining, _resets = await b.atry_consume(subject="ip:9.9.9.9", subject_limit=10)
+    assert remaining == 99
+
+
+@pytest.mark.asyncio
+async def test_arefund_in_process_reincrements() -> None:
+    from app.narrative.budget import DailyBudget
+
+    b = DailyBudget(limit=1)  # no redis -> in-process
+    assert (await b.atry_consume())[0] is True
+    assert (await b.atry_consume())[0] is False  # exhausted
+    await b.arefund()
+    assert (await b.atry_consume())[0] is True  # slot restored

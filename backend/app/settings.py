@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-VERSION = "1.0.4"
+VERSION = "1.0.5"
 
 
 class Settings(BaseSettings):
@@ -82,6 +82,17 @@ class Settings(BaseSettings):
     # analysis well inside GitHub's secondary rate-limit threshold. Override
     # via env GH_INGEST_CONCURRENCY without a redeploy.
     gh_ingest_concurrency: int = 8
+
+    # v1.0.5 — ingest amplification containment.
+    # SI-03: hard cap on live GitHub calls per analysis. ~1.5x the ~98 legit
+    # worst case (Staff-tier cold ingest), so no real account trips it — only a
+    # runaway/abusive fan-out does. Cache hits are NOT counted.
+    gh_max_calls_per_analysis: int = 150
+    # SI-06: ceiling on a single GitHub 403/429 Retry-After sleep (seconds).
+    github_retry_after_ceiling_seconds: float = 10.0
+    # SI-06: wall-clock deadline for one /analyze ingest+scoring (seconds).
+    # Above a legit cold ingest, well below Vercel's 300s function timeout.
+    analyze_ingest_deadline_seconds: float = 45.0
 
     # v0.8.6 — on-demand /share/[slug] ISR revalidation
     # FRONTEND_BASE_URL: backend posts to {FRONTEND_BASE_URL}/api/revalidate

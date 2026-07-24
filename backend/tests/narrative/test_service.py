@@ -187,3 +187,18 @@ async def test_stream_meta_flags_cache_hit() -> None:
     assert meta.cache_hit is True
     assert meta.is_fallback is False
     assert llm.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_refund_delegates_to_budget() -> None:
+    from app.narrative.service import NarrativeService
+
+    calls: dict[str, tuple] = {}
+
+    class _Budget:
+        async def arefund(self, *, subject=None, consumed_day=None):
+            calls["args"] = (subject, consumed_day)
+
+    svc = NarrativeService(cache=object(), budget=_Budget(), llm=object())
+    await svc.refund(subject="ip:1.2.3.4", consumed_day="2026-07-24")
+    assert calls["args"] == ("ip:1.2.3.4", "2026-07-24")

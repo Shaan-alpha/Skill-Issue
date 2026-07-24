@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from typing import TYPE_CHECKING, Any, Self
 
 import httpx
@@ -46,12 +48,39 @@ class _CachedResponse:
             )
 
 
+class GitHubCallCapExceeded(Exception):
+    """Raised when a single analysis exceeds its per-analysis live-call cap
+    (v1.0.5 SI-03). One GitHubClient is built per analysis, so its live-call
+    counter bounds the fan-out of that analysis."""
+
+    def __init__(self, count: int, cap: int) -> None:
+        super().__init__(f"GitHub call cap exceeded: {count} > {cap}")
+        self.count = count
+        self.cap = cap
+
+
+def _retry_after_seconds(resp: httpx.Response, *, ceiling: float) -> float:
+    """Parse a Retry-After header (delta-seconds OR RFC-7231 HTTP-date) into a
+    bounded sleep. Never raises; caps at `ceiling` (v1.0.5 SI-06)."""
+    raw = resp.headers.get("Retry-After", "1")
+    try:
+        secs = float(raw)
+    except ValueError:
+        try:
+            dt = parsedate_to_datetime(raw)
+            secs = max(0.0, (dt - datetime.now(UTC)).total_seconds())
+        except (TypeError, ValueError):
+            secs = 1.0
+    return min(max(secs, 0.0), ceiling)
+
+
 class GitHubClient:
     def __init__(
         self,
         token: str | None = None,
         *,
         max_retries: int = 3,
+        max_calls: int | None = None,
         cache: RedisCache | None = None,
     ) -> None:
         headers: dict[str, str] = {
@@ -63,6 +92,8 @@ class GitHubClient:
             headers["Authorization"] = f"Bearer {token}"
         self._client = httpx.AsyncClient(headers=headers, timeout=20.0, http2=True)
         self._max_retries = max_retries
+        self._max_calls = max_calls
+        self._live_calls = 0
         self._cache = cache
 
     async def __aenter__(self) -> Self:
@@ -89,13 +120,24 @@ class GitHubClient:
             if cached is not None:
                 return _CachedResponse(status_code=cached["status"], json_body=cached["body"])
 
+        # v1.0.5 SI-03: count only live calls (cache hits returned above are
+        # free) and hard-cap per-analysis fan-out. One GitHubClient == one
+        # analysis, so this instance counter bounds the analysis.
+        if self._max_calls is not None:
+            self._live_calls += 1
+            if self._live_calls > self._max_calls:
+                raise GitHubCallCapExceeded(self._live_calls, self._max_calls)
+
         # Live request with existing retry/rate-limit logic.
         resp: httpx.Response | None = None
         for _attempt in range(self._max_retries):
             resp = await self._client.request(method, url, **kwargs)
-            if resp.status_code == 403 and "rate limit" in resp.text.lower():
-                retry_after = float(resp.headers.get("Retry-After", "1"))
-                await asyncio.sleep(retry_after)
+            is_rl_403 = resp.status_code == 403 and "rate limit" in resp.text.lower()
+            # v1.0.5 SI-06: also honor a plain 429; cap the sleep; parse an
+            # HTTP-date Retry-After safely instead of crashing on float().
+            if is_rl_403 or resp.status_code == 429:
+                ceiling = settings.github_retry_after_ceiling_seconds
+                await asyncio.sleep(_retry_after_seconds(resp, ceiling=ceiling))
                 continue
             break
         assert resp is not None  # max_retries >= 1, so the loop body ran at least once
