@@ -42,3 +42,10 @@ def test_v1_0_4_cost_control_defaults():
     assert s.narrative_user_daily_limit == 40
     assert s.trusted_client_ip_header == "x-forwarded-for"
     assert s.analyze_unattributed_per_hour == 300
+
+
+def test_v1_0_5_amplification_defaults():
+    s = Settings()
+    assert s.gh_max_calls_per_analysis == 150
+    assert s.github_retry_after_ceiling_seconds == 10.0
+    assert s.analyze_ingest_deadline_seconds == 45.0
