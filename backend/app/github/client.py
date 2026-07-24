@@ -9,7 +9,13 @@ from typing import TYPE_CHECKING, Any, Self
 
 import httpx
 
-from app.cache.keys import NAMESPACE_GH, gh_request_key, ttl_for_gh_endpoint
+from app.cache.keys import (
+    GH_SHARED_QUOTA_KEY,
+    NAMESPACE_GH,
+    TTL_SHARED_QUOTA_SECONDS,
+    gh_request_key,
+    ttl_for_gh_endpoint,
+)
 from app.settings import VERSION, settings
 
 if TYPE_CHECKING:
@@ -74,6 +80,35 @@ def _retry_after_seconds(resp: httpx.Response, *, ceiling: float) -> float:
     return min(max(secs, 0.0), ceiling)
 
 
+# v1.0.6: only track the shared token's remaining quota once it dips below this,
+# so normal high-quota traffic writes nothing.
+_SHARED_QUOTA_WATCH = 1000
+
+
+async def record_shared_quota(cache: RedisCache, remaining: int) -> None:
+    """Best-effort write of the shared token's low-water remaining quota."""
+    try:
+        await cache.set_json(
+            NAMESPACE_GH,
+            GH_SHARED_QUOTA_KEY,
+            {"remaining": remaining},
+            ttl_seconds=TTL_SHARED_QUOTA_SECONDS,
+        )
+    except Exception:
+        logger.warning("failed to record shared GitHub quota", exc_info=True)
+
+
+async def shared_token_quota_ok(cache: RedisCache | None, *, min_remaining: int) -> bool:
+    """True when it's safe to start a new shared-token analysis. Fail-open when
+    the cache is unavailable or no low-water mark exists (quota is high)."""
+    if cache is None:
+        return True
+    data = await cache.get_json(NAMESPACE_GH, GH_SHARED_QUOTA_KEY)
+    if not data:
+        return True
+    return int(data.get("remaining", min_remaining)) >= min_remaining
+
+
 class GitHubClient:
     def __init__(
         self,
@@ -81,6 +116,7 @@ class GitHubClient:
         *,
         max_retries: int = 3,
         max_calls: int | None = None,
+        is_shared_token: bool = False,
         cache: RedisCache | None = None,
     ) -> None:
         headers: dict[str, str] = {
@@ -94,6 +130,7 @@ class GitHubClient:
         self._max_retries = max_retries
         self._max_calls = max_calls
         self._live_calls = 0
+        self._is_shared_token = is_shared_token
         self._cache = cache
 
     async def __aenter__(self) -> Self:
@@ -141,6 +178,19 @@ class GitHubClient:
                 continue
             break
         assert resp is not None  # max_retries >= 1, so the loop body ran at least once
+
+        # v1.0.6: record the shared token's remaining quota when it dips low, so
+        # the breaker can shed new anon analyses before exhaustion. Only writes
+        # below the watch threshold — high-quota traffic is free.
+        if self._is_shared_token and self._cache is not None:
+            remaining = resp.headers.get("X-RateLimit-Remaining")
+            if remaining is not None:
+                try:
+                    rem: int | None = int(remaining)
+                except ValueError:
+                    rem = None
+                if rem is not None and rem < _SHARED_QUOTA_WATCH:
+                    await record_shared_quota(self._cache, rem)
 
         # Cache successful + permanently-failed responses; skip transient errors.
         if (
