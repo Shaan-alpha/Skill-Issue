@@ -19,6 +19,17 @@ Format:
 
 ---
 
+## 2026-07-24 — Claude (Opus 4.8) with Shaan — CI: temporarily lower npm-audit gate to `critical` (unpatched Next.js CVEs)
+
+**Slice:** chore(ci) — unblocks all PRs, incl. v1.0.4
+**Done:** A batch of high-severity Next.js advisories (middleware/proxy bypass, Server Action DoS/SSRF, cache confusion, image-opt DoS, internal Server Function disclosure) plus its bundled `postcss`/`sharp` was disclosed with **no patched stable release available** — `npm audit fix` only offers a semver-major downgrade to `next@9.3.3`. The `npm audit --audit-level=high` CI gate went red on the current lockfile (pre-existing on `main`, not introduced by any PR), blocking every merge. Lowered the gate to `--audit-level=critical` with an inline restore-TODO in `.github/workflows/ci.yml`.
+**Decisions:** Exposure assessment for this app found no meaningful risk from the blocking advisories: **no Server Actions** (`grep "use server"` → none; all mutations go to the external FastAPI backend), **no middleware**, **no i18n/locales**, **no `rewrites`** in `next.config.ts`/`vercel.ts`, and **Image Optimization is locked to `avatars.githubusercontent.com`** with `dangerouslyAllowSVG` off — so no attacker-controlled images/SVGs reach the optimizer. `postcss` runs build-time on first-party CSS. So relaxing to `critical` is a documented, low-risk interim posture, not a blanket gate removal (criticals still block).
+**Learned / surprises:** The `npm audit` gate is time-sensitive — freshly-published advisories flip it red with zero code change. A patched Next.js isn't out yet (no stable ≥16.3 / 17; latest is 16.2.11, still in the vulnerable range).
+**Blocked / open:** **RESTORE `--audit-level=high`** once Next.js ships a patched release and `frontend/package.json` is bumped. Track the Next.js advisories for a fixed version.
+**Next:** Merge this chore PR → main; then bring main into the v1.0.4 PR (#34) so its CI re-runs green.
+
+---
+
 ## 2026-07-24 — Claude (Opus 4.8) with Shaan — v1.0.4: cost-control fairness & hardening from a full security audit
 
 **Slice:** v1.0.4 (implemented, unreleased/untagged — paused for operator go-ahead)
