@@ -23,6 +23,7 @@ class _AsyncRedisProtocol(Protocol):
     ) -> bool | str | None: ...
     async def delete(self, *keys: str) -> int: ...
     async def incr(self, key: str) -> int: ...
+    async def decr(self, key: str) -> int: ...
     async def expire(self, key: str, seconds: int) -> bool: ...
     async def ping(self) -> str: ...
 
@@ -105,6 +106,17 @@ class RedisCache:
             return await self._redis.incr(full)
         except Exception:
             logger.warning("cache INCR failed for %s", full, exc_info=True)
+            return 0
+
+    async def decr(self, namespace: str, key: str) -> int:
+        """Atomic DECR. Returns 0 on Redis failure (conservative — used to
+        release a reservation, so a failed release just leaves the counter
+        slightly high until the daily TTL clears it)."""
+        full = self._build_key(namespace, key)
+        try:
+            return await self._redis.decr(full)
+        except Exception:
+            logger.warning("cache DECR failed for %s", full, exc_info=True)
             return 0
 
     async def expire(self, namespace: str, key: str, seconds: int) -> bool:

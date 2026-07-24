@@ -21,7 +21,7 @@ from app.models import Report
 from app.narrative.service import NarrativeService, NarrativeStreamMeta
 from app.persistence.analyses import record_run, upsert_analysis
 from app.persistence.narratives import save_narrative
-from app.ratelimit import narrative_rate_limiter
+from app.ratelimit import narrative_rate_limiter, resolve_budget_subject
 from app.settings import settings
 
 router = APIRouter(tags=["narrative"])
@@ -78,11 +78,15 @@ async def get_narrative(
 
     typed_mode: Literal["roast", "mentor"] = "roast" if mode == "roast" else "mentor"
 
+    subject, subject_limit = resolve_budget_subject(request, session)
+
     async def event_generator() -> AsyncIterator[str]:
         acc: list[str] = []
         meta = NarrativeStreamMeta()
         started_at = datetime.now(UTC)
-        async for chunk in service.stream_narrative(typed_mode, report, meta=meta):
+        async for chunk in service.stream_narrative(
+            typed_mode, report, meta=meta, subject=subject, subject_limit=subject_limit
+        ):
             acc.append(chunk)
             payload = json.dumps({"chunk": chunk})
             yield f"data: {payload}\n\n"

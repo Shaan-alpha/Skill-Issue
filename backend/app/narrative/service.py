@@ -55,6 +55,8 @@ class NarrativeService:
         report: Report,
         *,
         meta: NarrativeStreamMeta | None = None,
+        subject: str | None = None,
+        subject_limit: int | None = None,
     ) -> AsyncIterator[str]:
         # 1. Check cache
         cache_key = self._cache.key(report.username, self._cache.scores_hash(report), mode)
@@ -67,7 +69,9 @@ class NarrativeService:
             return
 
         # 2. Check budget
-        allowed, _remaining, _resets_at = await self._budget.atry_consume()
+        allowed, _remaining, _resets_at = await self._budget.atry_consume(
+            subject=subject, subject_limit=subject_limit
+        )
         if not allowed:
             logger.warning(
                 f"Daily OpenAI budget exhausted. Using fallback narrative for {report.username} ({mode})"
