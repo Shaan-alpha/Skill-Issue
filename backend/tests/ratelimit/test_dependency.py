@@ -47,14 +47,19 @@ async def test_signed_in_uses_user_limit_not_ip(monkeypatch, fake_cache):
     assert exc.value.status_code == 429
 
 
-async def test_analyze_skips_anon_enforcement_when_secret_unset(monkeypatch, fake_cache):
+async def test_analyze_secret_unset_uses_unattributed_backstop(monkeypatch, fake_cache):
+    # SI-05: secret unset no longer SKIPS anon /analyze — it falls back to a
+    # conservative shared `ip:unattributed` backstop, so a direct attacker is
+    # still capped (fail-closed, not fail-open).
     monkeypatch.setattr("app.ratelimit.get_cache", lambda: fake_cache)
     monkeypatch.setattr(settings_module.settings, "internal_proxy_secret", None)
-    monkeypatch.setattr(settings_module.settings, "analyze_anon_per_ip_per_hour", 1)
-    req = make_request({"x-real-ip": "1.1.1.1"})
-    # Way past the cap of 1, but enforcement is skipped → never raises.
-    for _ in range(5):
+    monkeypatch.setattr(settings_module.settings, "analyze_unattributed_per_hour", 2)
+    req = make_request({"x-forwarded-for": "1.2.3.4"})
+    await analyze_rate_limiter(req, session=None)
+    await analyze_rate_limiter(req, session=None)
+    with pytest.raises(HTTPException) as exc:
         await analyze_rate_limiter(req, session=None)
+    assert exc.value.status_code == 429
 
 
 async def test_narrative_enforces_anon_even_without_secret(monkeypatch, fake_cache):

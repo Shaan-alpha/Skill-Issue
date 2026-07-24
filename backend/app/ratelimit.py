@@ -104,14 +104,22 @@ def make_rate_limiter(
             subject_type = "user"
         else:
             if via_trusted_proxy and not settings.internal_proxy_secret:
+                # SI-05: fail CLOSED to a conservative shared backstop instead of
+                # skipping. Proxied anon /analyze arrives from the Vercel-infra
+                # egress IP, so a shared bucket avoids collapsing real visitors
+                # into strict per-IP throttling while still capping total volume.
                 logger.warning(
-                    "rate_limit.skipped name=%s reason=internal_proxy_secret_unset", name
+                    "rate_limit.unattributed_backstop name=%s reason=internal_proxy_secret_unset",
+                    name,
                 )
-                return
-            ip = client_ip(request, trusted_proxy=is_trusted_proxy(request))
-            subject = f"ip:{ip}"
-            limit = getattr(settings, anon_limit_field)
-            subject_type = "ip"
+                subject = "ip:unattributed"
+                limit = settings.analyze_unattributed_per_hour
+                subject_type = "unattributed"
+            else:
+                ip = client_ip(request, trusted_proxy=is_trusted_proxy(request))
+                subject = f"ip:{ip}"
+                limit = getattr(settings, anon_limit_field)
+                subject_type = "ip"
 
         now = datetime.now(UTC)
         result = await try_increment_counter(
