@@ -87,3 +87,21 @@ async def test_call_cap_exceeded_maps_to_503(monkeypatch):
         await deps._live_ingest("octocat", None, cache=None)
     assert exc.value.status_code == 503
     assert exc.value.detail["error"] == "analysis_too_large"
+
+
+async def test_ingest_deadline_maps_to_503(monkeypatch):
+    import asyncio
+
+    from fastapi import HTTPException
+
+    import app.dependencies as deps
+
+    async def _slow(username, session, cache):
+        await asyncio.sleep(1.0)
+
+    monkeypatch.setattr(deps, "_live_ingest", _slow)
+    monkeypatch.setattr(deps.settings, "analyze_ingest_deadline_seconds", 0.05, raising=False)
+    with pytest.raises(HTTPException) as exc:
+        await deps._live_ingest_bounded("octocat", None, cache=None)
+    assert exc.value.status_code == 503
+    assert exc.value.detail["error"] == "analysis_timeout"

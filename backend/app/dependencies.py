@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import re
@@ -108,7 +109,7 @@ async def get_report_for_user(
                 # Lock holder timed out or returned bad data — fall through
                 # to a live ingest, no lock held.
 
-            report = await _live_ingest(username, session, cache)
+            report = await _live_ingest_bounded(username, session, cache)
 
             # Populate the cache for next time.
             try:
@@ -124,7 +125,25 @@ async def get_report_for_user(
             return report
 
     # No cache configured — original behaviour.
-    return await _live_ingest(username, session, cache=None)
+    return await _live_ingest_bounded(username, session, cache=None)
+
+
+async def _live_ingest_bounded(
+    username: str,
+    session: "_ResolvedSession | None",
+    cache: RedisCache | None,
+) -> Report:
+    """`_live_ingest` under a wall-clock deadline (v1.0.5 SI-06). On timeout,
+    503 and release the worker + DB connection rather than sleeping for minutes
+    under GitHub rate-limit backpressure."""
+    try:
+        return await asyncio.wait_for(
+            _live_ingest(username, session, cache),
+            timeout=settings.analyze_ingest_deadline_seconds,
+        )
+    except TimeoutError:
+        logger.warning("analyze.ingest_deadline")
+        raise HTTPException(status_code=503, detail={"error": "analysis_timeout"}) from None
 
 
 async def _live_ingest(

@@ -435,3 +435,18 @@ async def test_call_cap_raises_after_max_live_calls() -> None:
         await gh.get_user("b")  # 2
         with pytest.raises(GitHubCallCapExceeded):
             await gh.get_user("c")  # 3 > cap
+
+
+def test_retry_after_seconds_caps_and_parses() -> None:
+    from httpx import Request, Response
+
+    from app.github.client import _retry_after_seconds
+
+    def _resp(v: str) -> Response:
+        return Response(429, headers={"Retry-After": v}, request=Request("GET", "http://x"))
+
+    assert _retry_after_seconds(_resp("3"), ceiling=10.0) == 3.0
+    assert _retry_after_seconds(_resp("999"), ceiling=10.0) == 10.0  # capped
+    # HTTP-date / garbage must not crash and stays bounded by the ceiling.
+    assert _retry_after_seconds(_resp("Wed, 21 Oct 2099 07:28:00 GMT"), ceiling=10.0) == 10.0
+    assert _retry_after_seconds(_resp("not-a-number"), ceiling=10.0) <= 10.0
