@@ -53,3 +53,14 @@ def test_v1_0_5_amplification_defaults():
 
 def test_v1_0_6_breaker_default():
     assert Settings().gh_shared_token_min_remaining == 500
+
+
+def test_secrets_not_in_repr(monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "ghp_SUPERSECRET")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-SUPERSECRET")
+    monkeypatch.setenv("SESSION_TOKEN_ENC_KEY", "A" * 44)
+    monkeypatch.setenv("CRON_SECRET", "cronSUPERSECRET")
+    r = repr(Settings())
+    assert "ghp_SUPERSECRET" not in r
+    assert "sk-SUPERSECRET" not in r
+    assert "cronSUPERSECRET" not in r
