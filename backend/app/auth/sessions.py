@@ -1,16 +1,24 @@
 from __future__ import annotations
 
+import logging
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from sqlalchemy import delete, select, update
 
-from app.auth.crypto import decrypt_access_token, encrypt_access_token, load_enc_key
+from app.auth.crypto import (
+    InvalidEncKey,
+    decrypt_access_token,
+    encrypt_access_token,
+    load_enc_key,
+)
 from app.db.models import Session, User
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 
 def _new_session_id() -> str:
@@ -54,7 +62,15 @@ async def get_session_with_token(db: AsyncSession, session_id: str) -> tuple[Use
     if user is None:
         return None
     key = load_enc_key()
-    token = decrypt_access_token(key, row.access_token_ct, row.access_token_nonce)
+    try:
+        token = decrypt_access_token(key, row.access_token_ct, row.access_token_nonce)
+    except InvalidEncKey:
+        # SI-22: a decrypt failure (key rotation, corrupt row) means this session
+        # can no longer be honored. Treat it as invalid (None) -> clean re-login,
+        # instead of letting an uncaught 500 escape optional_session on every
+        # request. No ciphertext/token in the log.
+        logger.warning("session.decrypt_failed")
+        return None
     return user, token
 
 
