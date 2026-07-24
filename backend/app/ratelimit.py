@@ -31,20 +31,21 @@ def client_ip(request: Request, *, trusted_proxy: bool) -> str:
     """Resolve the caller's IP.
 
     When `trusted_proxy` (the X-Internal-Secret matched), trust the RSC-forwarded
-    `X-Client-IP`. Otherwise use Vercel's `x-real-ip`, then the leftmost
-    `x-forwarded-for` hop, then the raw connection host.
+    `X-Client-IP`. Otherwise use the configured trusted forwarded header
+    (`settings.trusted_client_ip_header`, default `x-forwarded-for`, which Vercel
+    OVERWRITES at the edge to prevent spoofing — per
+    https://vercel.com/docs/headers/request-headers). `x-real-ip` is NOT trusted:
+    Vercel makes no spoof-proofing guarantee for it (v1.0.4 SI-04).
     """
     headers = request.headers
     if trusted_proxy:
         forwarded = headers.get("x-client-ip")
         if forwarded and forwarded.strip():
             return forwarded.strip()
-    real = headers.get("x-real-ip")
-    if real and real.strip():
-        return real.strip()
-    xff = headers.get("x-forwarded-for")
-    if xff:
-        first = xff.split(",")[0].strip()
+    header_name = settings_module.settings.trusted_client_ip_header
+    fwd = headers.get(header_name)
+    if fwd:
+        first = fwd.split(",")[0].strip()
         if first:
             return first
     if request.client is not None:
@@ -61,6 +62,16 @@ def is_trusted_proxy(request: Request) -> bool:
         return False
     provided = request.headers.get("x-internal-secret", "")
     return hmac.compare_digest(provided, secret)
+
+
+def resolve_budget_subject(request: Request, session: object | None) -> tuple[str, int]:
+    """Return (subject, per_subject_daily_limit) for the narrative LLM budget,
+    matching the rate limiter's `user:`/`ip:` scheme (v1.0.4 SI-02)."""
+    settings = settings_module.settings
+    if session is not None:
+        return f"user:{session.user.id}", settings.narrative_user_daily_limit
+    ip = client_ip(request, trusted_proxy=is_trusted_proxy(request))
+    return f"ip:{ip}", settings.narrative_anon_ip_daily_limit
 
 
 def make_rate_limiter(
