@@ -11,6 +11,7 @@ from app import settings as settings_module
 from app.auth.dependencies import optional_session
 from app.cache.rate_limit import try_increment_counter
 from app.dependencies import get_cache
+from app.ratelimit_fallback import in_process_limiter
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -31,20 +32,21 @@ def client_ip(request: Request, *, trusted_proxy: bool) -> str:
     """Resolve the caller's IP.
 
     When `trusted_proxy` (the X-Internal-Secret matched), trust the RSC-forwarded
-    `X-Client-IP`. Otherwise use Vercel's `x-real-ip`, then the leftmost
-    `x-forwarded-for` hop, then the raw connection host.
+    `X-Client-IP`. Otherwise use the configured trusted forwarded header
+    (`settings.trusted_client_ip_header`, default `x-forwarded-for`, which Vercel
+    OVERWRITES at the edge to prevent spoofing — per
+    https://vercel.com/docs/headers/request-headers). `x-real-ip` is NOT trusted:
+    Vercel makes no spoof-proofing guarantee for it (v1.0.4 SI-04).
     """
     headers = request.headers
     if trusted_proxy:
         forwarded = headers.get("x-client-ip")
         if forwarded and forwarded.strip():
             return forwarded.strip()
-    real = headers.get("x-real-ip")
-    if real and real.strip():
-        return real.strip()
-    xff = headers.get("x-forwarded-for")
-    if xff:
-        first = xff.split(",")[0].strip()
+    header_name = settings_module.settings.trusted_client_ip_header
+    fwd = headers.get(header_name)
+    if fwd:
+        first = fwd.split(",")[0].strip()
         if first:
             return first
     if request.client is not None:
@@ -63,6 +65,16 @@ def is_trusted_proxy(request: Request) -> bool:
     return hmac.compare_digest(provided, secret)
 
 
+def resolve_budget_subject(request: Request, session: object | None) -> tuple[str, int]:
+    """Return (subject, per_subject_daily_limit) for the narrative LLM budget,
+    matching the rate limiter's `user:`/`ip:` scheme (v1.0.4 SI-02)."""
+    settings = settings_module.settings
+    if session is not None:
+        return f"user:{session.user.id}", settings.narrative_user_daily_limit
+    ip = client_ip(request, trusted_proxy=is_trusted_proxy(request))
+    return f"ip:{ip}", settings.narrative_anon_ip_daily_limit
+
+
 def make_rate_limiter(
     *,
     name: str,
@@ -74,18 +86,17 @@ def make_rate_limiter(
 
     Signed-in callers are capped per-user (`user:<id>`); anonymous callers
     per-IP (`ip:<addr>`). `via_trusted_proxy=True` (analyze, reached through the
-    RSC proxy) skips anonymous enforcement when `internal_proxy_secret` is unset,
-    so website visitors aren't collapsed into one Vercel-infra-IP bucket.
+    RSC proxy) falls back to a conservative shared `ip:unattributed` backstop
+    when `internal_proxy_secret` is unset (v1.0.4 SI-05), so website visitors
+    aren't collapsed into strict per-IP throttling yet the endpoint is never
+    left entirely uncapped. When the cache is unreachable, both paths degrade to
+    an in-process limiter rather than failing open (v1.0.4 SI-01).
     """
 
     async def _dependency(
         request: Request,
         session: Annotated[object | None, Depends(optional_session)] = None,
     ) -> None:
-        cache = get_cache()
-        if cache is None:
-            return  # cache unconfigured -> fail-open (no limiting)
-
         settings = settings_module.settings
         if session is not None:
             subject = f"user:{session.user.id}"
@@ -93,24 +104,47 @@ def make_rate_limiter(
             subject_type = "user"
         else:
             if via_trusted_proxy and not settings.internal_proxy_secret:
+                # SI-05: fail CLOSED to a conservative shared backstop instead of
+                # skipping. Proxied anon /analyze arrives from the Vercel-infra
+                # egress IP, so a shared bucket avoids collapsing real visitors
+                # into strict per-IP throttling while still capping total volume.
                 logger.warning(
-                    "rate_limit.skipped name=%s reason=internal_proxy_secret_unset", name
+                    "rate_limit.unattributed_backstop name=%s reason=internal_proxy_secret_unset",
+                    name,
                 )
-                return
-            ip = client_ip(request, trusted_proxy=is_trusted_proxy(request))
-            subject = f"ip:{ip}"
-            limit = getattr(settings, anon_limit_field)
-            subject_type = "ip"
+                subject = "ip:unattributed"
+                limit = settings.analyze_unattributed_per_hour
+                subject_type = "unattributed"
+            else:
+                ip = client_ip(request, trusted_proxy=is_trusted_proxy(request))
+                subject = f"ip:{ip}"
+                limit = getattr(settings, anon_limit_field)
+                subject_type = "ip"
 
         now = datetime.now(UTC)
-        result = await try_increment_counter(
-            cache,
-            name=name,
-            subject=subject,
-            limit=limit,
-            hour_bucket=hour_bucket(now),
-        )
-        if not result.allowed:
+        bucket = hour_bucket(now)
+        cache = get_cache()
+        if cache is None:
+            # SI-01: no Redis -> conservative in-process limiter, not fail-open.
+            allowed = in_process_limiter.check(
+                name=name, subject=subject, limit=limit, bucket=bucket
+            )
+            if not allowed:
+                logger.warning("rate_limit.degraded_local name=%s reason=cache_unconfigured", name)
+        else:
+            result = await try_increment_counter(
+                cache, name=name, subject=subject, limit=limit, hour_bucket=bucket
+            )
+            if result.current == 0:
+                # Redis-error sentinel (RedisCache.incr returned 0). Degrade to
+                # the in-process limiter instead of failing open (SI-01).
+                allowed = in_process_limiter.check(
+                    name=name, subject=subject, limit=limit, bucket=bucket
+                )
+                logger.warning("rate_limit.degraded_local name=%s reason=redis_error", name)
+            else:
+                allowed = result.allowed
+        if not allowed:
             retry_after = seconds_until_next_hour(now)
             logger.warning(
                 "rate_limit.throttled name=%s subject_type=%s limit=%s",

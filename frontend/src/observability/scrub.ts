@@ -10,6 +10,12 @@ export const SCRUB_HEADER_NAMES = new Set([
   "set-cookie",
   "authorization",
   "x-vercel-id",
+  // v1.0.4 SI-11 — must stay in sync with backend _SCRUB_HEADER_NAMES.
+  "x-internal-secret",
+  "x-revalidate-secret",
+  "x-client-ip",
+  "x-forwarded-for",
+  "x-real-ip",
 ]);
 
 export const SCRUB_EXTRA_KEYS = new Set([

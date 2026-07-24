@@ -30,6 +30,17 @@ Format:
 
 ---
 
+## 2026-07-24 — Claude (Opus 4.8) with Shaan — v1.0.4: cost-control fairness & hardening from a full security audit
+
+**Slice:** v1.0.4 (implemented, unreleased/untagged — paused for operator go-ahead)
+**Done:** Ran a full 6-dimension security audit of the platform (37 findings, adversarially verified; report artifact + no critical/clear-high live vulns — the real exposure is cost/availability + defense-in-depth). Brainstormed → spec'd → planned → implemented **Batch 1 + the lower-risk half of Batch 2** as v1.0.4 (8 findings); split the heavy ingest-path work into a planned **v1.0.5**. Delivered, each TDD with tests: SI-02 per-subject LLM budget (global 500 + per-IP 10 + per-user 40, reserve-then-release via new `RedisCache.decr`); SI-04 `client_ip()` trusts Vercel-overwritten `x-forwarded-for` and drops `x-real-ip`; SI-05 conservative `ip:unattributed` backstop replaces the secret-unset skip; SI-01 in-process fallback limiter + budget when Redis is down (new `app/ratelimit_fallback.py`); SI-11 Sentry scrub of internal/revalidate/IP headers (BE+FE); SI-12 CI `permissions: contents: read`; SI-13 `.env.example` cookie fix; SI-22 session decrypt failure → `None`. Backend `310 passed` (70 DB-skipped), frontend lint/tsc/68 tests/build all clean.
+**Decisions:** Global-ceiling-*plus*-per-subject budget model (user's call) over per-subject-only or raise-global. Split Workstream C to v1.0.5 to keep each PR reviewable. Grounded SI-04 in Vercel's request-headers docs (they overwrite `x-forwarded-for` to prevent spoofing; `x-real-ip` has no such guarantee) — so trusting `x-real-ip` *first* was the actual weak point.
+**Learned / surprises:** The local `backend/.env` holds real prod secrets, and pydantic's `Settings` repr dumps them into any pytest failure trace that reprs a `Settings` — a live token/key leaked into terminal output during TDD. CI is unaffected (throwaway env), but worth a follow-up (e.g. `repr=False` on secret fields). The audit workflow's verifier subagents hit the Anthropic session limit mid-run; the 29 unverified findings were hand-verified against source.
+**Blocked / open:** PR → CI → prod-verify, then tag `v1.0.4` — **paused for operator go-ahead** per the slice workflow.
+**Next:** Open the PR; after prod-verify + release, pick up **v1.0.5 — Ingest amplification containment** (write its design spec first).
+
+---
+
 ## 2026-07-18 — Claude (Opus 4.8) with Shaan — v1.0.3 follow-up: the RESOURCE_LIMITS fix was incomplete — scoring engine hit the same field
 
 **Slice:** v1.0.3 (same hotfix, second leg — still unreleased/untagged)

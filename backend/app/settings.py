@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-VERSION = "1.0.3"
+VERSION = "1.0.4"
 
 
 class Settings(BaseSettings):
@@ -18,7 +18,14 @@ class Settings(BaseSettings):
 
     # v0.4.0 narrative layer.
     narrative_model: str = "gpt-4o"
-    narrative_daily_limit: int = 50
+    # Global hard $ ceiling / UTC-day (v1.0.4: 50 -> 500, now paired with the
+    # per-subject caps below so one IP can't drain the whole global budget).
+    narrative_daily_limit: int = 500
+    # v1.0.4 — per-subject daily LLM caps (fairness). Anon by IP, signed-in by
+    # user. A narrative runs a real LLM call only if BOTH the global and the
+    # caller's subject budget have headroom; otherwise the fallback is served.
+    narrative_anon_ip_daily_limit: int = 10
+    narrative_user_daily_limit: int = 40
     # Optional OpenAI-compatible base URL. Set to point at any provider that
     # ships an OpenAI-compatible chat API (Groq, OpenRouter, Cerebras, vLLM,
     # Ollama, etc.) instead of OpenAI's default endpoint.
@@ -100,6 +107,15 @@ class Settings(BaseSettings):
     # /analyze enforcement is skipped (otherwise all website visitors would
     # collapse into one Vercel-infra-IP bucket); narrative + user limits stay on.
     internal_proxy_secret: str | None = None
+
+    # v1.0.4 — SI-04: trusted client-IP header. Default x-forwarded-for, which
+    # Vercel OVERWRITES at the edge to prevent spoofing (x-real-ip carries no
+    # such guarantee and is no longer trusted). Point at x-vercel-forwarded-for
+    # if an upstream proxy sits in front of Vercel.
+    trusted_client_ip_header: str = "x-forwarded-for"
+    # v1.0.4 — SI-05: conservative global backstop for anonymous /analyze when
+    # internal_proxy_secret is unset (fail-closed instead of skipping entirely).
+    analyze_unattributed_per_hour: int = 300
 
     # v0.9.4 — DB connection pool sizing
     # SQLAlchemy async engine pool. Defaults match the pre-v0.9.4 hardcoded

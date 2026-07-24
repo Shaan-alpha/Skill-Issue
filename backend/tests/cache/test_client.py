@@ -86,3 +86,10 @@ async def test_ping_returns_true_on_pong(fake_cache) -> None:
 async def test_ping_returns_false_on_failure(fake_cache, fake_redis) -> None:
     fake_redis.fail_next = 1
     assert await fake_cache.ping() is False
+
+
+@pytest.mark.asyncio
+async def test_decr_after_incr(fake_cache) -> None:
+    await fake_cache.incr("budget", "k")
+    await fake_cache.incr("budget", "k")
+    assert await fake_cache.decr("budget", "k") == 1

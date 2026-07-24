@@ -79,3 +79,14 @@ async def test_delete_session_removes_row(db: AsyncSession):
     sid = await create_session(db, user_id=u.id, github_access_token="x", ttl_days=30)
     await delete_session(db, sid)
     assert await db.scalar(select(Session).where(Session.id == sid)) is None
+
+
+async def test_get_session_with_corrupt_ciphertext_returns_none(db: AsyncSession):
+    u = await _user(db)
+    sid = await create_session(db, user_id=u.id, github_access_token="ghp_x", ttl_days=30)
+    row = await db.scalar(select(Session).where(Session.id == sid))
+    # Flip the last ciphertext byte so the AES-GCM tag check fails on decrypt.
+    row.access_token_ct = row.access_token_ct[:-1] + bytes([row.access_token_ct[-1] ^ 0xFF])
+    await db.flush()
+    # Must degrade to "invalid session" (None), not raise InvalidEncKey.
+    assert await get_session_with_token(db, sid) is None

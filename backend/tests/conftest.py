@@ -81,6 +81,14 @@ class FakeRedis:
         self._store[key] = str(current)
         return current
 
+    async def decr(self, key: str) -> int:
+        self._maybe_fail()
+        self._expire_if_due(key)
+        current = int(self._store.get(key, "0"))
+        current -= 1
+        self._store[key] = str(current)
+        return current
+
     async def expire(self, key: str, seconds: int) -> bool:
         self._maybe_fail()
         if key not in self._store:

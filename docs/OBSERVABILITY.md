@@ -127,14 +127,17 @@ Backend → frontend webhook for busting `/share/[slug]` cache tags after a shar
 | `share.revalidate_succeeded` | info | breadcrumb | Frontend returned 2xx within the 5s timeout |
 | `share.revalidate_failed` | warn | breadcrumb | 4xx response, network error, or timeout. Includes status/body excerpt for 4xx |
 
-### Rate-limit taxonomy (v0.9.2)
+### Rate-limit taxonomy (v0.9.2, extended v1.0.4)
 
 Backend emits structured `logger.warning` lines only — no Sentry capture, no PostHog event (log-only, matching the cron approach). **No raw IP or `user_id` is logged** (see PII contract below).
 
 | Event | Level | Fired when | Fields |
 | --- | --- | --- | --- |
-| `rate_limit.throttled` | warn | A request exceeds its hourly cap and gets a 429 | `name` (analyze\|narrative), `subject_type` (ip\|user), `limit` |
-| `rate_limit.skipped` | warn | Anonymous `/analyze` enforcement skipped because `internal_proxy_secret` is unset | `name`, `reason=internal_proxy_secret_unset` |
+| `rate_limit.throttled` | warn | A request exceeds its hourly cap and gets a 429 | `name` (analyze\|narrative), `subject_type` (ip\|user\|unattributed), `limit` |
+| `rate_limit.unattributed_backstop` | warn | Anonymous `/analyze` fell back to the shared `ip:unattributed` backstop because `internal_proxy_secret` is unset (v1.0.4 SI-05, replaces `rate_limit.skipped`) | `name`, `reason=internal_proxy_secret_unset` |
+| `rate_limit.degraded_local` | warn | Rate limiter used the in-process fallback because the cache is unconfigured or Redis errored (v1.0.4 SI-01) | `name`, `reason` (cache_unconfigured\|redis_error) |
+| `narrative.budget.degraded_local` | warn | The LLM daily budget used the in-process fallback because Redis errored (v1.0.4 SI-01) | `reason=redis_error` |
+| `session.decrypt_failed` | warn | A session's stored token failed to decrypt (key rotation / corrupt row); the session is treated as invalid → clean re-login (v1.0.4 SI-22) | _(none — no id or ciphertext logged)_ |
 
 ## Session Replay (v1.0.1)
 

@@ -17,6 +17,11 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
+# v1.0.4 SI-12 — least privilege. CI only reads the repo; no job needs write.
+# release.yml keeps its own contents: write for publishing releases.
+permissions:
+  contents: read
+
 # Avoid running the workflow twice for the same PR (push + pull_request both
 # fire). Cancel in-progress runs for the same ref when a new push lands.
 concurrency:

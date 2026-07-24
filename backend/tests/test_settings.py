@@ -33,3 +33,12 @@ def test_session_ttl_overridable(monkeypatch):
     monkeypatch.setenv("SESSION_TTL_DAYS", "7")
 
     assert Settings().session_ttl_days == 7
+
+
+def test_v1_0_4_cost_control_defaults():
+    s = Settings()
+    assert s.narrative_daily_limit == 500
+    assert s.narrative_anon_ip_daily_limit == 10
+    assert s.narrative_user_daily_limit == 40
+    assert s.trusted_client_ip_header == "x-forwarded-for"
+    assert s.analyze_unattributed_per_hour == 300

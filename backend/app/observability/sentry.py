@@ -16,7 +16,19 @@ from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.httpx import HttpxIntegration
 from sentry_sdk.integrations.logging import LoggingIntegration
 
-_SCRUB_HEADER_NAMES = {"cookie", "set-cookie", "authorization", "x-vercel-id"}
+_SCRUB_HEADER_NAMES = {
+    "cookie",
+    "set-cookie",
+    "authorization",
+    "x-vercel-id",
+    # v1.0.4 SI-11 — app-specific secrets forwarded on the /analyze hop, plus
+    # visitor-IP headers (PII) that Sentry's default filter doesn't cover.
+    "x-internal-secret",
+    "x-revalidate-secret",
+    "x-client-ip",
+    "x-forwarded-for",
+    "x-real-ip",
+}
 _SCRUB_EXTRA_KEYS = {
     "access_token",
     "access_token_ct",
