@@ -80,3 +80,40 @@ def test_is_cross_site_write_flags_only_cross_site():
         assert is_cross_site_write(_req_with_headers({"sec-fetch-site": site})) is False
     # Absent header (Next.js RSC server fetch, old browsers) — never penalized.
     assert is_cross_site_write(_req_with_headers({})) is False
+
+
+def _req_with_origin(origin: str | None = None):
+    from starlette.requests import Request
+
+    headers = [(b"origin", origin.encode())] if origin else []
+    return Request({"type": "http", "headers": headers})
+
+
+def test_require_trusted_origin(monkeypatch):
+    import pytest
+    from fastapi import HTTPException
+
+    from app import settings as settings_module
+    from app.auth.dependencies import require_trusted_origin
+
+    monkeypatch.setattr(
+        settings_module.settings,
+        "cors_allow_origins",
+        "https://skillissue.tech,http://localhost:3000",
+    )
+    monkeypatch.setattr(
+        settings_module.settings,
+        "cors_allow_origin_regex",
+        r"https://preview-[a-z0-9]+\.vercel\.app",
+    )
+    # Absent Origin (server-to-server / curl) -> allowed.
+    require_trusted_origin(_req_with_origin(None))
+    # Configured origin -> allowed.
+    require_trusted_origin(_req_with_origin("https://skillissue.tech"))
+    # Regex-matched preview deploy -> allowed.
+    require_trusted_origin(_req_with_origin("https://preview-abc123.vercel.app"))
+    # Foreign origin -> 403.
+    with pytest.raises(HTTPException) as exc:
+        require_trusted_origin(_req_with_origin("https://evil.example.com"))
+    assert exc.value.status_code == 403
+    assert exc.value.detail["error"] == "bad_origin"

@@ -5,7 +5,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import require_user
+from app.auth.dependencies import require_trusted_origin, require_user
 from app.db.models import User
 from app.db.session import get_db
 from app.persistence.analyses import (
@@ -40,6 +40,7 @@ async def share_analysis(
     background_tasks: BackgroundTasks,
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(require_user)],
+    _origin: Annotated[None, Depends(require_trusted_origin)],
 ) -> dict[str, Any]:
     try:
         slug = await set_share_slug(db, analysis_id=analysis_id, owner_id=user.id)
@@ -57,6 +58,7 @@ async def revoke_share(
     background_tasks: BackgroundTasks,
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(require_user)],
+    _origin: Annotated[None, Depends(require_trusted_origin)],
 ) -> Response:
     try:
         removed_slug = await revoke_share_slug(db, analysis_id=analysis_id, owner_id=user.id)
@@ -75,6 +77,7 @@ async def delete_analysis_route(
     background_tasks: BackgroundTasks,
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[User, Depends(require_user)],
+    _origin: Annotated[None, Depends(require_trusted_origin)],
 ) -> Response:
     try:
         removed_slug = await delete_analysis(db, analysis_id=analysis_id, owner_id=user.id)

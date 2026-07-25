@@ -1,13 +1,37 @@
 from __future__ import annotations
 
+import re
 from typing import Annotated
 
 from fastapi import Cookie, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import settings as settings_module
 from app.auth.sessions import get_session_with_token, touch_session
 from app.db.models import User
 from app.db.session import get_db
+
+
+def _origin_allowed(origin: str) -> bool:
+    s = settings_module.settings
+    allowed = {o.strip() for o in s.cors_allow_origins.split(",") if o.strip()}
+    if origin in allowed:
+        return True
+    rx = s.cors_allow_origin_regex
+    return bool(rx and re.fullmatch(rx, origin))
+
+
+def require_trusted_origin(request: Request) -> None:
+    """v1.0.8 SI-16: reject a state-changing mutation whose ``Origin`` is not one
+    of ours. SameSite=Lax treats a sibling subdomain as same-site, so a
+    credentialed DELETE/POST from ``evil.skillissue.tech`` (XSS / subdomain
+    takeover) would otherwise carry the cookie. Defense-in-depth on top of the
+    ownership check + SameSite — an absent Origin (server-to-server / curl) is
+    allowed, since browsers always send it on cross-origin fetch/XHR."""
+    origin = request.headers.get("origin")
+    if origin is None or _origin_allowed(origin):
+        return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"error": "bad_origin"})
 
 
 def is_cross_site_write(request: Request) -> bool:

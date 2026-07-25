@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import _ResolvedSession, require_session
+from app.auth.dependencies import _ResolvedSession, require_session, require_trusted_origin
 from app.cache.keys import NAMESPACE_REPORT, report_key
 from app.cache.rate_limit import try_increment_counter
 from app.db.session import get_db
@@ -27,6 +27,7 @@ async def force_refresh(
     username: str,
     db: Annotated[AsyncSession, Depends(get_db)],
     session: Annotated[_ResolvedSession, Depends(require_session)],
+    _origin: Annotated[None, Depends(require_trusted_origin)],
 ) -> object:
     analysis = await get_user_analysis_by_target(db, user_id=session.user.id, target_login=username)
     if analysis is None:
