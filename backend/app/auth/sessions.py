@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
@@ -26,6 +27,13 @@ def _new_session_id() -> str:
     return secrets.token_urlsafe(32)
 
 
+def _hash_session_id(sid: str) -> str:
+    """v1.0.8 SI-21: store only a hash of the session id at rest, so a DB-read
+    compromise can't replay a cookie. The raw id lives only in the cookie; every
+    lookup hashes the presented value before querying."""
+    return hashlib.sha256(sid.encode("utf-8")).hexdigest()
+
+
 async def create_session(
     db: AsyncSession,
     *,
@@ -40,7 +48,7 @@ async def create_session(
     expires_at = datetime.now(UTC) + timedelta(days=ttl_days)
     db.add(
         Session(
-            id=sid,
+            id=_hash_session_id(sid),
             user_id=user_id,
             access_token_ct=ct,
             access_token_nonce=nonce,
@@ -53,7 +61,7 @@ async def create_session(
 
 async def get_session_with_token(db: AsyncSession, session_id: str) -> tuple[User, str] | None:
     """Resolve a session_id to (User, decrypted_token) or None when expired/missing."""
-    row = await db.scalar(select(Session).where(Session.id == session_id))
+    row = await db.scalar(select(Session).where(Session.id == _hash_session_id(session_id)))
     if row is None:
         return None
     if row.expires_at <= datetime.now(UTC):
@@ -76,12 +84,14 @@ async def get_session_with_token(db: AsyncSession, session_id: str) -> tuple[Use
 
 async def touch_session(db: AsyncSession, session_id: str) -> None:
     await db.execute(
-        update(Session).where(Session.id == session_id).values(last_used_at=datetime.now(UTC))
+        update(Session)
+        .where(Session.id == _hash_session_id(session_id))
+        .values(last_used_at=datetime.now(UTC))
     )
 
 
 async def delete_session(db: AsyncSession, session_id: str) -> None:
-    await db.execute(delete(Session).where(Session.id == session_id))
+    await db.execute(delete(Session).where(Session.id == _hash_session_id(session_id)))
 
 
 async def purge_expired_sessions(db: AsyncSession) -> int:
