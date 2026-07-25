@@ -33,9 +33,14 @@ _DEP_FILES = {
     "composer.json",
 }
 
+# v1.0.7 SI-36: bounded scope group `\([^)]{0,100}\)` (was greedy `\(.+\)`) since
+# commit messages are attacker-influenced (analyze your own crafted repo).
 _CONVENTIONAL_PREFIX = re.compile(
-    r"^(feat|fix|chore|docs|refactor|test|perf|build|ci|style|revert)(\(.+\))?: ", re.I
+    r"^(feat|fix|chore|docs|refactor|test|perf|build|ci|style|revert)(\([^)]{0,100}\))?: ", re.I
 )
+
+# Truncate each untrusted commit message before regex/splitlines processing.
+_COMMIT_MSG_MAX = 500
 
 
 def _at_least(profile_tier: TierName, threshold: TierName) -> bool:
@@ -69,7 +74,12 @@ async def _enrich_repo_senior(repo_full_name: str, gh: "GitHubClient") -> dict[s
 def _commit_message_quality(messages: list[str]) -> int:
     if not messages:
         return 0
-    good = sum(1 for m in messages if len(m.splitlines()[0]) >= 50 or _CONVENTIONAL_PREFIX.match(m))
+    good = 0
+    for raw in messages:
+        m = raw[:_COMMIT_MSG_MAX]
+        first_line = (m.splitlines() or [""])[0]
+        if len(first_line) >= 50 or _CONVENTIONAL_PREFIX.match(m):
+            good += 1
     return round(good / len(messages) * 100)
 
 

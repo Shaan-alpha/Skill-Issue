@@ -1,15 +1,16 @@
 from typing import Literal
 
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-VERSION = "1.0.6"
+VERSION = "1.0.7"
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    github_token: str | None = None
-    openai_api_key: str | None = None
+    github_token: str | None = Field(default=None, repr=False)
+    openai_api_key: str | None = Field(default=None, repr=False)
     # Comma-separated for friction-free Vercel env config; split in main.py.
     cors_allow_origins: str = "http://localhost:3000"
     # Optional regex to match preview-deploy URLs whose hash isn't known up
@@ -32,12 +33,12 @@ class Settings(BaseSettings):
     narrative_base_url: str | None = None
 
     # v0.5.0 — Auth + persistence
-    database_url: str | None = None
-    database_direct_url: str | None = None
+    database_url: str | None = Field(default=None, repr=False)
+    database_direct_url: str | None = Field(default=None, repr=False)
     github_oauth_client_id: str | None = None
-    github_oauth_client_secret: str | None = None
+    github_oauth_client_secret: str | None = Field(default=None, repr=False)
     oauth_redirect_url: str | None = None
-    session_token_enc_key: str | None = None
+    session_token_enc_key: str | None = Field(default=None, repr=False)
     session_cookie_name: str = "si_session"
     session_ttl_days: int = 30
     cookie_domain: str | None = None
@@ -49,14 +50,14 @@ class Settings(BaseSettings):
 
     # v0.7.0 — caching
     upstash_redis_rest_url: str | None = None
-    upstash_redis_rest_token: str | None = None
+    upstash_redis_rest_token: str | None = Field(default=None, repr=False)
     # 6 hours — Report cache.
     cache_report_ttl_seconds: int = 21_600
     # 15 minutes — fallback TTL for layers that don't pick a specific one.
     cache_default_ttl_seconds: int = 900
 
     # v0.8.0 — observability
-    sentry_dsn: str | None = None
+    sentry_dsn: str | None = Field(default=None, repr=False)
     sentry_environment: str = "development"
     sentry_traces_sample_rate: float = 0.1
     log_level: str = "INFO"
@@ -68,7 +69,7 @@ class Settings(BaseSettings):
     # when this env var is set on the project. When unset, the cron route
     # responds 503 so misconfig is visible at the first fire instead of
     # silently no-op'ing.
-    cron_secret: str | None = None
+    cron_secret: str | None = Field(default=None, repr=False)
 
     # v0.8.2 — force-refresh rate limit
     # Per-user cap on force-refresh actions per UTC hour. Reset on bucket
@@ -108,7 +109,7 @@ class Settings(BaseSettings):
     # When either is unset, share toggles still work but the frontend ISR
     # cache only revalidates at its 3600s cacheLife TTL (graceful degradation).
     frontend_base_url: str | None = None
-    revalidate_secret: str | None = None
+    revalidate_secret: str | None = Field(default=None, repr=False)
 
     # v0.9.2 — rate limiting (IP + user)
     # Hourly caps per UTC-hour bucket. Anonymous callers are capped per-IP;
@@ -123,7 +124,7 @@ class Settings(BaseSettings):
     # value on both the frontend and backend services. When unset, anonymous
     # /analyze enforcement is skipped (otherwise all website visitors would
     # collapse into one Vercel-infra-IP bucket); narrative + user limits stay on.
-    internal_proxy_secret: str | None = None
+    internal_proxy_secret: str | None = Field(default=None, repr=False)
 
     # v1.0.4 — SI-04: trusted client-IP header. Default x-forwarded-for, which
     # Vercel OVERWRITES at the edge to prevent spoofing (x-real-ip carries no
@@ -144,6 +145,18 @@ class Settings(BaseSettings):
     # (pool_size + max_overflow) x peak_instances < 105.
     db_pool_size: int = 5
     db_max_overflow: int = 5
+
+    @model_validator(mode="after")
+    def _reject_credentialed_cors_wildcard(self) -> "Settings":
+        # v1.0.7 SI-14: CORS runs with allow_credentials=True, so a `*` origin
+        # would reflect the request Origin + credentials — the classic hole.
+        # Refuse it at boot instead of silently shipping it.
+        if any(o.strip() == "*" for o in self.cors_allow_origins.split(",")):
+            raise ValueError(
+                "CORS_ALLOW_ORIGINS must not contain '*' (credentials are enabled); "
+                "list explicit https origins."
+            )
+        return self
 
 
 settings = Settings()

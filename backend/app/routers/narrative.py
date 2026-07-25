@@ -141,6 +141,10 @@ async def get_narrative(
             )
             await db.commit()
 
+        # v1.0.7 SI-33: explicit end-of-stream sentinel so the client can tell a
+        # normal completion (this) from a dropped connection (EventSource error).
+        yield f"data: {json.dumps({'done': True})}\n\n"
+
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",

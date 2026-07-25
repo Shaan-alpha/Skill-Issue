@@ -39,7 +39,7 @@ async function getAnalysis(
   if (proxySecret) fwd["x-internal-secret"] = proxySecret;
   if (clientIp) fwd["x-client-ip"] = clientIp;
 
-  const res = await fetch(`${baseUrl}/analyze/${username}`, {
+  const res = await fetch(`${baseUrl}/analyze/${encodeURIComponent(username)}`, {
     cache: "no-store",
     headers: fwd,
   });

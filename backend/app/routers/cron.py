@@ -55,6 +55,11 @@ async def refresh_saved_analyses(
     # on the same daily tick. Independent of the refresh commit above.
     purged_sessions = await purge_expired_sessions(db)
     await db.commit()
+    # v1.0.7 SI-18: return only aggregate counters. The previous per-analysis
+    # `outcomes` array embedded a user_id -> analyzed-target ownership map that
+    # then landed in Vercel/CDN access logs and Sentry request captures. The
+    # per-row detail is already emitted to structured logs by run_refresh_chunk
+    # (cron.refresh_* events), so it isn't lost — just kept out of the HTTP body.
     return {
         "processed": summary.processed,
         "succeeded": summary.succeeded,
@@ -62,16 +67,4 @@ async def refresh_saved_analyses(
         "rate_limited": summary.rate_limited,
         "deadline_reached": summary.deadline_reached,
         "purged_sessions": purged_sessions,
-        "outcomes": [
-            {
-                "analysis_id": o.analysis_id,
-                "target_login": o.target_login,
-                "owner_user_id": o.owner_user_id,
-                "token_source": str(o.token_source),
-                "status": o.status,
-                "duration_ms": o.duration_ms,
-                "error": o.error,
-            }
-            for o in summary.outcomes
-        ],
     }

@@ -10,7 +10,19 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ## [Unreleased]
 
-## [1.0.6] — 2026-07-25
+## [1.0.7] — 2026-07-25
+
+Housekeeping + low-severity hardening.
+
+### Fixed
+- **The version shown on the site now matches the actual release.** The footer/report version had been stuck at v1.0.3 through several releases because it was a separate hardcoded value; it's now bumped and guarded by a test so it can't silently drift again.
+- **A dropped AI-narrative stream now shows an error** instead of silently appearing "finished" — the stream ends with an explicit completion signal, so a real connection drop is reported honestly.
+
+### Security
+- **Secrets can no longer leak into test/CI logs** — sensitive configuration values are hidden from diagnostic output.
+- **A misconfigured wildcard CORS origin is now refused at startup** (it would otherwise expose authenticated endpoints cross-origin).
+- **The scheduled-refresh job no longer echoes a who-analyzed-whom map in its response**, keeping that out of request logs.
+- Minor input-handling hardening: README size cap, bounded commit-message parsing, and consistent URL-encoding of usernames.
 
 Ingest hardening follow-up — a circuit breaker for the shared GitHub API budget.
 
