@@ -136,17 +136,30 @@ Four fail-open layers; every operation swallows Redis exceptions and falls throu
 | Layer | Key | TTL | Purpose |
 | --- | --- | --- | --- |
 | **A. Report** | `si:v1:report:<lowercased-username>` | 6h | Full scored `Report` JSON. Warm `/analyze/{user}` p95 ≤ 200ms. |
-| **B. Singleflight lock** | `si:v1:lock:report:<lowercased-username>` | 30s | `SET NX` lock around cold-cache ingest; waiters poll every 200ms for up to 25s. |
+| **B. Singleflight lock** | `si:v1:lock:report:<lowercased-username>` | 60s | `SET NX` lock around cold-cache ingest; waiters poll every 200ms for up to 25s. Release is **holder-checked** (compare-and-delete) so a slow holder can't delete a successor's lock (v1.0.5). |
 | **C. GitHub API responses** | `si:v1:gh:<METHOD>:<sha256(url+params+body)>` | per-endpoint (commits 5m, repos 15m, profile/languages 1h, contents 30m, GraphQL 15m) | Per-request caching to stretch the 5000/hr GH rate-limit budget. Only 200/404/422 cached; 429/5xx fall through. |
 | **D. Narrative + daily budget** | `si:v1:narrative:<username>:<scores_hash>:<mode>` (24h) + `si:v1:budget:narrative:<UTC-day>` (25h) | varies | Shared narrative cache and shared `INCR`-based daily counter — works correctly across Fluid Compute instances. |
 
 Bumping `KEY_PREFIX` in `app/cache/client.py` invalidates every namespace at once.
 
+### Reliability & abuse controls (v0.9.2 → v1.0.7)
+
+A layered defense against a single caller (or a Redis outage) exhausting the shared GitHub token, the worker pool, or the LLM budget. Built from the 2026-07-24 security audit.
+
+- **Rate limiting (`app/ratelimit.py`, v0.9.2+).** Per-hour caps on `/analyze` + `/narrative`: anonymous callers per-IP, signed-in per-user. The client IP is taken from Vercel's spoof-proof `x-forwarded-for` (v1.0.4 SI-04); the RSC proxy forwards `x-client-ip` behind a constant-time `x-internal-secret`. When that secret is unset, anonymous `/analyze` falls back to a conservative shared backstop rather than skipping (v1.0.4 SI-05).
+- **LLM budget (`app/narrative/budget.py`, v1.0.4).** A global daily ceiling **plus** per-IP and per-user daily caps, so one caller can't drain the day's AI generation. A budget slot is refunded when a client aborts the SSE stream mid-generation (v1.0.5 SI-07).
+- **Fail-closed cost controls (v1.0.4 SI-01).** When Redis is unreachable, the rate limiter and LLM budget degrade to a conservative **in-process** limiter instead of failing open.
+- **Ingest amplification containment (v1.0.5).** A per-analysis hard cap on live GitHub calls (`GitHubClient` counts them; ~150 vs. a ~98 legit worst case) → 503; a capped `Retry-After` sleep + HTTP-date-safe parse + `429` handling; and a wall-clock ingest deadline (`_live_ingest_bounded`) → 503.
+- **Shared-token quota breaker (v1.0.6).** `GitHubClient` observes `X-RateLimit-Remaining` on live shared-token responses (only when it dips below a watch threshold) and writes a low-water mark to Redis; `_live_ingest` sheds **new anonymous** analyses (503 `service_busy`) before the shared token is exhausted. Signed-in users bypass.
+- **CORS boot guard (v1.0.7 SI-14).** A credentialed wildcard origin (`CORS_ALLOW_ORIGINS=*`) is refused at startup.
+
+All of these are fail-open/degrade-gracefully where availability matters and fail-closed where cost/abuse matters; every threshold is an env-tunable `Settings` field with a safe default.
+
 ### Observability — Sentry + PostHog + structlog (v0.8.0)
 
 Two thin cross-cutting layers. Both fail open — telemetry is never a correctness boundary.
 
-- **Backend `app/observability/`** — `structlog` JSON logging (console renderer in dev) with a `request_id` contextvar bound by `RequestIDMiddleware` (UUID4 per request). Sentry FastAPI integration captures unhandled exceptions; a `before_send` PII scrub hook strips `access_token`, `access_token_ct`, `oauth_state`, `oauth_code`, `session_id`, full `Cookie`/`Authorization` headers, and `email` before the envelope leaves the process. `request_id` is tagged on every Sentry event and echoed in the `X-Request-ID` response header so frontend breadcrumbs can correlate.
+- **Backend `app/observability/`** — `structlog` JSON logging (console renderer in dev) with a `request_id` contextvar bound by `RequestIDMiddleware` (UUID4 per request). Sentry FastAPI integration captures unhandled exceptions; a `before_send` PII scrub hook strips `access_token`, `access_token_ct`, `oauth_state`, `oauth_code`, `session_id`, full `Cookie`/`Authorization`/`X-Internal-Secret`/`X-Revalidate-Secret`/`X-Client-IP`/`X-Forwarded-For`/`X-Real-IP` headers, and `email` before the envelope leaves the process (v1.0.4 SI-11 added the internal-secret + visitor-IP headers). `request_id` is tagged on every Sentry event and echoed in the `X-Request-ID` response header so frontend breadcrumbs can correlate.
 - **Frontend `src/observability/`** — Sentry browser SDK via Next 16's `instrumentation.ts`. Source-map upload is deferred to a v0.8.x patch (requires `SENTRY_AUTH_TOKEN` + `SENTRY_ORG` + `SENTRY_PROJECT` provisioning); runtime capture works without it but stack traces stay minified until the wrapper is re-added. PostHog browser SDK wraps the layout via `<ObservabilityProvider>` — auto-pageviews + web-vitals capture + named events (`analyze_submitted`, `share_toggled`, `share_card_copied`, `mode_toggled`, `sign_in_clicked`). Signed-in users identified by the opaque `si_session` cookie value (never GitHub login, never email); anonymous viewers use PostHog's auto-distinct ID.
 - **Correlation contract:** one `request_id` per request flows through middleware → structlog → Sentry tag → response header. One canonical session ID across PostHog `identify()` and Sentry `user.id`.
 - **Real-user perf metrics:** PostHog `enable_web_vitals_autocapture` captures LCP / CLS / INP per visitor with element selectors — closes v0.7.2's "couldn't identify the prod LCP element" gap without adding a second vendor.
