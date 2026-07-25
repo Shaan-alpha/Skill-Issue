@@ -89,6 +89,8 @@ In Vercel → **Settings** → **Environment Variables**, add (Production + Prev
 
 > **Security hardening (v1.0.2).** The 2026-07-13 audit remediation shipped in code: fixed the dead refresh cron (Vercel fires **GET**, the handler was POST-only), patched 7 backend CVEs (Starlette/FastAPI/cryptography/joserfc/pydantic-settings), added Dependabot + a CI SCA gate (`pip-audit` + `npm audit`); `cookie_secure` now fails closed by default; expired sessions are purged on the cron; CSRF writes on GET `/analyze` + `/narrative` are blocked via `Sec-Fetch-Site`; HSTS gained `includeSubDomains; preload`; `unsafe-eval` was dropped from the CSP. **Operator follow-ups (platform, not code):** add a Vercel WAF rate-limit rule on `/_/backend/analyze*` + `/narrative*`; enable BotID; confirm `INTERNAL_PROXY_SECRET` is set in prod (else anonymous `/analyze` isn't IP-limited); re-verify `CORS_ALLOW_ORIGIN_REGEX` is scoped; add a `main` branch-protection ruleset; enable Vercel Spend alerts; submit the apex to hstspreload.org; promote the CSP to enforcing after reviewing report-only data.
 
+> **Security & availability hardening (v1.0.4–v1.0.7).** The 2026-07-24 full audit remediation shipped across four releases: per-subject LLM budget (global ceiling + per-IP + per-user daily caps), **fail-closed** rate-limiting and LLM budget when Redis is down, spoof-proof client-IP derivation (`x-forwarded-for`, not `x-real-ip`), Sentry scrubbing of internal/revalidate/IP headers, a per-analysis GitHub-call cap + a wall-clock ingest deadline, an LLM-budget refund on mid-stream client abort, OG/card ingest attribution, a holder-checked singleflight lock, a shared-token quota breaker, a boot-time guard refusing a credentialed CORS `*`, and secret `repr` scrubbing. **New env knobs — all optional with safe defaults, tune only if needed:** `NARRATIVE_DAILY_LIMIT` (500), `NARRATIVE_ANON_IP_DAILY_LIMIT` (10), `NARRATIVE_USER_DAILY_LIMIT` (40), `TRUSTED_CLIENT_IP_HEADER` (`x-forwarded-for`), `ANALYZE_UNATTRIBUTED_PER_HOUR` (300), `GH_MAX_CALLS_PER_ANALYSIS` (150), `GITHUB_RETRY_AFTER_CEILING_SECONDS` (10), `ANALYZE_INGEST_DEADLINE_SECONDS` (45), `GH_SHARED_TOKEN_MIN_REMAINING` (500). **Two prior operator follow-ups are now handled in code:** anonymous `/analyze` with `INTERNAL_PROXY_SECRET` unset now falls back to a conservative shared backstop (no longer skips limiting), and a credentialed CORS wildcard is refused at boot. **Still operator-side:** the CI `npm audit` gate is temporarily at `--audit-level=critical` pending a patched Next.js (restore to `high` when one ships); the Vercel WAF / BotID / Spend-alert / branch-protection items remain platform config.
+
 ### 5. Run the initial Alembic migration
 
 The DB schema lives in `backend/migrations/`. Pulling the prod `DATABASE_DIRECT_URL` locally (or pasting it once into a shell session — don't persist it) is the safe way to run migrations:
@@ -109,7 +111,7 @@ After the first migration: every subsequent push that includes a new migration r
 ```bash
 # Health — should report db=up and cache=up after Upstash is provisioned
 curl https://<your-vercel-host>/_/backend/health
-# -> {"status":"ok","version":"0.8.3","db":"up","cache":"up"}
+# -> {"status":"ok","version":"1.0.7","db":"up","cache":"up"}
 
 # Anonymous analyze
 curl https://<your-vercel-host>/_/backend/analyze/octocat
@@ -147,13 +149,15 @@ time curl -s -o /dev/null https://<your-vercel-host>/_/backend/analyze/octocat
 
 Cold call: ~5-8s. Warm call (cached): ≤200ms p95 target. If the warm call isn't fast, check `/health` for `cache: "up"` and verify the env vars survived the deploy.
 
-## Known limits as of v0.8.3
+## Known limits as of v1.0.7
 
-- **No global rate limiting.** Anyone can hit `/analyze` and burn through the ingestion budget. The per-user 10/hour cap on `/me/refresh/{username}` (v0.8.2) is the only rate limit shipped today. Global IP-level limits + abuse heuristics are v0.9.0 territory (Beta hardening).
-- **`/share/[slug]` is not ISR-cached.** Each shared-page view re-renders server-side. Tolerable at current scale, but v0.8.4 ships on-demand `revalidateTag` so the route can opt in to ISR without a revocation correctness gap.
-- **Sentry source-map upload not wired.** Frontend stack traces in Sentry show minified function names — runtime capture still works, only symbolication is degraded. Lands in a v0.8.x patch once `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` / `SENTRY_PROJECT` are provisioned.
-- **Sentry alert rules not wired.** v0.8.0 ships the integration but not the thresholds; needs ~1 week of baseline data first. Patch lands when the data is in.
-- **Custom domain** — pre-v1.0.
+- **Sentry source-map upload not wired.** Frontend stack traces in Sentry show minified function names — runtime capture still works, only symbolication is degraded. Re-add the `withSentryConfig` wrapper once `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` / `SENTRY_PROJECT` are provisioned.
+- **Sentry alert rules not wired.** The integration ships without thresholds; needs ~1 week of baseline data first.
+- **CSP is Report-Only.** `frontend/next.config.ts` ships the Content-Security-Policy in report-only mode with `unsafe-inline`; promoting it to enforcing (nonce-based) is a deferred hardening slice (audit SI-31).
+- **`npm audit` CI gate at `--audit-level=critical`.** Temporarily lowered from `high` pending a patched Next.js release; restore to `high` when one ships (see the hardening note above).
+- **Heavier audit tail deferred** — hashing session ids at rest (DB migration), an Origin check on state-changing mutations, an SBOM + `security.txt`; tracked in `PLAN.md`.
+
+_(Resolved since earlier: global rate limiting shipped in v0.9.2 and was hardened in v1.0.4–v1.0.6; `/share/[slug]` gained on-demand ISR in v0.8.6; the custom domain — skillissue.tech — went live in v1.0.1.)_
 
 ## What's intentionally not here
 
