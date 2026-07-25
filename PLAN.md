@@ -54,6 +54,7 @@
 | **v1.0.4** | Cost-control fairness & hardening — 2026-07-24 audit (per-subject LLM budget, fail-closed limits, spoof-proof IP, Sentry scrub, CI perms) | ✅ shipped |
 | **v1.0.5** | Ingest amplification containment (cores) — call cap, Retry-After/deadline, budget refund on abort, OG attribution, holder-checked lock | ✅ shipped |
 | **v1.0.6** | Shared-token quota breaker (SI-03 ext) — sheds new anon analyses before the shared GitHub token is exhausted. SSE coalescing dropped; OG store-gating deferred | ✅ shipped |
+| **v1.0.7** | Low-severity hardening + version-display fix — `APP_VERSION` drift guard, secret repr-scrub, CORS wildcard guard, cron log trim, README/commit bounds, URL encode, SSE done-sentinel | ✅ shipped |
 
 ---
 
@@ -862,6 +863,23 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 - [x] Backend `ruff` clean, `pytest -q` non-DB suite green (327 passed). Frontend unchanged; gate green.
 - [ ] PR reviewed; CI green; prod deploy verified. *(paused for operator go-ahead before tag/release.)*
 - [ ] `CHANGELOG.md` `[1.0.6]`; tag `v1.0.6`; release.
+
+---
+
+## v1.0.7 — Low-severity hardening + version-display fix
+
+**Goal:** Fix the stale UI version (shown as v1.0.3 through v1.0.4–v1.0.6) and clear the cheap, low-risk tail of the 2026-07-24 audit.
+
+**Design spec:** [`docs/superpowers/specs/2026-07-25-v1.0.7-low-severity-hardening-design.md`](./docs/superpowers/specs/2026-07-25-v1.0.7-low-severity-hardening-design.md). **Plan:** [`docs/superpowers/plans/2026-07-25-v1.0.7-low-severity-hardening.md`](./docs/superpowers/plans/2026-07-25-v1.0.7-low-severity-hardening.md).
+
+**Delivered (8 items):** **VER** — `APP_VERSION` bumped + a vitest asserting it equals `package.json.version` (root cause: three drifting version constants). **ENV** — `repr=False` on secret Settings fields (they were leaking into pytest failure output). **SI-14** — boot-time guard refusing a credentialed CORS `*`. **SI-35** — README blob size cap before decode. **SI-36** — commit-message truncation + bounded conventional-prefix regex. **SI-18** — cron response returns only aggregate counts (dropped the `owner_user_id`↔`target_login` map). **SI-34** — `encodeURIComponent` on the last raw `/analyze` proxy URL. **SI-33** — backend emits an SSE done-sentinel; the client now reports a dropped stream as an error instead of a completion.
+
+**Remaining audit backlog (future slices / decisions):** SI-21 (hash session ids at rest — DB migration), SI-16 (Origin check on mutations), SI-31 (CSP → enforcing), SI-15 (`/health` split), SI-30 (GH cache-key scope namespacing), SI-37 (SBOM + `security.txt`). Plus the standing op item: restore the `npm audit` gate to `high` once Next.js ships a patched release.
+
+**Exit criteria:**
+- [x] All three version constants agree (`1.0.7`), enforced by a test. Backend `ruff` clean, `pytest -q` green (332 passed). Frontend `lint`+`tsc`+`test:run`+`build` clean.
+- [ ] PR reviewed; CI green; prod deploy verified (the UI shows v1.0.7). *(paused for operator go-ahead before tag/release.)*
+- [ ] `CHANGELOG.md` `[1.0.7]`; tag `v1.0.7`; release.
 
 ---
 

@@ -19,6 +19,17 @@ Format:
 
 ---
 
+## 2026-07-25 — Claude (Opus 4.8) with Shaan — v1.0.7: low-severity hardening + version-display fix
+
+**Slice:** v1.0.7 (implemented, unreleased/untagged — paused for operator go-ahead)
+**Done:** Fixed an operator-reported bug — the UI showed **v1.0.3** through the v1.0.4–v1.0.6 releases. Root cause: **three** version constants (`backend settings.py::VERSION`, `frontend package.json::version`, `frontend src/lib/site.ts::APP_VERSION` — the one the landing/report pages render) and the ritual only bumped the first two. Bumped `APP_VERSION` to 1.0.7 and added a vitest asserting `APP_VERSION === package.json.version` so it can't drift silently again. Cleared 7 more low/info audit items, each TDD: **ENV** `repr=False` on 11 secret Settings fields (they leaked into pytest failure output — discovered live in v1.0.4); **SI-14** boot guard refusing a credentialed CORS `*`; **SI-35** README size cap before decode; **SI-36** commit-message truncation + bounded regex (also fixed a latent empty-message IndexError); **SI-18** cron response returns aggregate counts only (dropped the owner↔target map that was landing in access logs); **SI-34** encodeURIComponent on the last raw `/analyze` proxy URL; **SI-33** backend SSE done-sentinel + client reports dropped streams as errors. Backend `332 passed` (70 DB-skipped); frontend lint/tsc/71-ish tests/build clean.
+**Decisions:** SI-33 needed a protocol change, not a one-liner — SSE `onerror` fires on normal completion too (server just closes), so the fix was a `data:{"done":true}` sentinel to distinguish success from a drop. The version ritual now bumps **all three** constants (guarded by the new test). Deferred the heavier audit tail (SI-21 session-id hashing, SI-16 Origin checks, SI-31 CSP enforcing, SI-15/30/37) to future slices.
+**Learned / surprises:** Version constants had silently tripled and drifted — a good reminder that "bump the version" is not a single edit here. The `.env` secret-in-repr leak was a real find from doing TDD against a local `.env` with prod secrets.
+**Blocked / open:** PR → CI → prod-verify (confirm the UI shows 1.0.7), then tag `v1.0.7` — **paused for operator go-ahead**. Standing: restore `npm audit` gate to `high` once Next.js patches.
+**Next:** Open the PR. The audit remediation is now down to the heavier deferred items (own slices) + the low/info remainder.
+
+---
+
 ## 2026-07-25 — Claude (Opus 4.8) with Shaan — v1.0.6: shared-token quota breaker (SI-03 ext)
 
 **Slice:** v1.0.6 (implemented, unreleased/untagged — paused for operator go-ahead)
