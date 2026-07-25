@@ -104,11 +104,14 @@ async def test_narrative_sse_streaming_format(_override_deps: None) -> None:
     assert resp.headers["cache-control"] == "no-cache"
 
     lines = [line for line in resp.text.splitlines() if line]
-    assert len(lines) == 4
+    assert len(lines) == 5  # 4 chunks + a v1.0.7 SI-33 "done" sentinel
     for i, tok in enumerate(["Hello", " ", "SSE", "!"]):
         assert lines[i].startswith("data: ")
         data = json.loads(lines[i][6:])
         assert data["chunk"] == tok
+    # The stream ends with an explicit done sentinel so the client can tell a
+    # normal completion from a dropped connection (SI-33).
+    assert json.loads(lines[4][6:]) == {"done": True}
 
 
 async def test_signed_in_narrative_persists(db, monkeypatch):
