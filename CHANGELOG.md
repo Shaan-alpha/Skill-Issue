@@ -10,6 +10,16 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ## [Unreleased]
 
+## [1.0.8] — 2026-07-26
+
+Auth & endpoint hardening (the deferred tail of the security audit).
+
+### Security
+- **Login sessions are now stored hashed**, so a database-only compromise can't be used to hijack a signed-in session. (Existing sessions simply prompt a fresh sign-in.)
+- **Account actions (saving, sharing, unsharing, refreshing) now reject requests from an untrusted origin**, an extra layer against cross-site request forgery on top of the existing same-site cookie protection.
+- **Published a security disclosure channel** at `/.well-known/security.txt` and added a pull-request check that flags newly introduced vulnerable dependencies before merge.
+- Tightened the Content-Security-Policy so it can be promoted to enforcing in a future release.
+
 ## [1.0.7] — 2026-07-25
 
 Housekeeping + low-severity hardening.
