@@ -34,6 +34,8 @@ Housekeeping + low-severity hardening.
 - **The scheduled-refresh job no longer echoes a who-analyzed-whom map in its response**, keeping that out of request logs.
 - Minor input-handling hardening: README size cap, bounded commit-message parsing, and consistent URL-encoding of usernames.
 
+## [1.0.6] — 2026-07-24
+
 Ingest hardening follow-up — a circuit breaker for the shared GitHub API budget.
 
 ### Security

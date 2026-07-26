@@ -842,8 +842,8 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 **Exit criteria:**
 - [x] Backend `ruff` clean, `pytest -q` non-DB suite green (321 passed). Frontend `lint` + `tsc` + `test:run` (70) + `build` clean.
-- [ ] PR reviewed; CI green; prod deploy verified. *(paused for operator go-ahead before tag/release.)*
-- [ ] `CHANGELOG.md` `[1.0.5]`; tag `v1.0.5`; release.
+- [x] PR reviewed; CI green; prod deploy verified.
+- [x] `CHANGELOG.md` `[1.0.5]`; tag `v1.0.5`; release published 2026-07-24.
 
 ---
 
@@ -862,8 +862,8 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 **Exit criteria:**
 - [x] Backend `ruff` clean, `pytest -q` non-DB suite green (327 passed). Frontend unchanged; gate green.
-- [ ] PR reviewed; CI green; prod deploy verified. *(paused for operator go-ahead before tag/release.)*
-- [ ] `CHANGELOG.md` `[1.0.6]`; tag `v1.0.6`; release.
+- [x] PR reviewed; CI green; prod deploy verified.
+- [x] `CHANGELOG.md` `[1.0.6]`; tag `v1.0.6`; release published 2026-07-24. *(The `[1.0.6]` heading was missing from `CHANGELOG.md` until 2026-07-26 — the notes were there but orphaned under `[1.0.7]`.)*
 
 ---
 
@@ -879,8 +879,8 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 **Exit criteria:**
 - [x] All three version constants agree (`1.0.7`), enforced by a test. Backend `ruff` clean, `pytest -q` green (332 passed). Frontend `lint`+`tsc`+`test:run`+`build` clean.
-- [ ] PR reviewed; CI green; prod deploy verified (the UI shows v1.0.7). *(paused for operator go-ahead before tag/release.)*
-- [ ] `CHANGELOG.md` `[1.0.7]`; tag `v1.0.7`; release.
+- [x] PR reviewed; CI green; prod deploy verified (the UI shows v1.0.7).
+- [x] `CHANGELOG.md` `[1.0.7]`; tag `v1.0.7`; release published 2026-07-25.
 
 ---
 
@@ -905,8 +905,8 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 **Exit criteria:**
 - [x] Backend `ruff` clean, `pytest -q` green (333 passed, 72 DB-skipped). Frontend `lint`+`tsc`+`test:run`+`build` clean. All three version constants at `1.0.8`.
-- [ ] PR reviewed; CI green; prod deploy verified. *(paused for operator go-ahead before tag/release.)*
-- [ ] `CHANGELOG.md` `[1.0.8]`; tag `v1.0.8`; release.
+- [x] PR reviewed (#40, + #41 docs); CI green on `main`; prod deploy verified 2026-07-26 (`security.txt` 200, UI badge `1.0.8`, `/_/backend/health` reports `1.0.8` with db+cache up). SI-16/SI-21 are test-verified only — not externally probeable; see `docs/PROGRESS_LOG.md`.
+- [ ] `CHANGELOG.md` `[1.0.8]` written; tag `v1.0.8`; release. *(paused for operator go-ahead on the tag — this is the only remaining step.)*
 
 ---
 
