@@ -906,7 +906,7 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 **Exit criteria:**
 - [x] Backend `ruff` clean, `pytest -q` green (333 passed, 72 DB-skipped). Frontend `lint`+`tsc`+`test:run`+`build` clean. All three version constants at `1.0.8`.
 - [x] PR reviewed (#40, + #41 docs); CI green on `main`; prod deploy verified 2026-07-26 (`security.txt` 200, UI badge `1.0.8`, `/_/backend/health` reports `1.0.8` with db+cache up). SI-16/SI-21 are test-verified only — not externally probeable; see `docs/PROGRESS_LOG.md`.
-- [ ] `CHANGELOG.md` `[1.0.8]` written; tag `v1.0.8`; release. *(paused for operator go-ahead on the tag — this is the only remaining step.)*
+- [x] `CHANGELOG.md` `[1.0.8]`; tag `v1.0.8`; release published 2026-07-26.
 
 ---
 
