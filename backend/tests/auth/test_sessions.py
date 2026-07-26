@@ -81,6 +81,21 @@ async def test_delete_session_removes_row(db: AsyncSession):
     assert await db.scalar(select(Session).where(Session.id == sid)) is None
 
 
+async def test_session_id_stored_hashed(db: AsyncSession):
+    import hashlib
+
+    u = await _user(db)
+    sid = await create_session(db, user_id=u.id, github_access_token="ghp_x", ttl_days=30)
+    # v1.0.8 SI-21: the raw cookie value is NOT stored — the PK is its hash.
+    assert await db.scalar(select(Session).where(Session.id == sid)) is None
+    expected = hashlib.sha256(sid.encode("utf-8")).hexdigest()
+    assert await db.scalar(select(Session).where(Session.id == expected)) is not None
+    # Resolving by the raw cookie value still works.
+    resolved = await get_session_with_token(db, sid)
+    assert resolved is not None
+    assert resolved[0].id == u.id
+
+
 async def test_get_session_with_corrupt_ciphertext_returns_none(db: AsyncSession):
     u = await _user(db)
     sid = await create_session(db, user_id=u.id, github_access_token="ghp_x", ttl_days=30)

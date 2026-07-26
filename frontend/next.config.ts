@@ -10,6 +10,14 @@ import type { NextConfig } from "next";
 // violation during tuning. 'unsafe-inline' stays until we wire nonce/hash-based
 // scripts+styles (Next emits inline hydration/style today); that removal is the
 // last step before promoting this to an enforcing Content-Security-Policy.
+// v1.0.8 SI-31: the browser talks to the backend origin directly (login state,
+// SSE narrative, save/share). Include it in connect-src so this report-only
+// policy is *promotable* to enforcing later (an enforced policy without it would
+// break the app's own calls). Vercel sets NEXT_PUBLIC_BACKEND_URL at build.
+const backendOrigin = process.env.NEXT_PUBLIC_BACKEND_URL
+  ? new URL(process.env.NEXT_PUBLIC_BACKEND_URL).origin
+  : "";
+
 const CSP_REPORT_ONLY = [
   "default-src 'self'",
   "base-uri 'self'",
@@ -19,7 +27,13 @@ const CSP_REPORT_ONLY = [
   "font-src 'self' data:",
   "style-src 'self' 'unsafe-inline'",
   "script-src 'self' 'unsafe-inline' https://*.posthog.com https://*.i.posthog.com",
-  "connect-src 'self' https://*.posthog.com https://*.i.posthog.com https://*.sentry.io https://*.ingest.sentry.io",
+  [
+    "connect-src 'self'",
+    backendOrigin,
+    "https://*.posthog.com https://*.i.posthog.com https://*.sentry.io https://*.ingest.sentry.io",
+  ]
+    .filter(Boolean)
+    .join(" "),
   "form-action 'self'",
 ].join("; ");
 

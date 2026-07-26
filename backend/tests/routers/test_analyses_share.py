@@ -176,3 +176,21 @@ async def test_share_wrong_owner_returns_403(db, monkeypatch):
         r = await ac.post(f"/analyses/{aid}/share")
     app.dependency_overrides.clear()
     assert r.status_code == 403
+
+
+async def test_share_rejects_foreign_origin(db, monkeypatch):
+    # v1.0.8 SI-16: a state-changing mutation from an untrusted Origin is 403'd,
+    # even with a valid session cookie.
+    sid, aid = await _setup(db, monkeypatch)
+    from app.db.session import get_db
+
+    async def _o():
+        yield db
+
+    app.dependency_overrides[get_db] = _o
+    async with await _client() as ac:
+        ac.cookies.set("si_session", sid)
+        r = await ac.post(f"/analyses/{aid}/share", headers={"Origin": "https://evil.example.com"})
+    app.dependency_overrides.clear()
+    assert r.status_code == 403
+    assert r.json()["error"] == "bad_origin"

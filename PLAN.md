@@ -55,6 +55,7 @@
 | **v1.0.5** | Ingest amplification containment (cores) — call cap, Retry-After/deadline, budget refund on abort, OG attribution, holder-checked lock | ✅ shipped |
 | **v1.0.6** | Shared-token quota breaker (SI-03 ext) — sheds new anon analyses before the shared GitHub token is exhausted. SSE coalescing dropped; OG store-gating deferred | ✅ shipped |
 | **v1.0.7** | Low-severity hardening + version-display fix — `APP_VERSION` drift guard, secret repr-scrub, CORS wildcard guard, cron log trim, README/commit bounds, URL encode, SSE done-sentinel | ✅ shipped |
+| **v1.0.8** | Auth & endpoint hardening — hashed session ids at rest (SI-21), Origin check on mutations (SI-16), CSP connect-src made promotable (SI-31), security.txt + PR dependency-review (SI-37) | ✅ shipped |
 
 ---
 
@@ -880,6 +881,32 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 - [x] All three version constants agree (`1.0.7`), enforced by a test. Backend `ruff` clean, `pytest -q` green (332 passed). Frontend `lint`+`tsc`+`test:run`+`build` clean.
 - [ ] PR reviewed; CI green; prod deploy verified (the UI shows v1.0.7). *(paused for operator go-ahead before tag/release.)*
 - [ ] `CHANGELOG.md` `[1.0.7]`; tag `v1.0.7`; release.
+
+---
+
+## v1.0.8 — Auth & endpoint hardening
+
+**Goal:** Close the deferred audit items that are high-value and cleanly doable (no DB migration, no change needing live prod verification).
+
+**Design spec:** [`docs/superpowers/specs/2026-07-26-v1.0.8-auth-endpoint-hardening-design.md`](./docs/superpowers/specs/2026-07-26-v1.0.8-auth-endpoint-hardening-design.md). **Plan:** [`docs/superpowers/plans/2026-07-26-v1.0.8-auth-endpoint-hardening.md`](./docs/superpowers/plans/2026-07-26-v1.0.8-auth-endpoint-hardening.md).
+
+**Delivered:**
+- **SI-21** — session ids stored **hashed** (`sha256`) at rest; the raw id lives only in the cookie, every lookup hashes first. No migration (old raw-id rows miss the lookup → clean re-login, reaped by the expiry cron).
+- **SI-16** — `require_trusted_origin` rejects state-changing mutations (`/analyses/{id}` share/unshare/delete, `/me/refresh/{username}`) from an untrusted `Origin` (403 `bad_origin`), closing the same-site sibling-subdomain CSRF gap. Absent-Origin (server/curl) passes; defense-in-depth on top of ownership + SameSite.
+- **SI-31 (partial)** — CSP `connect-src` now includes the backend origin (from `NEXT_PUBLIC_BACKEND_URL`), making the report-only policy promotable.
+- **SI-37 (partial)** — `/.well-known/security.txt` disclosure channel + a PR-time `actions/dependency-review-action` gate (`fail-on-severity: high`).
+
+**Still deferred (with rationale):**
+- **SI-15** (`/health` split) — the version is already public (Releases/UI/OG) and db/cache health is the endpoint's purpose; changing it risks uptime monitors for negligible gain.
+- **SI-30** (GH cache-key scope namespacing) — latent only (all cached endpoints are public-data); the fix reduces the shared-cache hit rate that stretches the 5000/hr GitHub budget.
+- **CSP enforcing flip** (SI-31 full) — needs nonce-based inline scripts + prod verification; its own slice now that connect-src is ready.
+- **SBOM** (SI-37 rest) — separate CI concern.
+- **Restore `npm audit` gate to `high`** — still blocked: latest Next.js is 16.2.12, inside the vulnerable range (fix `>16.3.0-preview.7`, unreleased).
+
+**Exit criteria:**
+- [x] Backend `ruff` clean, `pytest -q` green (333 passed, 72 DB-skipped). Frontend `lint`+`tsc`+`test:run`+`build` clean. All three version constants at `1.0.8`.
+- [ ] PR reviewed; CI green; prod deploy verified. *(paused for operator go-ahead before tag/release.)*
+- [ ] `CHANGELOG.md` `[1.0.8]`; tag `v1.0.8`; release.
 
 ---
 

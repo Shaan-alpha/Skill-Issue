@@ -137,3 +137,17 @@ jobs:
 
       - name: TypeScript (vercel.ts)
         run: npx tsc --noEmit -p .
+
+  # v1.0.8 SI-37 — PR-time supply-chain gate. Flags newly-introduced vulnerable
+  # or malicious dependencies (and license issues) in the PR diff, before merge.
+  # Complements pip-audit / npm audit (which scan the whole tree, not the delta).
+  # PR-only: the action needs a base..head diff to review.
+  dependency-review:
+    name: Dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
