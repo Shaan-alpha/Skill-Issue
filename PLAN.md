@@ -929,8 +929,8 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 - [x] Backend `ruff` clean, `pytest -q` green (359 passed, 72 DB-skipped). Frontend `lint`+`tsc`+`test:run`+`build` clean.
 - [x] Frontend CI job passes. *(The npm outage ended before implementation; verified against the recovered endpoint — `npm audit clean` — with the outage path covered by the captured-payload unit test rather than live. The `::warning::` path is unit-tested, not observed in CI.)*
 - [x] All three version constants at `1.0.9`.
-- [ ] PR reviewed; CI green; prod deploy verified.
-- [ ] `CHANGELOG.md` `[1.0.9]`; tag `v1.0.9`; release. *(Paused for operator go-ahead.)*
+- [x] PR reviewed (#46); CI green; prod deploy verified 2026-07-28 (`/_/backend/health` reports `1.0.9` with db+cache up, site 200 with the `1.0.9` badge, `security.txt` 200).
+- [ ] `CHANGELOG.md` `[1.0.9]` written; tag `v1.0.9`; release. *(Paused for operator go-ahead — the only remaining step.)*
 
 ---
 
