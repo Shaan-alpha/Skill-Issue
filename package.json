@@ -7,6 +7,6 @@
   },
   "devDependencies": {
     "@vercel/config": "^0.5.0",
-    "typescript": "^5"
+    "typescript": "^7.0.2"
   }
 }
