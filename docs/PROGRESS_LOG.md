@@ -45,7 +45,8 @@ Format:
 **Learned / surprises:** The obvious way to test this is wrong. Tampering with `requirements.txt` in the working tree and running the guard **passes** — the regenerate step overwrites the tamper before `git diff` sees it. Real drift means the *committed* file is wrong, so the test has to commit first. Caught this during design validation, when a first drift test reported exit 0 and looked like the guard didn't work. Separately, `pip-audit --locked` does not read `uv.lock` (it wants a PEP 751 `pylock.toml`), which is why auditing the lock directly and dropping `requirements.txt` was not available.
 **Blocked / open:** Unchanged — #20/#21 blocked on `eslint-config-next`'s bundled tooling; `--threshold high` blocked on `next >= 16.3.0` stable.
 **Shipped to prod:** PR #55 merged 2026-07-28. CI green, and the new step was confirmed *executing* in the real job log (`uv lock --check` → `Resolved 56 packages`, export, clean diff) rather than silently skipped — the same evidence standard v1.0.9 established, since a step that no-ops is exactly what this slice guards against. Prod-verified: `/_/backend/health` → `1.0.10`, db+cache up; site 200 with the `1.0.10` badge; `/analyze/octocat` 200 in 0.80s. **Untagged/unreleased — paused for operator go-ahead.**
-**Next:** operator decides on the `v1.0.10` tag + release. Then v1.1.0 (Progress Pulse).
+**Released:** tagged `v1.0.10` and published 2026-07-28, marked Latest. As with v1.0.9, ran `release.yml`'s exact awk extraction locally against `CHANGELOG.md` first and confirmed it returns the `[1.0.10]` section rather than empty — the check that would have caught the v1.0.6 missing-heading incident. Worth noting the extraction is prefix-safe: `## [1.0.1]` does not match `## [1.0.10] — ...` because the closing bracket disambiguates, so the two-digit patch introduced no ambiguity. Release workflow succeeded first try.
+**Next:** v1.1.0 (Progress Pulse).
 
 ---
 

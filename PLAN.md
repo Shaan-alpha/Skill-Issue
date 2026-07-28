@@ -57,7 +57,7 @@
 | **v1.0.7** | Low-severity hardening + version-display fix — `APP_VERSION` drift guard, secret repr-scrub, CORS wildcard guard, cron log trim, README/commit bounds, URL encode, SSE done-sentinel | ✅ shipped |
 | **v1.0.8** | Auth & endpoint hardening — hashed session ids at rest (SI-21), Origin check on mutations (SI-16), CSP connect-src made promotable (SI-31), security.txt + PR dependency-review (SI-37) | ✅ shipped |
 | **v1.0.9** | Audit-gate resilience — advisory-registry outages warn instead of hard-blocking CI (shape-based classification, ERROR verdict for unexplained failure) | ✅ shipped |
-| **v1.0.10** | Dependency-manifest drift guard — CI fails if `pyproject.toml` / `uv.lock` / `requirements.txt` disagree | 🔸 implemented — paused before tag |
+| **v1.0.10** | Dependency-manifest drift guard — CI fails if `pyproject.toml` / `uv.lock` / `requirements.txt` disagree | ✅ shipped |
 
 ---
 
@@ -957,7 +957,7 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 - [ ] All three version constants at `1.0.10`.
 - [ ] Backend `ruff` clean, `pytest -q` green. Frontend `lint`+`tsc`+`test:run`+`build` clean.
 - [x] PR reviewed (#55); CI green — the guard step confirmed *running* in the real job log (`Resolved 56 packages`), not skipped; prod deploy verified 2026-07-28 (`/_/backend/health` reports `1.0.10` with db+cache up, site 200 with the `1.0.10` badge, `/analyze/octocat` 200).
-- [ ] `CHANGELOG.md` `[1.0.10]` written; tag `v1.0.10`; release. *(Paused for operator go-ahead — the only remaining step.)*
+- [x] `CHANGELOG.md` `[1.0.10]`; tag `v1.0.10`; release published 2026-07-28.
 
 ---
 
