@@ -1,0 +1,2 @@
+npm warn audit invalid json response body at https://registry.npmjs.org/-/npm/v1/security/advisories/bulk reason: Unexpected token '', "\b      "... is not valid JSON
+npm error audit endpoint returned an error

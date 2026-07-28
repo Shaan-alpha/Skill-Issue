@@ -67,7 +67,11 @@ jobs:
       - name: pip-audit (shipped dependency CVEs)
         # Audits the exported requirements.txt (what actually deploys), not the
         # dev tooling. Fails the build on any known CVE in a runtime dependency.
-        run: uvx pip-audit -r requirements.txt
+        #
+        # v1.0.9: routed through tools/audit_gate.py so an OSV/PyPI outage
+        # produces a warning instead of a hard block. Unrecognised failures
+        # still fail — see the ERROR verdict in the module docstring.
+        run: uv run python tools/audit_gate.py pip --requirements requirements.txt
 
   frontend:
     name: Frontend (lint + test + build)
@@ -100,9 +104,12 @@ jobs:
         # `avatars.githubusercontent.com` (no attacker-controlled images / SVGs).
         # postcss/sharp are build-time / avatar-only. Full write-up in
         # docs/PROGRESS_LOG.md (2026-07-24).
-        # RESTORE to `--audit-level=high` once Next.js ships a patched release
-        # and `frontend/package.json` is bumped to it.
-        run: npm audit --omit=dev --audit-level=critical
+        # RESTORE: change `--threshold critical` to `--threshold high` below once
+        # Next.js ships a patched release and `frontend/package.json` is bumped.
+        #
+        # v1.0.9: routed through the audit gate so an npm registry outage warns
+        # instead of hard-blocking every PR (as it did on 2026-07-26).
+        run: python3 ../backend/tools/audit_gate.py npm --threshold critical
 
       - name: ESLint
         run: npm run lint
