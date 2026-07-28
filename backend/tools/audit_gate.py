@@ -42,13 +42,26 @@ def _parse_results(stdout: str, ecosystem: str) -> dict | None:
             return None
         return doc
 
+    if ecosystem == "pip":
+        # pip-audit's shape varies by version: modern emits
+        # {"dependencies": [...]}, older emits a bare array.
+        if isinstance(doc, list):
+            return {"dependencies": doc}
+        if isinstance(doc, dict) and isinstance(doc.get("dependencies"), list):
+            return doc
+        return None
+
     raise ValueError(f"unknown ecosystem: {ecosystem}")
 
 
 def _has_findings(doc: dict, ecosystem: str, threshold: str) -> bool:
-    counts = doc["metadata"]["vulnerabilities"]
-    floor = SEVERITY_ORDER.index(threshold)
-    return any(int(counts.get(sev, 0)) > 0 for sev in SEVERITY_ORDER[floor:])
+    if ecosystem == "npm":
+        counts = doc["metadata"]["vulnerabilities"]
+        floor = SEVERITY_ORDER.index(threshold)
+        return any(int(counts.get(sev, 0)) > 0 for sev in SEVERITY_ORDER[floor:])
+    # pip-audit reports no severity, so `threshold` does not apply here —
+    # any vulnerability at all is a finding.
+    return any(dep.get("vulns") for dep in doc["dependencies"])
 
 
 def classify(stdout: str, stderr: str, ecosystem: str, threshold: str = "critical") -> str:

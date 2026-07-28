@@ -56,3 +56,42 @@ def test_npm_moderate_only_below_critical_threshold_is_clean():
 def test_npm_high_vulns_at_high_threshold_is_findings():
     """Case 5 — proves the threshold knob, which is the deferred `high` restore path."""
     assert classify(_npm_report(high=3), "", "npm", "high") == FINDINGS
+
+
+PIP_CONNECTION_ERROR = (
+    "ERROR:pip_audit._cli:ConnectionError: Failed to reach the OSV vulnerability service"
+)
+
+
+def _pip_report(*deps: dict) -> str:
+    """pip-audit's modern shape: {"dependencies": [...]}."""
+    return json.dumps({"dependencies": list(deps)})
+
+
+def test_pip_connection_error_is_service_unavailable():
+    """Case 6 — pip-audit raises ConnectionError when OSV/PyPI is unreachable."""
+    assert classify("", PIP_CONNECTION_ERROR, "pip") == SERVICE_UNAVAILABLE
+
+
+def test_pip_clean_report_is_clean():
+    """Case 7."""
+    payload = _pip_report(
+        {"name": "fastapi", "version": "0.115.0", "vulns": []},
+        {"name": "httpx", "version": "0.27.0", "vulns": []},
+    )
+    assert classify(payload, "", "pip") == CLEAN
+
+
+def test_pip_legacy_bare_array_shape_is_parsed():
+    """Case 8 — older pip-audit emits a bare array; both shapes must work."""
+    payload = json.dumps([{"name": "httpx", "version": "0.27.0", "vulns": []}])
+    assert classify(payload, "", "pip") == CLEAN
+
+
+def test_pip_report_with_vulns_is_findings():
+    """Case 9 — pip-audit carries no severity, so any vuln is a finding."""
+    payload = _pip_report(
+        {"name": "flask", "version": "0.5", "vulns": [{"id": "PYSEC-2019-179"}]},
+        {"name": "httpx", "version": "0.27.0", "vulns": []},
+    )
+    assert classify(payload, "", "pip") == FINDINGS
