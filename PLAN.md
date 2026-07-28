@@ -57,6 +57,7 @@
 | **v1.0.7** | Low-severity hardening + version-display fix — `APP_VERSION` drift guard, secret repr-scrub, CORS wildcard guard, cron log trim, README/commit bounds, URL encode, SSE done-sentinel | ✅ shipped |
 | **v1.0.8** | Auth & endpoint hardening — hashed session ids at rest (SI-21), Origin check on mutations (SI-16), CSP connect-src made promotable (SI-31), security.txt + PR dependency-review (SI-37) | ✅ shipped |
 | **v1.0.9** | Audit-gate resilience — advisory-registry outages warn instead of hard-blocking CI (shape-based classification, ERROR verdict for unexplained failure) | ✅ shipped |
+| **v1.0.10** | Dependency-manifest drift guard — CI fails if `pyproject.toml` / `uv.lock` / `requirements.txt` disagree | 🔸 implemented — paused before tag |
 
 ---
 
@@ -933,6 +934,30 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 - [x] All three version constants at `1.0.9`.
 - [x] PR reviewed (#46); CI green; prod deploy verified 2026-07-28 (`/_/backend/health` reports `1.0.9` with db+cache up, site 200 with the `1.0.9` badge, `security.txt` 200).
 - [x] `CHANGELOG.md` `[1.0.9]`; tag `v1.0.9`; release published 2026-07-28.
+
+---
+
+## v1.0.10 — Dependency-manifest drift guard
+
+**Goal:** Make a mismatch between `backend/pyproject.toml`, `backend/uv.lock` and `backend/requirements.txt` fail CI deterministically instead of surfacing by accident.
+
+**Design spec:** [`docs/superpowers/specs/2026-07-28-v1.0.10-manifest-drift-guard-design.md`](./docs/superpowers/specs/2026-07-28-v1.0.10-manifest-drift-guard-design.md). **Plan:** [`docs/superpowers/plans/2026-07-28-v1.0.10-manifest-drift-guard.md`](./docs/superpowers/plans/2026-07-28-v1.0.10-manifest-drift-guard.md).
+
+**Delivered:**
+- One CI step, no new source files: `uv lock --check` for `pyproject.toml → uv.lock`, and regenerate-in-place + `git diff --exit-code` for `uv.lock → requirements.txt`.
+- Placed before `pip-audit`, so the audit runs against a manifest proven to match the lock.
+- Corrected two comments that called `requirements.txt` the deploy manifest; Vercel installs from `pyproject.toml` + `uv.lock`.
+
+**Deliberately not done:** generating `requirements.txt` at audit time instead of committing it, which would make drift impossible rather than merely detected. It depends on the file genuinely never being read at install time — strongly evidenced by v0.8.5 but not proven — and the conservative option costs little. Reopenable.
+
+**Exit criteria:**
+- [ ] Guard demonstrated to fail on a committed drifted `requirements.txt` and pass on a clean tree.
+- [ ] Job/step tree verified after editing `ci.yml` (backend 9, frontend 8, config 4, dependency-review 2).
+- [ ] Both misleading comments corrected.
+- [ ] All three version constants at `1.0.10`.
+- [ ] Backend `ruff` clean, `pytest -q` green. Frontend `lint`+`tsc`+`test:run`+`build` clean.
+- [ ] PR reviewed; CI green; prod deploy verified.
+- [ ] `CHANGELOG.md` `[1.0.10]`; tag `v1.0.10`; release. *(Paused for operator go-ahead.)*
 
 ---
 
