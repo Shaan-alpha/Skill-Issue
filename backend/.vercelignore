@@ -1,7 +1,11 @@
 # Keep dev-only files out of the deployed Vercel Python function bundle.
-# Only runtime code needs to ship: app/, api/, migrations/, alembic.ini,
-# requirements.txt, pyproject.toml. Everything below is tests, load/dev
-# tooling, caches, or local env — never imported by the request path.
+# What ships: app/, api/, migrations/, alembic.ini, pyproject.toml,
+# uv.lock, requirements.txt. Everything below is tests, load/dev tooling,
+# caches, or local env — never imported by the request path.
+#
+# Note requirements.txt ships but is not the install manifest: Vercel
+# resolves dependencies from pyproject.toml + uv.lock (docs/DEPLOY.md).
+# It is kept as the pip-audit input and a readable record of the closure.
 
 tests/
 loadtest/

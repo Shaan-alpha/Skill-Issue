@@ -37,6 +37,17 @@ Format:
 
 ---
 
+## 2026-07-28 — Claude (Opus 5) with Shaan — v1.0.10: dependency-manifest drift guard
+
+**Slice:** v1.0.10 (implemented, unreleased/untagged — paused for operator go-ahead)
+**Done:** The backend's three dependency files — `pyproject.toml`, `uv.lock`, `requirements.txt` — had no check on either link between them. CI now asserts both: `uv lock --check` for the first, and regenerate-in-place plus `git diff --exit-code` for the second. One step, no new source files. Placed before `pip-audit` so the audit runs against a manifest already proven to match the lock. Also corrected two comments (`ci.yml`, `backend/.vercelignore`) that called `requirements.txt` the deploy manifest.
+**Decisions:** Regenerating in place rather than diffing a temp file is the detail that makes this work without normalisation — `uv export` writes a header echoing its own `-o` argument, so a temp path differs on line 2 by construction and would report drift on every run. Also rejected flipping the existing `uv sync --frozen` to `--locked`, which would cover the first link for free: the failure would read as "the install broke" rather than "your manifests disagree", and a separately named step is self-describing in the checks UI.
+**Learned / surprises:** The obvious way to test this is wrong. Tampering with `requirements.txt` in the working tree and running the guard **passes** — the regenerate step overwrites the tamper before `git diff` sees it. Real drift means the *committed* file is wrong, so the test has to commit first. Caught this during design validation, when a first drift test reported exit 0 and looked like the guard didn't work. Separately, `pip-audit --locked` does not read `uv.lock` (it wants a PEP 751 `pylock.toml`), which is why auditing the lock directly and dropping `requirements.txt` was not available.
+**Blocked / open:** Unchanged — #20/#21 blocked on `eslint-config-next`'s bundled tooling; `--threshold high` blocked on `next >= 16.3.0` stable.
+**Next:** PR → CI → prod-verify, then pause for the tag.
+
+---
+
 ## 2026-07-28 — Claude (Opus 5) with Shaan — v1.0.9 released
 
 **Slice:** v1.0.9 ✅ **shipped** — tagged `v1.0.9`, release published 2026-07-28, marked Latest.
