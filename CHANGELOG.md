@@ -10,6 +10,13 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ## [Unreleased]
 
+## [1.0.9] — 2026-07-28
+
+CI reliability — a dependency-advisory outage no longer blocks all work.
+
+### Fixed
+- **A dependency-advisory service outage no longer blocks every pull request.** The security audit step previously couldn't tell "the advisory service is down" from "your dependencies are vulnerable" — both look identical from the outside — so an npm registry incident on 2026-07-26 turned every pull request red, including documentation-only ones. The check now recognises the difference: it retries, and if the service is genuinely unreachable it records a clearly-marked warning instead of failing. Real vulnerabilities still block the build exactly as before, and any failure it can't positively identify as a service outage still fails loudly rather than passing quietly.
+
 ## [1.0.8] — 2026-07-26
 
 Auth & endpoint hardening (the deferred tail of the security audit).

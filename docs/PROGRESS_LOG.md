@@ -19,6 +19,17 @@ Format:
 
 ---
 
+## 2026-07-28 — Claude (Opus 5) with Shaan — v1.0.9: audit-gate resilience
+
+**Slice:** v1.0.9 (implemented, unreleased/untagged — paused for operator go-ahead)
+**Done:** New stdlib-only `backend/tools/audit_gate.py`. Both `npm audit` and `pip-audit` exit `1` for a registry outage *and* for a real advisory, and both CI steps gated on the exit code alone — so when npm's `/security/advisories/bulk` endpoint started returning an undecodable gzip body on 2026-07-26, every PR went red, including docs-only ones. The gate now classifies on the **parsed output shape** instead (neither tool emits a valid results document on transport failure), across four verdicts: `CLEAN`, `FINDINGS`, `SERVICE_UNAVAILABLE` (retry ×3 at 5s/15s, then `::warning::` + pass), and `ERROR`. Both CI steps routed through it; `--threshold` replaces `--audit-level`. Backend `359 passed` (72 DB-skipped, 26 new); frontend lint/tsc/tests/build clean; all three version constants → 1.0.9.
+**Decisions:** The `ERROR` verdict is the point of the design, not a detail. Forgiving outages is easy to get wrong — a naive version treats *any* unparseable output as an outage, so a crashed tool or a malformed `requirements.txt` would pass with a warning. Only positively-identified transport signatures are forgiven; everything else still fails. Also dropped the `returncode` parameter the spec listed for `classify` — writing the logic showed it is never read, and keeping it would imply the exit code still matters, which is the exact confusion this slice removes. Two additions beyond the plan: `_run_audit` resolves the auditor via `shutil.which` (Windows ships `npm.cmd`/`uvx.exe`, which `CreateProcess` won't find from a bare name — this blocked the plan's own local end-to-end step), and catches `OSError` into an `ERROR` verdict so a missing binary produces a diagnostic instead of a traceback.
+**Learned / surprises:** The npm outage returned **HTTP 200** with a gzip body, so it never looked like a network error to anything checking status codes — only the JSON parse failed. It had **already recovered** by the time this was implemented (2026-07-28), so the live-outage verification the plan called for was not observable; the outage path is covered by the captured-payload unit test, and the recovered endpoint was verified instead (`npm audit clean`, exit 0). The `::warning::` path is therefore unit-tested but never yet seen in a real CI run. Separately, PR #45's backend failure turned out to be a genuine `pip-audit` `ResolutionImpossible` (requirements.txt line 83 vs `pydantic-core==2.47.0`) — ran its real stderr through `classify` and confirmed it lands on `ERROR`, i.e. the new gate does *not* mask it.
+**Blocked / open:** Restoring `--threshold high` still waits on a patched Next.js — re-confirmed 2026-07-28 that `npm audit --omit=dev --audit-level=high` exits 1 on 5 remaining high advisories. 25 Dependabot alerts (14 high / 11 medium) and 14 open Dependabot PRs remain untriaged — several are major-version jumps (`typescript` 5→7, `eslint` 9→10, `@types/node` 20→26, `actions/checkout` 4→7) needing real review. PR #45 needs its dependency conflict resolved on its own merits.
+**Next:** PR → CI → prod-verify, then pause for the tag.
+
+---
+
 ## 2026-07-26 — Claude (Opus 4.8) with Shaan — v1.0.8: auth & endpoint hardening (deferred audit tail)
 
 **Slice:** v1.0.8 ✅ **shipped** — merged, prod-verified, tagged `v1.0.8`, release published 2026-07-26

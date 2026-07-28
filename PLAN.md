@@ -56,6 +56,7 @@
 | **v1.0.6** | Shared-token quota breaker (SI-03 ext) — sheds new anon analyses before the shared GitHub token is exhausted. SSE coalescing dropped; OG store-gating deferred | ✅ shipped |
 | **v1.0.7** | Low-severity hardening + version-display fix — `APP_VERSION` drift guard, secret repr-scrub, CORS wildcard guard, cron log trim, README/commit bounds, URL encode, SSE done-sentinel | ✅ shipped |
 | **v1.0.8** | Auth & endpoint hardening — hashed session ids at rest (SI-21), Origin check on mutations (SI-16), CSP connect-src made promotable (SI-31), security.txt + PR dependency-review (SI-37) | ✅ shipped |
+| **v1.0.9** | Audit-gate resilience — advisory-registry outages warn instead of hard-blocking CI (shape-based classification, ERROR verdict for unexplained failure) | 🔸 implemented — paused before tag |
 
 ---
 
@@ -907,6 +908,29 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 - [x] Backend `ruff` clean, `pytest -q` green (333 passed, 72 DB-skipped). Frontend `lint`+`tsc`+`test:run`+`build` clean. All three version constants at `1.0.8`.
 - [x] PR reviewed (#40, + #41 docs); CI green on `main`; prod deploy verified 2026-07-26 (`security.txt` 200, UI badge `1.0.8`, `/_/backend/health` reports `1.0.8` with db+cache up). SI-16/SI-21 are test-verified only — not externally probeable; see `docs/PROGRESS_LOG.md`.
 - [x] `CHANGELOG.md` `[1.0.8]`; tag `v1.0.8`; release published 2026-07-26.
+
+---
+
+## v1.0.9 — Audit-gate resilience
+
+**Goal:** Stop an advisory-registry outage from turning a CI security gate into a repo-wide hard blocker, without weakening it.
+
+**Design spec:** [`docs/superpowers/specs/2026-07-26-v1.0.9-audit-gate-resilience-design.md`](./docs/superpowers/specs/2026-07-26-v1.0.9-audit-gate-resilience-design.md). **Plan:** [`docs/superpowers/plans/2026-07-26-v1.0.9-audit-gate-resilience.md`](./docs/superpowers/plans/2026-07-26-v1.0.9-audit-gate-resilience.md).
+
+**Delivered:**
+- `backend/tools/audit_gate.py` (stdlib-only) classifies audit output by parsed shape rather than exit code — both `npm audit` and `pip-audit` exit `1` for an outage and a real advisory alike.
+- Four verdicts: `CLEAN`, `FINDINGS`, `SERVICE_UNAVAILABLE` (retry ×3, then warn + pass), `ERROR` (unexplained failure — fails loudly).
+- Both CI audit steps routed through it. `--threshold` makes the deferred `high` restore a one-word change.
+
+**Still deferred:** restoring `--threshold high` (blocked on a patched Next.js release — re-confirmed 2026-07-28: `npm audit --audit-level=high` still exits 1 on 5 high advisories); triage of the 25 Dependabot alerts / 14 open Dependabot PRs, several of which are major-version jumps.
+
+**Exit criteria:**
+- [x] `classify` unit tests green for all 14 cases, including both `ERROR` guards (26 tests total after parametrisation).
+- [x] Backend `ruff` clean, `pytest -q` green (359 passed, 72 DB-skipped). Frontend `lint`+`tsc`+`test:run`+`build` clean.
+- [x] Frontend CI job passes. *(The npm outage ended before implementation; verified against the recovered endpoint — `npm audit clean` — with the outage path covered by the captured-payload unit test rather than live. The `::warning::` path is unit-tested, not observed in CI.)*
+- [x] All three version constants at `1.0.9`.
+- [ ] PR reviewed; CI green; prod deploy verified.
+- [ ] `CHANGELOG.md` `[1.0.9]`; tag `v1.0.9`; release. *(Paused for operator go-ahead.)*
 
 ---
 
