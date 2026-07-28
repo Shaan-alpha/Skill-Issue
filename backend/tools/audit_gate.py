@@ -14,6 +14,7 @@ degrade into "pass on anything we don't understand".
 from __future__ import annotations
 
 import json
+import re
 
 CLEAN = "CLEAN"
 FINDINGS = "FINDINGS"
@@ -64,9 +65,45 @@ def _has_findings(doc: dict, ecosystem: str, threshold: str) -> bool:
     return any(dep.get("vulns") for dep in doc["dependencies"])
 
 
+# Only these positively-identified failures are forgiven. Anything else
+# unexplained must fail — see the ERROR verdict.
+_TRANSPORT_SIGNATURES = (
+    "audit endpoint returned an error",
+    "invalid json response body",
+    "connectionerror",
+    "serviceerror",
+    "socket hang up",
+    "network error",
+    "getaddrinfo",
+    "etimedout",
+    "econnreset",
+    "econnrefused",
+    "enotfound",
+    "eai_again",
+    "too many requests",
+    "service unavailable",
+    "bad gateway",
+    "gateway timeout",
+    "internal server error",
+)
+
+# Matches "HTTP 503", "status code 429" — but not a bare "500" that could
+# just as easily be a version number or a dependency count.
+_HTTP_ERROR_RE = re.compile(r"(?:http|status(?:\s+code)?)\D{0,3}(?:429|50[0-4])", re.IGNORECASE)
+
+
+def _looks_like_transport_failure(stdout: str, stderr: str) -> bool:
+    blob = f"{stdout or ''}\n{stderr or ''}".lower()
+    if any(sig in blob for sig in _TRANSPORT_SIGNATURES):
+        return True
+    return bool(_HTTP_ERROR_RE.search(blob))
+
+
 def classify(stdout: str, stderr: str, ecosystem: str, threshold: str = "critical") -> str:
     """Classify one audit run. Pure — no network, no clock, no subprocess."""
     doc = _parse_results(stdout, ecosystem)
     if doc is not None:
         return FINDINGS if _has_findings(doc, ecosystem, threshold) else CLEAN
-    return SERVICE_UNAVAILABLE
+    if _looks_like_transport_failure(stdout, stderr):
+        return SERVICE_UNAVAILABLE
+    return ERROR

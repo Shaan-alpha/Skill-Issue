@@ -3,8 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from tools.audit_gate import (
     CLEAN,
+    ERROR,
     FINDINGS,
     SERVICE_UNAVAILABLE,
     classify,
@@ -95,3 +98,36 @@ def test_pip_report_with_vulns_is_findings():
         {"name": "httpx", "version": "0.27.0", "vulns": []},
     )
     assert classify(payload, "", "pip") == FINDINGS
+
+
+@pytest.mark.parametrize("ecosystem", ["npm", "pip"])
+def test_unparseable_output_without_transport_signature_is_error(ecosystem):
+    """Case 10 — a crashed tool must fail loudly, not pass as an outage."""
+    stdout = 'Traceback (most recent call last):\n  File "x.py", line 1\nKeyError: \'deps\''
+    stderr = "invalid requirement on line 4 of requirements.txt"
+
+    assert classify(stdout, stderr, ecosystem) == ERROR
+
+
+@pytest.mark.parametrize("ecosystem", ["npm", "pip"])
+def test_empty_output_without_transport_signature_is_error(ecosystem):
+    """Case 11 — silence is not success."""
+    assert classify("", "", ecosystem) == ERROR
+
+
+@pytest.mark.parametrize(
+    "stderr",
+    [
+        "npm error audit endpoint returned an error",
+        "npm warn audit invalid json response body at https://registry.npmjs.org",
+        "ConnectionError: OSV unreachable",
+        "pip_audit ServiceError: PyPI returned an error",
+        "request failed, reason: getaddrinfo ENOTFOUND registry.npmjs.org",
+        "FetchError: request to https://registry.npmjs.org failed, reason: ETIMEDOUT",
+        "Received HTTP 503 from the advisory service",
+        "server responded with status code 429",
+    ],
+)
+def test_known_transport_signatures_are_service_unavailable(stderr):
+    """Each forgiven failure mode must be positively identified."""
+    assert classify("", stderr, "npm") == SERVICE_UNAVAILABLE
