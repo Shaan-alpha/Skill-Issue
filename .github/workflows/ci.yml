@@ -88,8 +88,13 @@ jobs:
           git diff --exit-code -- requirements.txt
 
       - name: pip-audit (shipped dependency CVEs)
-        # Audits the exported requirements.txt (what actually deploys), not the
-        # dev tooling. Fails the build on any known CVE in a runtime dependency.
+        # Audits the exported requirements.txt -- the runtime dependency closure,
+        # not the dev tooling. Fails the build on any known CVE in it.
+        #
+        # NOTE: requirements.txt is NOT the install manifest. Vercel resolves the
+        # deploy from pyproject.toml + uv.lock (docs/DEPLOY.md). This file exists
+        # to feed this audit, which is why the drift guard above matters -- if it
+        # drifted, this step would audit something production never installs.
         #
         # v1.0.9: routed through tools/audit_gate.py so an OSV/PyPI outage
         # produces a warning instead of a hard block. Unrecognised failures
