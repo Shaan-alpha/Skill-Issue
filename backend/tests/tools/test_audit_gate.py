@@ -5,12 +5,14 @@ from pathlib import Path
 
 import pytest
 
+from tools import audit_gate
 from tools.audit_gate import (
     CLEAN,
     ERROR,
     FINDINGS,
     SERVICE_UNAVAILABLE,
     classify,
+    run_gate,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -103,7 +105,7 @@ def test_pip_report_with_vulns_is_findings():
 @pytest.mark.parametrize("ecosystem", ["npm", "pip"])
 def test_unparseable_output_without_transport_signature_is_error(ecosystem):
     """Case 10 — a crashed tool must fail loudly, not pass as an outage."""
-    stdout = 'Traceback (most recent call last):\n  File "x.py", line 1\nKeyError: \'deps\''
+    stdout = "Traceback (most recent call last):\n  File \"x.py\", line 1\nKeyError: 'deps'"
     stderr = "invalid requirement on line 4 of requirements.txt"
 
     assert classify(stdout, stderr, ecosystem) == ERROR
@@ -131,3 +133,86 @@ def test_empty_output_without_transport_signature_is_error(ecosystem):
 def test_known_transport_signatures_are_service_unavailable(stderr):
     """Each forgiven failure mode must be positively identified."""
     assert classify("", stderr, "npm") == SERVICE_UNAVAILABLE
+
+
+class _FakeRunner:
+    """Returns a scripted (stdout, stderr) per call and counts invocations."""
+
+    def __init__(self, *responses: tuple[str, str]):
+        self._responses = list(responses)
+        self.calls = 0
+
+    def __call__(self, ecosystem: str, requirements: str | None) -> tuple[str, str]:
+        self.calls += 1
+        return self._responses[min(self.calls - 1, len(self._responses) - 1)]
+
+
+def test_run_gate_retries_then_passes_with_warning_on_outage(capsys):
+    """Case 12 — exhausted retries on a real outage exit 0, loudly."""
+    outage = ("", "npm error audit endpoint returned an error")
+    runner = _FakeRunner(outage)
+    slept: list[int] = []
+
+    code = run_gate("npm", attempts=3, sleep=slept.append, runner=runner)
+
+    assert code == 0
+    assert runner.calls == 3
+    assert slept == [5, 15]
+    assert "::warning::" in capsys.readouterr().out
+
+
+def test_run_gate_recovers_if_a_retry_succeeds(capsys):
+    """A transient blip resolves without a warning."""
+    outage = ("", "npm error audit endpoint returned an error")
+    runner = _FakeRunner(outage, (_npm_report(), ""))
+    slept: list[int] = []
+
+    code = run_gate("npm", attempts=3, sleep=slept.append, runner=runner)
+
+    assert code == 0
+    assert runner.calls == 2
+    assert slept == [5]
+    assert "::warning::" not in capsys.readouterr().out
+
+
+def test_run_gate_does_not_retry_on_findings():
+    """Case 13 — a real advisory fails fast."""
+    runner = _FakeRunner((_npm_report(critical=1), ""))
+    slept: list[int] = []
+
+    code = run_gate("npm", threshold="critical", attempts=3, sleep=slept.append, runner=runner)
+
+    assert code == 1
+    assert runner.calls == 1
+    assert slept == []
+
+
+def test_run_gate_does_not_retry_on_error():
+    """Case 14 — an unexplained failure fails fast."""
+    runner = _FakeRunner(("garbage", "nothing recognisable here"))
+    slept: list[int] = []
+
+    code = run_gate("npm", attempts=3, sleep=slept.append, runner=runner)
+
+    assert code == 1
+    assert runner.calls == 1
+    assert slept == []
+
+
+def test_missing_auditor_binary_is_error_not_outage(monkeypatch):
+    """A missing npm/uvx must fail the gate, not be forgiven as an outage.
+
+    `_run_audit` turns the OSError into stderr text carrying no transport
+    signature, so it lands on ERROR rather than escaping as a traceback.
+    """
+    monkeypatch.setattr(audit_gate.shutil, "which", lambda _: None)
+
+    def _boom(*args, **kwargs):
+        raise FileNotFoundError(2, "The system cannot find the file specified")
+
+    monkeypatch.setattr(audit_gate.subprocess, "run", _boom)
+
+    stdout, stderr = audit_gate._run_audit("npm", None)
+
+    assert "could not run npm" in stderr
+    assert classify(stdout, stderr, "npm") == ERROR
