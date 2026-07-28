@@ -922,7 +922,9 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 - Four verdicts: `CLEAN`, `FINDINGS`, `SERVICE_UNAVAILABLE` (retry ×3, then warn + pass), `ERROR` (unexplained failure — fails loudly).
 - Both CI audit steps routed through it. `--threshold` makes the deferred `high` restore a one-word change.
 
-**Still deferred:** restoring `--threshold high` (blocked on a patched Next.js release — re-confirmed 2026-07-28: `npm audit --audit-level=high` still exits 1 on 5 high advisories); triage of the 25 Dependabot alerts / 14 open Dependabot PRs, several of which are major-version jumps.
+**Still deferred:** restoring `--threshold high`, blocked on a patched Next.js. Re-confirmed 2026-07-28: `npm audit --audit-level=high` still exits 1 on 5 high advisories, and the precise unblock condition is **`next >= 16.3.0` stable** — the vulnerable range runs through `16.3.0-preview.7` while latest stable is `16.2.12`.
+
+*(The Dependabot backlog this slice deferred was cleared the same day — 13 open PRs → 2, 25 alerts → 16. The two that remain, `typescript` 7 and `eslint` 10, are blocked upstream on `eslint-config-next`'s bundled tooling. See the 2026-07-28 dependency-triage entry in `docs/PROGRESS_LOG.md`.)*
 
 **Exit criteria:**
 - [x] `classify` unit tests green for all 14 cases, including both `ERROR` guards (26 tests total after parametrisation).
