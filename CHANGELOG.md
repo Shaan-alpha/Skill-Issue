@@ -12,10 +12,14 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ## [1.0.10] — 2026-07-28
 
-Internal CI hardening. No user-facing change.
+Internal CI hardening and a dependency refresh. No user-facing change.
 
 ### Changed
 - **The build now fails immediately if the backend's dependency files disagree with each other.** These three files must stay in step, and one is generated from another; previously a mismatch was only noticed if it happened to break something else downstream. It is now checked directly on every pull request.
+- **Dependencies brought up to date** — 25 backend packages and 10 frontend packages, plus the CI action versions. Nothing changes in how the app behaves; this clears a backlog of pending security advisories in libraries the project depends on.
+
+### Security
+- Cleared 9 outstanding dependency advisories. The ones that remain are either not shipped to users at all (development-only tooling) or are waiting on an upstream release that does not exist yet — both categories are documented in `docs/DEPLOY.md` rather than left unexplained.
 
 ## [1.0.9] — 2026-07-28
 

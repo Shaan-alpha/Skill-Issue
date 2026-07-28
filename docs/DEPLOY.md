@@ -111,7 +111,7 @@ After the first migration: every subsequent push that includes a new migration r
 ```bash
 # Health — should report db=up and cache=up after Upstash is provisioned
 curl https://<your-vercel-host>/_/backend/health
-# -> {"status":"ok","version":"1.0.7","db":"up","cache":"up"}
+# -> {"status":"ok","version":"1.0.10","db":"up","cache":"up"}
 
 # Anonymous analyze
 curl https://<your-vercel-host>/_/backend/analyze/octocat
@@ -149,17 +149,18 @@ time curl -s -o /dev/null https://<your-vercel-host>/_/backend/analyze/octocat
 
 Cold call: ~5-8s. Warm call (cached): ≤200ms p95 target. If the warm call isn't fast, check `/health` for `cache: "up"` and verify the env vars survived the deploy.
 
-## Known limits as of v1.0.7
+## Known limits as of v1.0.10
 
 - **Sentry source-map upload not wired.** Frontend stack traces in Sentry show minified function names — runtime capture still works, only symbolication is degraded. Re-add the `withSentryConfig` wrapper once `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` / `SENTRY_PROJECT` are provisioned.
 - **Sentry alert rules not wired.** The integration ships without thresholds; needs ~1 week of baseline data first.
-- **CSP is Report-Only.** `frontend/next.config.ts` ships the Content-Security-Policy in report-only mode with `unsafe-inline`; promoting it to enforcing (nonce-based) is a deferred hardening slice (audit SI-31).
-- **`npm audit` CI gate at `--audit-level=critical`.** Temporarily lowered from `high` pending a patched Next.js release; restore to `high` when one ships (see the hardening note above).
-- **Heavier audit tail deferred** — hashing session ids at rest (DB migration), an Origin check on state-changing mutations, an SBOM + `security.txt`; tracked in `PLAN.md`.
+- **CSP is Report-Only.** `frontend/next.config.ts` ships the Content-Security-Policy in report-only mode with `unsafe-inline`. v1.0.8 (SI-31) added the backend origin to `connect-src`, so the policy is now **promotable**; flipping it to enforcing (nonce-based) remains a deferred slice.
+- **`npm audit` CI gate at `--threshold critical`.** Temporarily lowered from `high` pending a patched Next.js. Precise unblock condition: **`next >= 16.3.0` stable** — the vulnerable range runs through `16.3.0-preview.7` and latest stable is `16.2.12`, so npm's `fixAvailable: true` currently resolves to a preview or a semver-major downgrade. Since v1.0.9 the knob is `--threshold` on `backend/tools/audit_gate.py`, so restoring it is a one-word change.
+- **SBOM not published.** The remaining piece of audit SI-37; `security.txt` and the PR dependency-review gate shipped in v1.0.8.
+- **Two Dependabot PRs blocked upstream** — `typescript` 7 (#20) and `eslint` 10 (#21). Both are `eslint-config-next`'s bundled tooling lagging: its `typescript-eslint` hard-errors `does not support TS 7.0`, and its `eslint-plugin-react` still calls the `context.getFilename()` ESLint 10 removed. One `eslint-config-next` release likely clears both.
 
-_(Resolved since earlier: global rate limiting shipped in v0.9.2 and was hardened in v1.0.4–v1.0.6; `/share/[slug]` gained on-demand ISR in v0.8.6; the custom domain — skillissue.tech — went live in v1.0.1.)_
+_(Resolved since earlier: global rate limiting shipped in v0.9.2 and was hardened in v1.0.4–v1.0.6; session ids are hashed at rest and mutations carry an Origin check as of v1.0.8; `/share/[slug]` gained on-demand ISR in v0.8.6; the custom domain — skillissue.tech — went live in v1.0.1.)_
 
 ## What's intentionally not here
 
-- A `requirements.txt` step — Vercel reads `backend/pyproject.toml` directly via `uv` since v0.5.0.
+- A `requirements.txt` step — Vercel reads `backend/pyproject.toml` directly via `uv` since v0.5.0. `backend/requirements.txt` is still committed, but only as the `pip-audit` input and a readable record of the resolved closure; v1.0.10 added a CI guard that fails if it drifts from `uv.lock`.
 - The retired two-project layout — see git history for `feat/v0.5.0-auth-persistence` if you need to reconstruct it.
