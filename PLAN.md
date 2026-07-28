@@ -956,8 +956,8 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 - [ ] Both misleading comments corrected.
 - [ ] All three version constants at `1.0.10`.
 - [ ] Backend `ruff` clean, `pytest -q` green. Frontend `lint`+`tsc`+`test:run`+`build` clean.
-- [ ] PR reviewed; CI green; prod deploy verified.
-- [ ] `CHANGELOG.md` `[1.0.10]`; tag `v1.0.10`; release. *(Paused for operator go-ahead.)*
+- [x] PR reviewed (#55); CI green — the guard step confirmed *running* in the real job log (`Resolved 56 packages`), not skipped; prod deploy verified 2026-07-28 (`/_/backend/health` reports `1.0.10` with db+cache up, site 200 with the `1.0.10` badge, `/analyze/octocat` 200).
+- [ ] `CHANGELOG.md` `[1.0.10]` written; tag `v1.0.10`; release. *(Paused for operator go-ahead — the only remaining step.)*
 
 ---
 

@@ -44,7 +44,8 @@ Format:
 **Decisions:** Regenerating in place rather than diffing a temp file is the detail that makes this work without normalisation — `uv export` writes a header echoing its own `-o` argument, so a temp path differs on line 2 by construction and would report drift on every run. Also rejected flipping the existing `uv sync --frozen` to `--locked`, which would cover the first link for free: the failure would read as "the install broke" rather than "your manifests disagree", and a separately named step is self-describing in the checks UI.
 **Learned / surprises:** The obvious way to test this is wrong. Tampering with `requirements.txt` in the working tree and running the guard **passes** — the regenerate step overwrites the tamper before `git diff` sees it. Real drift means the *committed* file is wrong, so the test has to commit first. Caught this during design validation, when a first drift test reported exit 0 and looked like the guard didn't work. Separately, `pip-audit --locked` does not read `uv.lock` (it wants a PEP 751 `pylock.toml`), which is why auditing the lock directly and dropping `requirements.txt` was not available.
 **Blocked / open:** Unchanged — #20/#21 blocked on `eslint-config-next`'s bundled tooling; `--threshold high` blocked on `next >= 16.3.0` stable.
-**Next:** PR → CI → prod-verify, then pause for the tag.
+**Shipped to prod:** PR #55 merged 2026-07-28. CI green, and the new step was confirmed *executing* in the real job log (`uv lock --check` → `Resolved 56 packages`, export, clean diff) rather than silently skipped — the same evidence standard v1.0.9 established, since a step that no-ops is exactly what this slice guards against. Prod-verified: `/_/backend/health` → `1.0.10`, db+cache up; site 200 with the `1.0.10` badge; `/analyze/octocat` 200 in 0.80s. **Untagged/unreleased — paused for operator go-ahead.**
+**Next:** operator decides on the `v1.0.10` tag + release. Then v1.1.0 (Progress Pulse).
 
 ---
 
