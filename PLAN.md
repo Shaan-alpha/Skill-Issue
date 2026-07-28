@@ -56,7 +56,7 @@
 | **v1.0.6** | Shared-token quota breaker (SI-03 ext) — sheds new anon analyses before the shared GitHub token is exhausted. SSE coalescing dropped; OG store-gating deferred | ✅ shipped |
 | **v1.0.7** | Low-severity hardening + version-display fix — `APP_VERSION` drift guard, secret repr-scrub, CORS wildcard guard, cron log trim, README/commit bounds, URL encode, SSE done-sentinel | ✅ shipped |
 | **v1.0.8** | Auth & endpoint hardening — hashed session ids at rest (SI-21), Origin check on mutations (SI-16), CSP connect-src made promotable (SI-31), security.txt + PR dependency-review (SI-37) | ✅ shipped |
-| **v1.0.9** | Audit-gate resilience — advisory-registry outages warn instead of hard-blocking CI (shape-based classification, ERROR verdict for unexplained failure) | 🔸 implemented — paused before tag |
+| **v1.0.9** | Audit-gate resilience — advisory-registry outages warn instead of hard-blocking CI (shape-based classification, ERROR verdict for unexplained failure) | ✅ shipped |
 
 ---
 
@@ -932,7 +932,7 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 - [x] Frontend CI job passes. *(The npm outage ended before implementation; verified against the recovered endpoint — `npm audit clean` — with the outage path covered by the captured-payload unit test rather than live. The `::warning::` path is unit-tested, not observed in CI.)*
 - [x] All three version constants at `1.0.9`.
 - [x] PR reviewed (#46); CI green; prod deploy verified 2026-07-28 (`/_/backend/health` reports `1.0.9` with db+cache up, site 200 with the `1.0.9` badge, `security.txt` 200).
-- [ ] `CHANGELOG.md` `[1.0.9]` written; tag `v1.0.9`; release. *(Paused for operator go-ahead — the only remaining step.)*
+- [x] `CHANGELOG.md` `[1.0.9]`; tag `v1.0.9`; release published 2026-07-28.
 
 ---
 
