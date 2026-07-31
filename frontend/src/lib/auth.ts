@@ -48,8 +48,20 @@ function getSnapshot(): Promise<Session> {
   return getCachedPromise();
 }
 
+// Must be a stable reference. `useSyncExternalStore` compares snapshots with
+// Object.is, and `use()` needs a promise identity it can resolve against a
+// cache — returning `Promise.resolve(null)` from the function body minted a new
+// promise on every call, which is what produced both of the console errors this
+// app had learned to treat as background noise:
+//   "The result of getServerSnapshot should be cached to avoid an infinite loop"
+//   "A component was suspended by an uncached promise"
+// React's own wording ("to avoid an infinite loop") is the tell that this was
+// never cosmetic. There is no server session to report — the cookie is read by
+// the browser — so a single resolved-null promise is the correct snapshot.
+const SERVER_SNAPSHOT: Promise<Session> = Promise.resolve(null);
+
 function getServerSnapshot(): Promise<Session> {
-  return Promise.resolve(null);
+  return SERVER_SNAPSHOT;
 }
 
 export function useSession(): Session {
