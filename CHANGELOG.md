@@ -10,6 +10,10 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ## [Unreleased]
 
+### Fixed
+- **The AI roast no longer repeats itself after using the browser back button.** Leaving a report and returning to it appended a second complete copy of the narrative under the first — a third trip added a third copy, and so on. The report now shows the narrative exactly once no matter how you navigate to it, and returning to a report you already generated no longer re-requests it.
+- **Returning to a report no longer counts as a brand-new analysis** in product analytics. Each analysis is now reported once, so the usage numbers reflect real analyses rather than back-and-forward navigation.
+
 ## [1.0.10] — 2026-07-28
 
 Internal CI hardening and a dependency refresh. No user-facing change.

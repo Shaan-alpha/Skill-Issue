@@ -19,6 +19,33 @@ Format:
 
 ---
 
+## 2026-07-31 — Claude (Opus 5) with Shaan — bugfix: narrative duplicated on back/forward (Activity)
+
+**Slice:** none yet — fix landed, recorded under `CHANGELOG [Unreleased]`. Operator to decide whether it cuts **v1.0.11**.
+**Done:** Shaan reported that analyzing `shaan-alpha`, navigating away and returning **doubled** the AI roast text; a second round trip **tripled** it. Fixed two components plus two new test files:
+- `frontend/src/components/narrative-stream.tsx` — accumulate into a per-connection local buffer and `setText(buffer)` instead of `setText(prev => prev + chunk)`; reset `text`/`status` at the start of each real stream; record the completed stream id in a `useRef` so a re-show of an already-finished narrative returns early and never reopens the SSE connection.
+- `frontend/src/components/results-view.tsx` — same root cause, different symptom: `trackAnalyzeSubmitted` re-fired on every re-show, inflating `analyze_submitted` in PostHog. Guarded with a `useRef` keyed on `username:generated_at`.
+- New `__tests__/narrative-stream.test.tsx` and `__tests__/results-view-activity.test.tsx` drive a real React `<Activity>` hide→show cycle.
+
+**Root cause:** **`cacheComponents: true`** (set in `next.config.ts` back in v0.8.6 for `/share/[slug]` ISR) changes navigation semantics repo-wide, which nothing in our code accounted for. Next 16 no longer unmounts a route on navigation — it hides it behind React's `<Activity>` (`display: none`) and keeps up to **3** routes alive. Per `node_modules/next/dist/docs/01-app/02-guides/preserving-ui-state.md`: *"Effects run on every hide-to-visible transition, not just the initial mount."* So `useState` survived the hide while the effect tore down and re-ran on the re-show. `NarrativeStream` appended off the surviving state, and the backend narrative cache (`app/narrative/service.py:72`) replays the whole narrative as **one chunk** on a cache hit — so each round trip appended one more complete copy. The `key={`${username}-${mode}`}` on `<NarrativeStream>` does **not** help: same key, so Activity preserves that exact instance.
+
+**Decisions:** (1) Chose the ref-guard over simply resetting text on every effect run. Both stop the duplication, but the guard also skips a pointless backend round trip and the re-fade of text the user is already looking at. (2) The per-connection `buffer` is kept *as well as* the guard — it is what makes a stream **interrupted** mid-flight (navigate away while streaming, then come back) restart cleanly rather than resume on top of a partial. (3) Recorded under `[Unreleased]` rather than minting v1.0.11 — per the per-slice workflow, the version bump ritual (4 constants: `frontend/package.json`, `site.ts::APP_VERSION`, `backend/pyproject.toml`, `settings.py::VERSION`) and the tag/release are operator calls. (4) Fixed the analytics defect as a **separate** change after the reported one, not bundled into it.
+
+**Learned / surprises:** This is a **whole-class** hazard, not a one-off bug: with Cache Components on, *any* `useEffect` that appends to state, increments a counter, fires an analytics event, or starts a one-shot animation is now wrong-by-default across the whole app. The Next docs' own remedy is a `useRef` (refs are not cleaned up across hide/show) or deriving the state from the URL. Worth an audit pass over every `useEffect` in `src/components`. Also noted: `backend/pyproject.toml` is still on **1.0.3** while the other three version constants are on 1.0.10 — the v1.0.7 drift guard only asserts `package.json == APP_VERSION`, so the backend pair drifted unnoticed.
+
+**Verified:** frontend `vitest run` **77 passed / 25 files** (was 73/22 at v1.0.10 + 4 new), `tsc --noEmit` clean, `eslint src` clean, `next build` clean (14/14 static pages, route table unchanged). The two new tests were confirmed **failing first** against the unfixed code with the exact reported signature — `expected 2 to be 1` after one round trip, `expected 4 to be 1` after three; analytics `expected 1, got 4`.
+**Audit (Activity hazards across `frontend/src`) — 3 findings, all reproduced with a throwaway probe test, none fixed:**
+1. **`history-grid.tsx:12` — `useState(analyses)` goes stale (data correctness, highest value).** `items` is seeded from the prop and never resynced. Without Activity the route unmounted, so a remount reseeded it and the bug was unreachable; now the instance survives and `/me` can be preserved for up to 3 routes. Probe: render with one row, hide, re-show with two rows → the second row **never appears**. User-visible as "I saved an analysis and it's missing from my history."
+2. **`badge-row.tsx` — a pinned-open badge popover survives the route being hidden.** `Popover.Portal` mounts into `document.body`, *outside* the Activity boundary, so the boundary's `display: none` does not reach it. Probe confirmed the evidence text is still in `document.body` after the hide. Narrower than it first looks: Base UI closes on outside-press, so clicking a nav link closes it first — the reachable path is the **browser back button** (or keyboard nav) while a popover is pinned. Worth a real-browser confirm via the `verify` skill before fixing.
+3. **`badge-row.tsx:15` — the badge trigger is not exposed as a button (a11y, unrelated to Activity).** The code comment claims *"Popover.Trigger renders a `<button>`"*; it no longer does. Probe: `tag: SPAN, role: null, exposed as button to a11y tree: false`, and Base UI itself warns `expected a native <button> because the nativeButton prop is true`. Focusable via `tabindex=0`, but screen readers announce no role. Almost certainly a Base UI upgrade changed this under a comment nobody re-read. Fix is likely `nativeButton={false}` or rendering a real `<button>`.
+
+Not hazards, checked and cleared: `search-bar.tsx:39` already documents and handles this (v0.9.4 fixed the stuck spinner via `useTransition` — existing precedent for the whole class); toast timers in `save-share-controls`/`card-actions` are plain `setTimeout`, not effects, so they still clear themselves while hidden; `observability/provider.tsx` lives in the root layout, which Activity does not hide.
+
+**Blocked / open:** Unchanged — #20/#21 blocked on `eslint-config-next`'s bundled tooling; `--threshold high` blocked on `next >= 16.3.0` stable.
+**Next:** operator decides whether this ships as v1.0.11 (bump 4 constants + PLAN row + CHANGELOG heading) or rides along with the next slice. The 3 audit findings above are unfixed and unticketed — finding 1 is the one with real user impact.
+
+---
+
 ## 2026-07-28 — Claude (Opus 5) with Shaan — dependency backlog triage (13 PRs → 2)
 
 **Slice:** none — maintenance, no version bump. Follows the v1.0.9 slice the same day.
