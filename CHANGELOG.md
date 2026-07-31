@@ -25,6 +25,8 @@ Navigation-state bug sweep. Enabling Cache Components back in v0.8.6 changed how
 - A scoring test measured a 90-day activity window against dates hardcoded in its test data, so the build broke on a calendar date rather than on a code change. The dates are now anchored relative to the moment the test runs.
 - The backend's package version had been left seven releases behind the version the service actually reports. It is corrected, and a check now fails the build if the two disagree — the same guard the frontend has had since v1.0.7.
 - The internal list of "expected" browser console messages was audited: three of its four entries were real bugs rather than noise. The list is rewritten, and the two fixes are above.
+- Preview deployments are disabled by listing branch prefixes, and `release/` had been left off the list, so release branches were building previews nobody wanted. Added, along with the other prefixes in use.
+- Merging several pull requests in quick succession cancelled each previous merge's build check, leaving those commits without a recorded pass. Builds on the main branch are no longer cancelled this way.
 
 ## [1.0.10] — 2026-07-28
 
