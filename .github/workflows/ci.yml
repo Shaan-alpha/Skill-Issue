@@ -26,9 +26,21 @@ permissions:
 
 # Avoid running the workflow twice for the same PR (push + pull_request both
 # fire). Cancel in-progress runs for the same ref when a new push lands.
+#
+# ...but NOT on `main`. Every push to main shares one group key
+# (`github.ref` is always `refs/heads/main`), so merging several PRs in quick
+# succession cancelled each previous merge's run. On 2026-07-31 six PRs merged
+# inside ~30s and three merge commits — c08afed, b694214, 5cd73eb — ended up
+# on main, and in production, with `cancelled` as their only CI verdict. The
+# cumulative state was green afterwards, so nothing shipped broken, but those
+# commits are individually unverified: a later bisect or revert would land on
+# a commit CI never actually passed.
+#
+# Superseding is right for a PR (only the tip matters) and wrong for main
+# (every merge commit is a deployable artifact), so gate it on the ref.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   backend:
