@@ -12,7 +12,16 @@ interface BadgeRowProps {
 // - Desktop: hover to peek (150 ms open delay, instant close) + click to pin.
 // - Mobile / touch: tap toggles. Tooltip's hover-only behaviour previously
 //   left mobile users with no way to read the evidence.
-// - Keyboard: focus + Enter/Space toggles (Popover.Trigger renders a <button>).
+// - Keyboard: focus + Enter/Space toggles.
+//
+// `nativeButton={false}` is load-bearing, not decoration. The trigger renders
+// through `Badge`, which is a <span>, and Base UI defaults `nativeButton` to
+// true — so it put `type="button"` on a span and left the element with no role
+// at all. Chrome's accessibility tree reported the trigger as `generic`, i.e.
+// the evidence behind every badge was unreachable to a screen reader. Told the
+// truth, Base UI applies `role="button"` and the non-native keyboard handling.
+// (Base UI warns about this at runtime; the warning was in the known-noise
+// list in .claude/skills/verify rather than being chased down.)
 export function BadgeRow({ badges }: BadgeRowProps) {
   if (badges.length === 0) return null;
   return (
@@ -20,6 +29,7 @@ export function BadgeRow({ badges }: BadgeRowProps) {
       {badges.map((b) => (
         <Popover.Root key={b.slug}>
           <Popover.Trigger
+            nativeButton={false}
             openOnHover
             delay={150}
             closeDelay={50}
