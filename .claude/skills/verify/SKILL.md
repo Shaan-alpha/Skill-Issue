@@ -53,7 +53,30 @@ Useful targets:
 - Signed-in and `/share/{slug}` variants are NOT drivable locally (no
   DATABASE_URL / OAuth credentials in `backend/.env`) — say so in the
   report instead of faking them.
-- The dev overlay shows a red "N Issues" bubble; known pre-existing dev
-  console errors (auth `getServerSnapshot`, uncached-promise suspension,
-  Base UI `nativeButton` warning, anonymous 401 on `/me`) — don't pin
-  them on an unrelated diff, but do check the count didn't grow.
+- The dev overlay shows a red "N Issues" bubble. **Treat console errors as
+  defects until proven otherwise — this list was wrong.** Three of the four
+  entries it used to carry were real bugs, not noise:
+  - auth `getServerSnapshot` + uncached-promise suspension — one root cause,
+    `getServerSnapshot` minting a fresh promise per call. React's own wording
+    ("to avoid an infinite loop") said so all along. Fixed.
+  - Base UI `nativeButton` warning — the badge trigger was reaching the
+    accessibility tree as `generic`, so badge evidence was unreachable to a
+    screen reader. Fixed.
+  - anonymous 401 on `/me` — genuinely benign. An anonymous visitor has no
+    session; `fetchSessionFresh` handles the 401 and returns null. The browser
+    logs the failed request; nothing is broken.
+
+  So the baseline is now **one** expected entry (the 401), not four. Anything
+  else is a regression or an undiagnosed bug — investigate before shipping,
+  and only add to this list with a written reason it is inert.
+- Verify anything involving portals, layout, or paint in this browser
+  harness, not in vitest. happy-dom does not compute layout and handles
+  portals differently from Chrome; a jsdom-only failure is evidence about
+  the test environment, not the product. (An `<Activity>` popover "leak" was
+  chased and a fix written on jsdom evidence before Chrome showed the bug
+  did not exist.)
+- Drive route changes through the app's own UI (fill the search bar, click
+  its button) rather than `Page.navigate`. `Page.navigate` is a full document
+  load, so it tears down client state and the App Router's `<Activity>`
+  boundaries — any test about back/forward or preserved state silently passes
+  under it while proving nothing.
