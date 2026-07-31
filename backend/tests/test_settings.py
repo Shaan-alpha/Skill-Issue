@@ -1,4 +1,7 @@
-from app.settings import Settings
+import tomllib
+from pathlib import Path
+
+from app.settings import VERSION, Settings
 
 
 def test_required_v050_fields_loaded(monkeypatch):
@@ -78,3 +81,19 @@ def test_cors_wildcard_rejected():
 def test_cors_normal_origins_ok():
     s = Settings(cors_allow_origins="https://ok.com,https://also.com")
     assert "ok.com" in s.cors_allow_origins
+
+
+def test_version_matches_pyproject():
+    """`settings.VERSION` and `pyproject.toml` must not drift.
+
+    v1.0.7 added this guard on the frontend pair (`site.ts::APP_VERSION` vs
+    `package.json`) after the UI shipped a stale version through three
+    releases. The backend pair was left unguarded and drifted exactly the same
+    way: `VERSION` tracked releases up to 1.0.10 while `pyproject.toml` sat on
+    1.0.3. `VERSION` is what `/health` and the OpenAPI doc report, so a
+    mismatch means the package metadata describes a release that never shipped.
+    """
+    pyproject = tomllib.loads(
+        (Path(__file__).parent.parent / "pyproject.toml").read_text(encoding="utf-8")
+    )
+    assert pyproject["project"]["version"] == VERSION
