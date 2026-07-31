@@ -12,7 +12,11 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ### Fixed
 - **The AI roast no longer repeats itself after using the browser back button.** Leaving a report and returning to it appended a second complete copy of the narrative under the first — a third trip added a third copy, and so on. The report now shows the narrative exactly once no matter how you navigate to it, and returning to a report you already generated no longer re-requests it.
+- **A newly saved analysis now shows up in your history immediately.** If you had already opened your history page in that browsing session, saving an analysis and going back to the history left it missing from the list until a hard reload. The same applied in reverse to an analysis deleted elsewhere.
 - **Returning to a report no longer counts as a brand-new analysis** in product analytics. Each analysis is now reported once, so the usage numbers reflect real analyses rather than back-and-forward navigation.
+
+### Internal
+- A scoring test measured a 90-day activity window against dates hardcoded in its test data, so the build broke on a calendar date rather than on a code change. The dates are now anchored relative to the moment the test runs.
 
 ## [1.0.10] — 2026-07-28
 
