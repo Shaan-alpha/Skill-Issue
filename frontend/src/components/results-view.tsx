@@ -1,7 +1,7 @@
 "use client";
 
 import { m } from "framer-motion";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import {
   ArrowLeft,
   ExternalLink,
@@ -129,8 +129,18 @@ export function ResultsView({
   analysisId,
   initialShareSlug,
 }: ResultsViewProps) {
+  // `cacheComponents: true` makes Next 16 hide this route behind
+  // React's <Activity> rather than unmounting it, and every effect re-runs on
+  // each hide→show transition. Without a guard, one browser back-then-forward
+  // counted as a second analysis in PostHog. Refs survive those transitions, so
+  // keying on the report identity reports once per analysis — a genuinely new
+  // report (different user or a refreshed run) still fires.
+  const reportedRef = useRef<string | null>(null);
   useEffect(() => {
     if (!report) return;
+    const reportKey = `${report.username}:${report.generated_at}`;
+    if (reportedRef.current === reportKey) return;
+    reportedRef.current = reportKey;
     trackAnalyzeSubmitted({
       tier: report.tier.name,
       score: report.total,
