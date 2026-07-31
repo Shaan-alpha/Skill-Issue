@@ -58,6 +58,7 @@
 | **v1.0.8** | Auth & endpoint hardening — hashed session ids at rest (SI-21), Origin check on mutations (SI-16), CSP connect-src made promotable (SI-31), security.txt + PR dependency-review (SI-37) | ✅ shipped |
 | **v1.0.9** | Audit-gate resilience — advisory-registry outages warn instead of hard-blocking CI (shape-based classification, ERROR verdict for unexplained failure) | ✅ shipped |
 | **v1.0.10** | Dependency-manifest drift guard — CI fails if `pyproject.toml` / `uv.lock` / `requirements.txt` disagree | ✅ shipped |
+| **v1.0.11** | Cache Components navigation-state sweep — roast duplication, `/me` staleness, analytics double-count, badge a11y, session snapshot; + fixture time-bomb and backend version-drift guards | ⏸️ merged to `main`, prod-verified, untagged |
 
 ---
 
@@ -958,6 +959,34 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 - [ ] Backend `ruff` clean, `pytest -q` green. Frontend `lint`+`tsc`+`test:run`+`build` clean.
 - [x] PR reviewed (#55); CI green — the guard step confirmed *running* in the real job log (`Resolved 56 packages`), not skipped; prod deploy verified 2026-07-28 (`/_/backend/health` reports `1.0.10` with db+cache up, site 200 with the `1.0.10` badge, `/analyze/octocat` 200).
 - [x] `CHANGELOG.md` `[1.0.10]`; tag `v1.0.10`; release published 2026-07-28.
+
+---
+
+## v1.0.11 — Cache Components navigation-state sweep
+
+**Goal:** Close out a user-reported bug — the AI roast duplicating on back/forward — and the class of bug behind it. `cacheComponents: true` (enabled in v0.8.6 for `/share/[slug]` ISR) changed navigation semantics repo-wide: Next 16 hides a route behind React's `<Activity>` instead of unmounting it, keeping up to 3 routes alive. State survives; effects re-run on every hide→show. Nothing in the codebase accounted for that.
+
+**No design spec or plan doc:** this started as a bug report mid-session, not a planned slice. The investigation and every decision are recorded in [`docs/PROGRESS_LOG.md`](./docs/PROGRESS_LOG.md) (2026-07-31 entry) and in the six PR descriptions.
+
+**Delivered:**
+- **#59** — `narrative-stream`: accumulate into a per-connection buffer and guard completion in a ref, so a re-show neither appends nor reopens the SSE stream. Also `results-view`: `trackAnalyzeSubmitted` fired once per re-show (4 events measured for 1 real analysis).
+- **#61** — `history-grid`: `useState(analyses)` never resynced, so an analysis saved elsewhere never appeared in `/me`. Resyncs on list *content*, preserving an in-flight undo.
+- **#62** — `badge-row`: the trigger reached Chrome's accessibility tree as `generic`, making badge evidence unreachable to screen readers.
+- **#63** — `backend/pyproject.toml` was seven releases behind `settings.py::VERSION`; adds the backend-pair drift guard v1.0.7 only ever applied to the frontend pair.
+- **#64** — `lib/auth.ts::getServerSnapshot` minted a fresh promise per call, producing both console errors the project had learned to ignore. Prod console events 4 → 1.
+- **#60** — unrelated but blocking: `main` went red on its own on 2026-07-31 when a fixture's newest commit date aged past `repo_quality`'s 90-day window.
+
+**Deliberately not done:** tag + release (operator step). No cross-stack version guard — the backend and frontend pairs are separately deployable and there is a fair argument they need not move in lockstep; each pair is now internally consistent, which is what actually broke both times.
+
+**Withdrawn:** a third audit finding (badge popover surviving an Activity hide) was investigated, fixed, then **reverted** — Chrome showed `painted: false` on unmodified `main`, so the jsdom evidence was an artifact of happy-dom's portal handling. The `verify` skill now requires portal/layout/paint claims to be checked in the browser.
+
+**Exit criteria:**
+- [x] Every fix written test-first and confirmed failing first with the reported signature.
+- [x] All four version constants at `1.0.11`.
+- [x] Backend `ruff` clean, `pytest -q` green (361). Frontend `lint`+`tsc`+`test:run`+`build` clean (84).
+- [x] Six PRs reviewed and merged (#59–#64); CI green on `main`.
+- [x] Prod-verified 2026-07-31 — `/_/backend/health` `1.0.10` with db+cache up, site 200, `/analyze/octocat` 200 in 0.63s; **and the reported bug driven in real Chrome: narrative stayed 931 chars / 1 copy across three leave-and-return cycles.**
+- [ ] `CHANGELOG.md` `[1.0.11]`; tag `v1.0.11`; release published. **Paused for operator go-ahead.**
 
 ---
 
