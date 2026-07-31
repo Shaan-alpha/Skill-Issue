@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NarrativeMode } from "@/types";
 import { createNarrativeEventSource } from "@/lib/sse";
 import { AnimatePresence, m } from "framer-motion";
@@ -18,23 +18,44 @@ export function NarrativeStream({ username, mode }: NarrativeStreamProps) {
   >("streaming");
   const [retryKey, setRetryKey] = useState(0);
 
+  // With `cacheComponents: true`, Next 16 hides a route behind
+  // React's <Activity> instead of unmounting it. Effects tear down and re-run
+  // on every hide→show transition while useState survives, so a browser
+  // back-then-forward re-ran this effect on top of the text it had already
+  // accumulated — the narrative doubled, then tripled, once per round trip.
+  // The ref records which stream already finished (refs survive the same
+  // transitions), so a re-show reuses the completed text instead of reopening
+  // the stream and appending the backend's cached replay.
+  const streamId = `${username}:${mode}:${retryKey}`;
+  const completedStreamRef = useRef<string | null>(null);
+
   useEffect(() => {
+    if (completedStreamRef.current === streamId) return;
+
+    // Accumulate per connection rather than off the previous render's state:
+    // a restarted stream must replace what a torn-down one left behind.
+    let buffer = "";
+    setText("");
+    setStatus("streaming");
+
     const cleanup = createNarrativeEventSource(
       username,
       mode,
       (chunk) => {
-        setText((prev) => prev + chunk);
+        buffer += chunk;
+        setText(buffer);
       },
       () => {
         setStatus("error");
       },
       () => {
+        completedStreamRef.current = streamId;
         setStatus("complete");
       }
     );
 
     return () => cleanup();
-  }, [username, mode, retryKey]);
+  }, [username, mode, streamId]);
 
   const isFallback = text.includes("[AI narrator offline — daily cap reached]");
   const displayText = isFallback
