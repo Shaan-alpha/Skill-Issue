@@ -58,7 +58,7 @@
 | **v1.0.8** | Auth & endpoint hardening — hashed session ids at rest (SI-21), Origin check on mutations (SI-16), CSP connect-src made promotable (SI-31), security.txt + PR dependency-review (SI-37) | ✅ shipped |
 | **v1.0.9** | Audit-gate resilience — advisory-registry outages warn instead of hard-blocking CI (shape-based classification, ERROR verdict for unexplained failure) | ✅ shipped |
 | **v1.0.10** | Dependency-manifest drift guard — CI fails if `pyproject.toml` / `uv.lock` / `requirements.txt` disagree | ✅ shipped |
-| **v1.0.11** | Cache Components navigation-state sweep — roast duplication, `/me` staleness, analytics double-count, badge a11y, session snapshot; + fixture time-bomb and backend version-drift guards | ⏸️ merged to `main`, prod-verified, untagged |
+| **v1.0.11** | Cache Components navigation-state sweep — roast duplication, `/me` staleness, analytics double-count, badge a11y, session snapshot; + fixture time-bomb and backend version-drift guards | ✅ shipped |
 
 ---
 
@@ -986,7 +986,7 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 - [x] Backend `ruff` clean, `pytest -q` green (361). Frontend `lint`+`tsc`+`test:run`+`build` clean (84).
 - [x] Six PRs reviewed and merged (#59–#64); CI green on `main`.
 - [x] Prod-verified 2026-07-31 — `/_/backend/health` `1.0.10` with db+cache up, site 200, `/analyze/octocat` 200 in 0.63s; **and the reported bug driven in real Chrome: narrative stayed 931 chars / 1 copy across three leave-and-return cycles.**
-- [ ] `CHANGELOG.md` `[1.0.11]`; tag `v1.0.11`; release published. **Paused for operator go-ahead.**
+- [x] `CHANGELOG.md` `[1.0.11]`; tag `v1.0.11`; release published 2026-07-31, marked Latest. Two further fixes (#66 preview prefixes, #67 CI concurrency) merged *after* the release-prep PR, so the changelog section was completed in #68 before tagging — `release.yml` publishes that section verbatim, so an incomplete section would have shipped as the release notes.
 
 ---
 
