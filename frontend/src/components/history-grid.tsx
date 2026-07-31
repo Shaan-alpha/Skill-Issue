@@ -13,8 +13,29 @@ export function HistoryGrid({ analyses }: { analyses: SavedAnalysis[] }) {
   // The analysis currently in its undo window (removed from view, not yet deleted).
   const [pending, setPending] = useState<SavedAnalysis | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Original ordering, so Undo can re-insert a card at its place.
-  const orderRef = useRef<number[]>(analyses.map((a) => a.id));
+  // Server ordering, so Undo can re-insert a card at its place. State rather
+  // than a ref because it is rewritten by the resync below, and writing a ref
+  // during render is not allowed.
+  const [order, setOrder] = useState<number[]>(() => analyses.map((a) => a.id));
+
+  // `items` seeds from a prop, which used to be safe: navigating away unmounted
+  // this route, so coming back remounted it and reseeded. Under
+  // `cacheComponents: true` (next.config.ts) the App Router hides /me behind
+  // React's <Activity> and keeps it alive for up to 3 routes, so the seed stuck
+  // and an analysis saved elsewhere never showed up in the history. Resync on
+  // the server list's *content*, not its identity — a fresh server render hands
+  // us a new array every time, and resetting on that would wipe an in-flight
+  // undo. This is React's documented "adjusting state when a prop changes"
+  // pattern: a plain render-time computation, no effect and no extra paint.
+  const signature = analyses.map((a) => a.id).join(",");
+  const [syncedSignature, setSyncedSignature] = useState(signature);
+  if (signature !== syncedSignature) {
+    setSyncedSignature(signature);
+    // Keep the optimistic removal: `pending`'s DELETE is still in flight, so
+    // the server legitimately still lists it.
+    setItems(pending ? analyses.filter((a) => a.id !== pending.id) : analyses);
+    setOrder(analyses.map((a) => a.id));
+  }
 
   function commitDelete(id: number) {
     void fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL ?? ""}/analyses/${id}`, {
@@ -57,9 +78,7 @@ export function HistoryGrid({ analyses }: { analyses: SavedAnalysis[] }) {
       const restored = pending;
       setItems((prev) => {
         const next = [...prev, restored];
-        next.sort(
-          (a, b) => orderRef.current.indexOf(a.id) - orderRef.current.indexOf(b.id),
-        );
+        next.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
         return next;
       });
       setPending(null);
