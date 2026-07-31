@@ -10,6 +10,10 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ## [Unreleased]
 
+## [1.0.11] — 2026-07-31
+
+Navigation-state bug sweep. Enabling Cache Components back in v0.8.6 changed how the app behaves when you leave a page and come back — several things quietly stopped resetting that used to. Reported as "the roast doubled"; the same root cause turned out to be behind four separate problems.
+
 ### Fixed
 - **The AI roast no longer repeats itself after using the browser back button.** Leaving a report and returning to it appended a second complete copy of the narrative under the first — a third trip added a third copy, and so on. The report now shows the narrative exactly once no matter how you navigate to it, and returning to a report you already generated no longer re-requests it.
 - **A newly saved analysis now shows up in your history immediately.** If you had already opened your history page in that browsing session, saving an analysis and going back to the history left it missing from the list until a hard reload. The same applied in reverse to an analysis deleted elsewhere.
@@ -19,6 +23,8 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ### Internal
 - A scoring test measured a 90-day activity window against dates hardcoded in its test data, so the build broke on a calendar date rather than on a code change. The dates are now anchored relative to the moment the test runs.
+- The backend's package version had been left seven releases behind the version the service actually reports. It is corrected, and a check now fails the build if the two disagree — the same guard the frontend has had since v1.0.7.
+- The internal list of "expected" browser console messages was audited: three of its four entries were real bugs rather than noise. The list is rewritten, and the two fixes are above.
 
 ## [1.0.10] — 2026-07-28
 
