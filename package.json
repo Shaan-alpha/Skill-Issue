@@ -6,7 +6,7 @@
     "node": ">=24"
   },
   "devDependencies": {
-    "@vercel/config": "^0.5.0",
+    "@vercel/config": "^0.6.1",
     "typescript": "^7.0.2"
   }
 }
