@@ -48,10 +48,12 @@ class NarrativeService:
         cache: NarrativeCache,
         budget: DailyBudget,
         llm: NarrativeLLM | FakeNarrativeLLM,
+        max_output_tokens: int = 1200,
     ) -> None:
         self._cache = cache
         self._budget = budget
         self._llm = llm
+        self._max_output_tokens = max_output_tokens
 
     async def stream_narrative(
         self,
@@ -96,7 +98,9 @@ class NarrativeService:
         acc: list[str] = []
         try:
             async for chunk in self._llm.stream_chat(
-                messages, temperature=_TEMPERATURE_BY_MODE[mode]
+                messages,
+                temperature=_TEMPERATURE_BY_MODE[mode],
+                max_output_tokens=self._max_output_tokens,
             ):
                 acc.append(chunk)
                 yield chunk

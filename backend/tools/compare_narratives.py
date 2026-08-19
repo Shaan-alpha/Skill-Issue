@@ -32,10 +32,11 @@ from app.narrative.prompts import build_messages
 from app.scoring.engine import run_scoring_engine
 
 # (model_id, roast_temperature, mentor_temperature)
-# Groq's current production-grade chat models as of 2026-05 (deepseek-r1
-# and qwen-qwq variants we tried earlier were decommissioned).
+# Groq's current production-grade chat models as of 2026-08. Groq retires
+# models on a rolling basis — deepseek-r1 and qwen-qwq went first, then
+# llama-3.3-70b-versatile on 2026-08-16. Re-check console.groq.com/docs/models
+# before trusting this list.
 CANDIDATES: list[tuple[str, float, float]] = [
-    ("llama-3.3-70b-versatile", 0.95, 0.55),
     ("openai/gpt-oss-120b", 0.95, 0.55),
     ("meta-llama/llama-4-maverick-17b-128e-instruct", 0.95, 0.55),
     ("moonshotai/kimi-k2-instruct-0905", 0.95, 0.55),

@@ -183,9 +183,10 @@ Two thin cross-cutting layers. Both fail open — telemetry is never a correctne
 ### AI — Groq (OpenAI-compatible)
 
 - Client wrapped behind `narrative/llm.py` so swapping providers is a single-file change. Accepts `base_url` for any OpenAI-compatible endpoint.
-- Default model: **Groq `llama-3.3-70b-versatile`** (free tier, 30 RPM, 14,400 RPD, ~95% GPT-4o quality on creative writing). Configured via `NARRATIVE_BASE_URL=https://api.groq.com/openai/v1` + `NARRATIVE_MODEL=llama-3.3-70b-versatile`.
+- Production model: **Groq `openai/gpt-oss-120b`** (free tier: 30 RPM / 1K RPD / 8K TPM / 200K TPD, 131k context). Configured via `NARRATIVE_BASE_URL=https://api.groq.com/openai/v1` + `NARRATIVE_MODEL=openai/gpt-oss-120b`. Groq decommissioned the previous default, `llama-3.3-70b-versatile`, on 2026-08-16.
+- Reasoning tokens land in a separate `reasoning` field on gpt-oss, not in `message.content`, so the SSE pipeline reads `delta.content` and stays free of `<think>` output with no extra parsing.
 - Strict prompt templates per mode; all prompts version-controlled, regression-tested via committed snapshots in `tests/narrative/test_prompt_snapshots.py`.
-- Cost guardrails: per-request `max_tokens` cap, daily request budget (`NARRATIVE_DAILY_LIMIT`, default 50, **shared across instances via Upstash since v0.7.0**), deterministic on-voice fallback narrative when the budget is exhausted (`[AI narrator offline — daily cap reached]`) or upstream errors (`[AI narrator offline — upstream hiccup]`).
+- Cost guardrails: per-request `max_tokens` cap, daily request budget (`NARRATIVE_DAILY_LIMIT`, code default 500, **set to 55 in production** to stay inside Groq's 200K token/day free-tier ceiling at ~3.2K tokens/call, **shared across instances via Upstash since v0.7.0**), deterministic on-voice fallback narrative when the budget is exhausted (`[AI narrator offline — daily cap reached]`) or upstream errors (`[AI narrator offline — upstream hiccup]`).
 
 ---
 

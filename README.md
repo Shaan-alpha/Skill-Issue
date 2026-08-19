@@ -138,7 +138,7 @@ cp .env.example .env        # then add your GITHUB_TOKEN and OPENAI_API_KEY
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
-> **On the LLM key:** the client is OpenAI-compatible, so `OPENAI_API_KEY` is the variable name regardless of provider. Production points it at **Groq** (`llama-3.3-70b-versatile`) via `NARRATIVE_BASE_URL` + `NARRATIVE_MODEL`; leave both unset to use OpenAI directly. The narrative layer is optional — scoring works without any LLM key.
+> **On the LLM key:** the client is OpenAI-compatible, so `OPENAI_API_KEY` is the variable name regardless of provider. Production points it at **Groq** (`openai/gpt-oss-120b`) via `NARRATIVE_BASE_URL` + `NARRATIVE_MODEL`; leave both unset to use OpenAI directly. The narrative layer is optional — scoring works without any LLM key.
 
 Verify:
 

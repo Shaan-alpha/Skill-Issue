@@ -20,7 +20,7 @@ uv run uvicorn app.main:app --reload --port 8000
 | `GITHUB_TOKEN` | every `/analyze` request | Classic PAT or fine-grained token. Stored only in `.env` (gitignored). |
 | `OPENAI_API_KEY` | `GET /narrative` | OpenAI-compatible API key. Use a Groq key when `NARRATIVE_BASE_URL` points at Groq. |
 | `NARRATIVE_BASE_URL` | optional | OpenAI-compatible endpoint. Set to `https://api.groq.com/openai/v1` for Groq (default in production); empty for OpenAI. |
-| `NARRATIVE_MODEL` | optional | Model id. Default: `llama-3.3-70b-versatile` (Groq). |
+| `NARRATIVE_MODEL` | optional | Model id. Code default is `gpt-4o`, which only resolves when `NARRATIVE_BASE_URL` is empty (the OpenAI path). Production sets `openai/gpt-oss-120b` explicitly to match its Groq base URL. |
 | `CORS_ALLOW_ORIGINS` | optional | Comma-separated allowed origins. Defaults to `http://localhost:3000`. |
 | `CORS_ALLOW_ORIGIN_REGEX` | optional | Regex matched against `Origin` for preview deploys. |
 | `DATABASE_URL` / `DATABASE_DIRECT_URL` | persistence routes (v0.5.0+) | Neon pooled (port 6543) + direct (5432) connections. |

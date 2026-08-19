@@ -19,7 +19,7 @@ class NarrativeLLM:
         self,
         messages: list[dict[str, str]],
         *,
-        max_output_tokens: int = 600,
+        max_output_tokens: int = 1200,
         temperature: float = 0.7,
     ) -> AsyncIterator[str]:
         stream = await self._client.chat.completions.create(
@@ -47,7 +47,7 @@ class FakeNarrativeLLM:
         self,
         messages: list[dict[str, str]],
         *,
-        max_output_tokens: int = 600,
+        max_output_tokens: int = 1200,
         temperature: float = 0.7,
     ) -> AsyncIterator[str]:
         self.calls += 1
