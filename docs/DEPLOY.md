@@ -62,7 +62,7 @@ In Vercel → **Settings** → **Environment Variables**, add (Production + Prev
 | `COOKIE_SECURE` | `true` (HTTPS-only cookies in production) | — |
 | `CORS_ALLOW_ORIGINS` | `https://<your-vercel-host>` | — |
 | `NEXT_PUBLIC_BACKEND_URL` | `https://<your-vercel-host>/_/backend` | — |
-| `NARRATIVE_MODEL` | `llama-3.3-70b-versatile` (Groq default) | — |
+| `NARRATIVE_MODEL` | `openai/gpt-oss-120b` (Groq default) | — |
 | `NARRATIVE_BASE_URL` | `https://api.groq.com/openai/v1` (or empty for OpenAI) | — |
 | `OPENAI_API_KEY` | Your Groq API key (it's an OpenAI-compatible endpoint) | ✅ |
 | `UPSTASH_REDIS_REST_URL` | from step 2 (Upstash) | ✅ |

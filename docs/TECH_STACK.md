@@ -79,7 +79,7 @@
 | Tool | Role |
 | --- | --- |
 | **`openai` Python SDK** | OpenAI-compatible client. Used against any provider that ships an OpenAI-compatible chat API, not just OpenAI. |
-| **Groq + `llama-3.3-70b-versatile`** | Production default since v0.5.0. Free tier (30 RPM, 14,400 RPD), faster than GPT-4o, ~95% quality on creative writing. Configured via `NARRATIVE_BASE_URL=https://api.groq.com/openai/v1` + `NARRATIVE_MODEL=llama-3.3-70b-versatile`. |
+| **Groq + `openai/gpt-oss-120b`** | Production default since 2026-08-19, replacing `llama-3.3-70b-versatile` (Groq decommissioned it 2026-08-16). Free tier: 30 RPM / 1K RPD / 8K TPM / 200K TPD, 131k context, ~500 tok/s. Configured via `NARRATIVE_BASE_URL=https://api.groq.com/openai/v1` + `NARRATIVE_MODEL=openai/gpt-oss-120b`. |
 | Provider abstraction | `NarrativeLLM` in [`backend/app/narrative/llm.py`](../backend/app/narrative/llm.py) accepts `base_url`. Pointing at any OpenAI-compatible endpoint (Groq, OpenRouter, Cerebras, vLLM/Ollama, OpenAI itself) requires only env-var changes — no code. |
 
 **Cost guardrails:** per-request `max_tokens` cap, per-day per-instance request budget (`NARRATIVE_DAILY_LIMIT`, default 50). Groq's free tier means out-of-pocket cost stays at $0 for v0.5.0; the in-process budget is conservative defence against runaway loops, not a billing guard.
