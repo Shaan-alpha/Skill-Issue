@@ -19,6 +19,41 @@ Format:
 
 ---
 
+## 2026-08-19 — Claude (Opus 5) with Shaan — incident: Groq retired the narrative model; narratives silently on fallback for 3 days
+
+**Slice:** none — production config fix plus doc correction. Recorded under `CHANGELOG [Unreleased]`; operator to decide whether it cuts **v1.0.12**.
+
+**Done:**
+- Rotated the Groq API key (operator did the Vercel-side edit; key never entered the agent transcript).
+- Diagnosed 404 `model_not_found` on every narrative call: Groq decommissioned `llama-3.3-70b-versatile` on 2026-08-16 (notice sent 2026-06-17). The key was fine — requests authenticated and were logged under the `skillissue` key before 404ing.
+- Set `NARRATIVE_MODEL=openai/gpt-oss-120b` and `NARRATIVE_DAILY_LIMIT=55` on Production + Preview, both as **non-sensitive**, and redeployed.
+- Corrected the retired model id in `ARCHITECTURE.md`, `docs/DEPLOY.md`, `docs/TECH_STACK.md`, `README.md`, `backend/README.md`, `backend/.env.example`, and `backend/tools/compare_narratives.py`.
+- Removed a dead OpenAI key from local `backend/.env` and pointed local dev at Groq so it stops diverging from production.
+- **Second defect, found after the swap:** every narrative truncated mid-sentence. Raised the completion cap 600 -> 1200 and moved it behind a new `narrative_max_output_tokens` setting, plumbed `NarrativeService -> stream_chat`. Two regression tests added. Full suite 363 passed / 72 skipped.
+
+**Decisions:**
+- **`openai/gpt-oss-120b` over `qwen/qwen3.6-27b`.** Groq names both as replacements, but Qwen is preview-tier — it can be pulled with little notice, which is exactly the failure we were recovering from. gpt-oss-120b is production-tier.
+- **Lowered our own budget to 55/day rather than leaving 500.** Measured cost is ~3,241 tokens per roast (1,941 static prompt + ~700 report payload + 600 max output) against a 200K TPD free-tier ceiling ≈ 61/day. Our gate now trips before Groq's, so the user-facing reason is accurate.
+- **Did not change the `narrative_model` code default from `gpt-4o`.** It is correct for the no-base-url OpenAI path; `backend/README.md`'s claim that the default was the Groq model was the actual error. Changing the default would have moved the breakage rather than fixed it.
+- **Un-marked `NARRATIVE_MODEL` / `NARRATIVE_DAILY_LIMIT` as Vercel Sensitive.** Neither is a credential, and `vercel env pull` returning `""` for them materially slowed diagnosis.
+
+**Learned / surprises:**
+- **The fail-soft narrative design hid a total outage for three days.** `except Exception -> fallback_narrative` in `app/narrative/service.py` converts provider 404s, 401s, and 429s alike into on-voice stand-in text. Health checks stayed green, no 5xx, no Sentry spike. There is currently nothing that distinguishes "budget exhausted" (expected) from "provider rejected us" (an incident) in monitoring — only `fallback_reason` in the stream metadata, which is not alerted on.
+- **Groq's free tier shrank a lot.** Docs still cited 30 RPM / 14,400 RPD from v0.5.0; gpt-oss free tier is 30 RPM / 1K RPD / 8K TPM / **200K TPD**. The token-per-day cap, not the request cap, is now the binding constraint. 8K TPM also means ~2 concurrent narratives per minute.
+- **gpt-oss puts reasoning in a separate `reasoning` field, not `message.content`.** So `llm.py` reading `delta.content` needed no change — no `<think>` leakage. `reasoning_effort` still defaults to `medium`, which spends tokens against that 200K ceiling for prose that does not need it.
+- **Reasoning is invisible in the output but not in the bill.** Separating reasoning from `content` solved the display problem and hid the budget problem: `max_tokens=600` was consumed by reasoning first, leaving 189 visible tokens for roast and 88 for mentor. Both streams still ended with a clean `done` sentinel, so nothing downstream could tell a finished narrative from a guillotined one. **Any cap sized for a non-reasoning model is wrong for a reasoning model** — that is the transferable lesson from this swap.
+- Could not measure `usage.completion_tokens_details.reasoning_tokens` directly: no Groq key is available to the agent, and Groq's own docs do not state whether reasoning is billed against `max_completion_tokens`. The reasoning-as-consumer explanation is inferred from the clean-sentinel + mid-token-stop + differing-visible-lengths evidence, not measured. The fix holds under either explanation.
+
+**Blocked / open:**
+- Nothing blocking. Production redeployed; end-to-end narrative generation not yet confirmed by a human at time of writing.
+
+**Next:**
+- Ship the truncation fix (code change — needs a real deploy, not a redeploy) and verify on an un-cached username, then revoke the old Groq key.
+- **Cache caveat:** the truncated narratives were successful responses, so they are cached for 24h. Any `(username, scores_hash, mode)` generated on 2026-08-19 replays truncated text until it expires or Upstash's `narrative:` namespace is flushed.
+- Confirm the reasoning-token split with `usage.completion_tokens_details` once a key is to hand, and tune `NARRATIVE_MAX_OUTPUT_TOKENS` down if 1200 proves generous.
+- Consider alerting on `fallback_reason == "error"` — a provider outage should page, a budget cap should not.
+- Consider `reasoning_effort="low"` for narratives, and trimming the 4 few-shots per mode to 2, to roughly double the daily ceiling.
+
 ## 2026-07-31 — Claude (Opus 5) with Shaan — bugfix: narrative duplicated on back/forward (Activity)
 
 **Slice:** none yet — fix landed, recorded under `CHANGELOG [Unreleased]`. Operator to decide whether it cuts **v1.0.11**.

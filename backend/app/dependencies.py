@@ -67,7 +67,12 @@ def get_narrative_service() -> NarrativeService:
         model=settings.narrative_model,
         base_url=settings.narrative_base_url,
     )
-    return NarrativeService(cache=cache, budget=budget, llm=llm)
+    return NarrativeService(
+        cache=cache,
+        budget=budget,
+        llm=llm,
+        max_output_tokens=settings.narrative_max_output_tokens,
+    )
 
 
 async def get_report_for_user(

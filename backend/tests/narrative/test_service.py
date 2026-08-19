@@ -16,7 +16,7 @@ class _BoomLLM(FakeNarrativeLLM):
         super().__init__(tokens=[])
         self.calls = 0
 
-    async def stream_chat(self, messages, temperature):  # type: ignore[no-untyped-def, override]
+    async def stream_chat(self, messages, temperature, max_output_tokens=1200):  # type: ignore[no-untyped-def, override]
         self.calls += 1
         raise RuntimeError("provider 502")
         yield ""  # pragma: no cover - keeps function a generator
@@ -80,6 +80,47 @@ async def test_service_uses_fallback_when_budget_exhausted() -> None:
     res = "".join(out)
     assert "[AI narrator offline" in res
     assert llm.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_service_forwards_configured_output_token_cap() -> None:
+    """Regression: the cap must reach the provider call.
+
+    On Groq's gpt-oss reasoning models the model's thinking is drawn from the
+    same completion budget as the visible answer. The previous hardcoded 600 —
+    sized for the non-reasoning llama-3.3-70b — left roughly 90-190 tokens for
+    prose and truncated every narrative mid-sentence in production. If this
+    value stops being plumbed through, that regression returns silently: the
+    stream still ends cleanly, it just ends early.
+    """
+    cache = NarrativeCache()
+    budget = DailyBudget(limit=10)
+    llm = FakeNarrativeLLM(tokens=["ok"])
+    svc = NarrativeService(cache=cache, budget=budget, llm=llm, max_output_tokens=1500)
+
+    async for _ in svc.stream_narrative("roast", _report("octo", 50)):
+        pass
+
+    assert llm.last_max_output_tokens == 1500
+
+
+@pytest.mark.asyncio
+async def test_service_default_cap_leaves_room_for_reasoning_plus_prose() -> None:
+    """The default must clear the longest prompt target plus reasoning overhead.
+
+    Roast asks for 250-350 words (~475 tokens at 4 chars/token); reasoning at
+    the provider's default `medium` effort consumed ~400-500 tokens in the
+    2026-08-19 incident. 600 could not cover both.
+    """
+    cache = NarrativeCache()
+    budget = DailyBudget(limit=10)
+    llm = FakeNarrativeLLM(tokens=["ok"])
+    svc = NarrativeService(cache=cache, budget=budget, llm=llm)
+
+    async for _ in svc.stream_narrative("roast", _report("octo", 50)):
+        pass
+
+    assert llm.last_max_output_tokens >= 1000
 
 
 @pytest.mark.asyncio

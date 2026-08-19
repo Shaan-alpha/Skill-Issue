@@ -10,6 +10,17 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ## [Unreleased]
 
+### Fixed
+- **AI roasts and mentor notes work again.** Groq retired `llama-3.3-70b-versatile`, the model the narrator ran on, on 16 August 2026. Every narrative request had been failing since. Because the narrator is built to degrade quietly rather than error, nothing looked broken — the site simply served its pre-written stand-in text behind an "AI narrator offline" badge for three days. The narrator now runs on Groq's `openai/gpt-oss-120b`.
+- **Roasts and mentor notes are no longer cut off mid-sentence.** The replacement model thinks before it answers, and that thinking is paid for out of the same word allowance as the reply. The allowance had been set for the old model, which did no thinking, so almost all of it was spent before the visible text began — mentor notes were stopping after two sentences, mid-number. The allowance is more than doubled, and is now adjustable without a code change.
+
+### Changed
+- **The daily ceiling on AI narratives is 55, down from 500.** The replacement model's free tier allows 200,000 tokens a day and one narrative costs roughly 3,200, so the real ceiling is about 61 — 500 was a number the app could never reach. Setting our own limit just under the provider's means you get an honest "daily cap reached" message instead of an unexplained upstream failure.
+
+### Internal
+- Every document that named the retired model is corrected, and each now records the free-tier limits it was checked against, so the next retirement is easier to spot. `NARRATIVE_MODEL` and `NARRATIVE_DAILY_LIMIT` were also un-marked as secrets in deployment config — a model id is not a credential, and hiding it made this outage slower to diagnose.
+- `backend/README.md` had claimed the code's default model was the Groq one. It is `gpt-4o`, which only resolves on the OpenAI path; production always set the model explicitly. The claim is corrected rather than the code, since changing the default would have broken the OpenAI path instead.
+
 ## [1.0.11] — 2026-07-31
 
 Navigation-state bug sweep. Enabling Cache Components back in v0.8.6 changed how the app behaves when you leave a page and come back — several things quietly stopped resetting that used to. Reported as "the roast doubled"; the same root cause turned out to be behind four separate problems.

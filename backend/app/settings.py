@@ -19,6 +19,12 @@ class Settings(BaseSettings):
 
     # v0.4.0 narrative layer.
     narrative_model: str = "gpt-4o"
+    # Completion-token ceiling per narrative. On reasoning models (Groq's
+    # gpt-oss family) the model's thinking is drawn from this same budget, so
+    # it has to cover reasoning AND the visible prose. The old value of 600
+    # was sized for llama-3.3-70b, which did no reasoning; on gpt-oss it left
+    # only ~90-190 tokens for prose and cut every narrative mid-sentence.
+    narrative_max_output_tokens: int = 1200
     # Global hard $ ceiling / UTC-day (v1.0.4: 50 -> 500, now paired with the
     # per-subject caps below so one IP can't drain the whole global budget).
     narrative_daily_limit: int = 500
