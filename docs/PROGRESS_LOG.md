@@ -45,7 +45,8 @@ Format:
 - Could not measure `usage.completion_tokens_details.reasoning_tokens` directly: no Groq key is available to the agent, and Groq's own docs do not state whether reasoning is billed against `max_completion_tokens`. The reasoning-as-consumer explanation is inferred from the clean-sentinel + mid-token-stop + differing-visible-lengths evidence, not measured. The fix holds under either explanation.
 
 **Blocked / open:**
-- Nothing blocking. Production redeployed; end-to-end narrative generation not yet confirmed by a human at time of writing.
+- CI's `pip-audit` gate went red on `cryptography` 49.0.0 (CVE-2026-69247) and `h2` 4.4.0 (CVE-2026-71554) — advisories published after main's last green run on 2026-08-17, so unrelated to this work but blocking the merge. Floors raised in `pyproject.toml` per the existing convention, relocked, re-exported; suite still 363 passed / 72 skipped and the audit gate is clean locally. The `cryptography` bump is a major version and the session-token AES-GCM path plus Authlib OAuth both sit on it, so the green suite is the evidence, not the version number.
+- Nothing else blocking. Production redeployed; end-to-end narrative generation not yet confirmed by a human at time of writing.
 
 **Next:**
 - Ship the truncation fix (code change — needs a real deploy, not a redeploy) and verify on an un-cached username, then revoke the old Groq key.

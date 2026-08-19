@@ -29,7 +29,7 @@ colorama==0.4.6 ; sys_platform == 'win32'
     # via
     #   click
     #   tqdm
-cryptography==49.0.0
+cryptography==50.0.0
     # via
     #   authlib
     #   joserfc
@@ -46,7 +46,7 @@ h11==0.16.0
     # via
     #   httpcore
     #   uvicorn
-h2==4.4.0
+h2==4.4.1
     # via skill-issue-backend
 hpack==4.2.0
     # via h2

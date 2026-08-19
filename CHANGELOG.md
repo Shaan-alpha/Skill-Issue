@@ -17,6 +17,9 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 ### Changed
 - **The daily ceiling on AI narratives is 55, down from 500.** The replacement model's free tier allows 200,000 tokens a day and one narrative costs roughly 3,200, so the real ceiling is about 61 — 500 was a number the app could never reach. Setting our own limit just under the provider's means you get an honest "daily cap reached" message instead of an unexplained upstream failure.
 
+### Security
+- **`cryptography` 49.0.0 → 50.0.0** ([CVE-2026-69247](https://github.com/advisories/GHSA-g6cj-pr64-35w5)) and **`h2` 4.4.0 → 4.4.1** ([CVE-2026-71554](https://github.com/advisories/GHSA-6hr6-w5qg-qmwg)). Neither appears reachable from this application — nothing here decrypts attacker-supplied PKCS#7 `EnvelopedData`, and the h2 issue needs an HTTP/2-to-1.1 downgrade path — but both are rated critical and the dependency audit blocks on that rating regardless.
+
 ### Internal
 - Every document that named the retired model is corrected, and each now records the free-tier limits it was checked against, so the next retirement is easier to spot. `NARRATIVE_MODEL` and `NARRATIVE_DAILY_LIMIT` were also un-marked as secrets in deployment config — a model id is not a credential, and hiding it made this outage slower to diagnose.
 - `backend/README.md` had claimed the code's default model was the Groq one. It is `gpt-4o`, which only resolves on the OpenAI path; production always set the model explicitly. The claim is corrected rather than the code, since changing the default would have broken the OpenAI path instead.
