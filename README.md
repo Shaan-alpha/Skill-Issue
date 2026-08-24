@@ -7,7 +7,7 @@
 [![Version](https://img.shields.io/github/v/release/Shaan-alpha/Skill-Issue?style=for-the-badge&label=release&color=10b981)](https://github.com/Shaan-alpha/Skill-Issue/releases)
 [![License](https://img.shields.io/github/license/Shaan-alpha/Skill-Issue?style=for-the-badge&color=475569)](./LICENSE)
 [![Live](https://img.shields.io/badge/live-skillissue.tech-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://skillissue.tech)
-[![Status](https://img.shields.io/badge/status-v1.0.10%20·%20live-10b981?style=for-the-badge)](https://skillissue.tech)
+[![Status](https://img.shields.io/badge/status-v1.0.11%20·%20live-10b981?style=for-the-badge)](https://skillissue.tech)
 
 [![Next.js](https://img.shields.io/badge/Next.js%2016-000000?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React%2019-149eca?style=for-the-badge&logo=react&logoColor=white)](https://react.dev/)
@@ -59,14 +59,65 @@ Drop in a username. Skill Issue analyzes repositories, engineering maturity, OSS
 
 ---
 
+## How it works
+
+Determinism first: the score is computed by code before any model is called, and the narrator is handed the finished `Report` — scores, tier, badges, headline signals — never the raw repos. It cannot invent a number it was never shown.
+
+```mermaid
+flowchart TD
+    U(["User enters a GitHub username"])
+    FE["<b>Next.js 16 · App Router</b><br/>landing · analyze flow · results · receipts<br/><i>renders facts, never computes a score</i>"]
+
+    subgraph BE ["FastAPI backend — Python 3.12, async end to end"]
+        direction TB
+        ING["<b>Ingestion</b> · httpx + GraphQL<br/>profile · pinned · repos · commits<br/>PRs · issues · languages · contributions<br/><i>rate-limit aware, bounded fan-out</i>"]
+        P1["<b>Pass 1 — deterministic scoring</b><br/>repo quality 30 · maturity 20 · OSS 15<br/>recruiter signal 15 · consistency 10 · trajectory 10<br/>→ base total → tier"]
+        P2["<b>Pass 2 — tier-gated depth</b><br/>SPDX licence · CI workflows · README quality<br/>PR review depth · commit-message quality<br/>cross-repo refactor → re-score"]
+        LADDER["<b>Ladder &amp; badges</b><br/>7 tiers, Hobbyist → Principal, with sub-rank<br/>8 stackable badges, no priority ordering"]
+        NARR["<b>Narrative</b> · Groq, mode-aware<br/>Roast or Mentor · streams over SSE<br/><i>sees the Report only</i>"]
+        ING --> P1 --> P2 --> LADDER --> NARR
+    end
+
+    subgraph CACHE ["Upstash Redis — four layers, every one fail-open"]
+        direction TB
+        L["A · report cache, 6 h TTL<br/>B · singleflight SET-NX lock<br/>C · GitHub API cache, per endpoint<br/>D · narrative cache + daily budget"]
+    end
+
+    GH[("GitHub REST + GraphQL")]
+    PG[("Neon Postgres<br/>users · sessions<br/>analyses · narratives")]
+    OAUTH["GitHub OAuth<br/>sign-in + higher rate limits"]
+    OG["1200×630 GitHub Receipt<br/>/u/[user]/card · /share/[slug]"]
+
+    U --> FE -->|"HTTP"| ING
+    GH -.->|"conditional requests · ETags"| ING
+    ING <--> CACHE
+    P1 --> CACHE
+    NARR -->|"SSE stream"| FE
+    LADDER --> PG
+    OAUTH --> FE
+    FE --> OG
+
+    classDef det fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#d1fae5
+    classDef ai fill:#312e81,stroke:#818cf8,stroke-width:2px,color:#e2e8f0
+    classDef store fill:#1e293b,stroke:#475569,stroke-width:1.5px,color:#cbd5e1
+    class P1,P2,LADDER det
+    class NARR ai
+    class GH,PG,L,OAUTH,OG store
+```
+
+Green is the part that must be right, and is pure: same GitHub data in, same score out, every point carrying its evidence. `p95 ≤ 200 ms` on a warm `/analyze` is layer A doing its job; if Redis is down, all four layers degrade to a slower but correct answer rather than an error.
+
+---
+
 ## Status
 
-**v1.0.10: live** at [skillissue.tech](https://skillissue.tech), with GitHub OAuth sign-in, Neon Postgres persistence, `/me` history, and opt-in `/share/[slug]` public links.
+**v1.0.11: live** at [skillissue.tech](https://skillissue.tech), with GitHub OAuth sign-in, Neon Postgres persistence, `/me` history, and opt-in `/share/[slug]` public links.
 
-Following the v1.0.0 stable launch, a security-hardening line ran from a full internal audit through v1.0.8, and CI-integrity work through v1.0.10.
+Following the v1.0.0 stable launch, a security-hardening line ran from a full internal audit through v1.0.8, and CI-integrity work through v1.0.10. v1.0.11 closed a navigation-state bug sweep that traced four separate reports back to one root cause.
 
 | Release | What shipped |
 | --- | --- |
+| **v1.0.11** | Navigation-state bug sweep: the narrative no longer duplicates on back-nav, `/me` reflects saves immediately, badge evidence is reachable by screen reader, and a version-drift guard now fails the build |
 | **v1.0.10** | Dependency-manifest drift guard: CI fails if `pyproject.toml` / `uv.lock` / `requirements.txt` disagree |
 | **v1.0.9** | Audit-gate resilience: an advisory-registry outage warns instead of hard-blocking every PR |
 | **v1.0.8** | Auth & endpoint hardening: session ids hashed at rest, Origin check on mutations, promotable CSP, `security.txt` + PR dependency review |
@@ -78,29 +129,29 @@ Following the v1.0.0 stable launch, a security-hardening line ran from a full in
 <details>
 <summary><b>Earlier history (v0.1.0 → v1.0.3)</b></summary>
 
-- **v1.0.3** (hotfixed `/analyze` for hyper-active accounts tripping GitHub's GraphQL cost limit.
-- **v1.0.2**) security & hardening: fixed the nightly refresh cron (Vercel fires GET; the handler was POST-only), patched 7 backend dependency CVEs, added CSRF, supply-chain (Dependabot + CI SCA gate) and HTTP-header hardening.
-- **v1.0.1** (operational launch-ops milestone: the `skillissue.tech` domain cutover, tracked in [`docs/LAUNCH.md`](./docs/LAUNCH.md).
-- **v1.0.0**) first stable release: homepage link-preview cards, autofocused search, inline "analyze another" on reports, repo cleanup.
-- **v0.9.8** (launch landing sections: example reports, a how-it-works methodology section, a GitHub-star CTA.
-- **v0.9.7**) Privacy Policy + Terms of Service, linked from a new site-wide footer.
-- **v0.9.6** (reusable load-test harness for the warm `/analyze` path (the full 100 RPS run is an operator step).
-- **v0.9.5**) full pre-launch security audit (no high/critical findings), OAuth scope tightened to `read:user`, HTTP security headers.
-- **v0.9.4** (DB connection pool size made env-tunable (defaults unchanged; RUM showed no pool exhaustion) and the real back-nav spinner fix.
-- **v0.9.3**) deletable `/me` history with undo, a golden "creator" scorecard, and a first (incomplete) back-nav spinner fix.
-- **v0.9.2** (rate limiting on `/analyze` and `/narrative`: per-IP for anonymous, higher per-user caps when signed in.
-- **v0.9.1**) closed the `/me` N+1 and added per-namespace Report cache versioning.
-- **v0.9.0** (opened Beta hardening with bounded GitHub fan-out.
-- **v0.8.7**) modernized project config (`vercel.json` → `vercel.ts`).
-- **v0.8.6** (closed v0.7.1's deferred share-page caching.
-- **v0.8.5**) closed the post-deploy-Sentry loop with a pre-merge CI gate.
-- **v0.8.4** (fixed the silent narrative misattribution.
-- **v0.8.3**) hotfixed the empty-repo crash.
-- **v0.8.2** (manual force-refresh button on `/me`.
-- **v0.8.1**) nightly cron with bearer auth.
-- **v0.8.0** (Sentry (FE+BE), PostHog (events + web vitals), structlog JSON logging, on-voice 404, full axe a11y pass.
-- **v0.7.2**) prod-certified the perf budget (CLS 0.080 → 0 structurally, perf 90 → 94, LCP 2,804 → 2,773 ms).
-- **v0.7.0**: Upstash Redis caching (warm `/analyze` ≤ 200 ms).
+- **v1.0.3** — hotfixed `/analyze` for hyper-active accounts tripping GitHub's GraphQL cost limit.
+- **v1.0.2** — security & hardening: fixed the nightly refresh cron (Vercel fires GET; the handler was POST-only), patched 7 backend dependency CVEs, added CSRF, supply-chain (Dependabot + CI SCA gate) and HTTP-header hardening.
+- **v1.0.1** — operational launch-ops milestone: the `skillissue.tech` domain cutover, tracked in [`docs/LAUNCH.md`](./docs/LAUNCH.md).
+- **v1.0.0** — first stable release: homepage link-preview cards, autofocused search, inline "analyze another" on reports, repo cleanup.
+- **v0.9.8** — launch landing sections: example reports, a how-it-works methodology section, a GitHub-star CTA.
+- **v0.9.7** — Privacy Policy + Terms of Service, linked from a new site-wide footer.
+- **v0.9.6** — reusable load-test harness for the warm `/analyze` path (the full 100 RPS run is an operator step).
+- **v0.9.5** — full pre-launch security audit (no high/critical findings), OAuth scope tightened to `read:user`, HTTP security headers.
+- **v0.9.4** — DB connection pool size made env-tunable (defaults unchanged; RUM showed no pool exhaustion) and the real back-nav spinner fix.
+- **v0.9.3** — deletable `/me` history with undo, a golden "creator" scorecard, and a first (incomplete) back-nav spinner fix.
+- **v0.9.2** — rate limiting on `/analyze` and `/narrative`: per-IP for anonymous, higher per-user caps when signed in.
+- **v0.9.1** — closed the `/me` N+1 and added per-namespace Report cache versioning.
+- **v0.9.0** — opened Beta hardening with bounded GitHub fan-out.
+- **v0.8.7** — modernized project config (`vercel.json` → `vercel.ts`).
+- **v0.8.6** — closed v0.7.1's deferred share-page caching.
+- **v0.8.5** — closed the post-deploy-Sentry loop with a pre-merge CI gate.
+- **v0.8.4** — fixed the silent narrative misattribution.
+- **v0.8.3** — hotfixed the empty-repo crash.
+- **v0.8.2** — manual force-refresh button on `/me`.
+- **v0.8.1** — nightly cron with bearer auth.
+- **v0.8.0** — Sentry (FE+BE), PostHog (events + web vitals), structlog JSON logging, on-voice 404, full axe a11y pass.
+- **v0.7.2** — prod-certified the perf budget (CLS 0.080 → 0 structurally, perf 90 → 94, LCP 2,804 → 2,773 ms).
+- **v0.7.0** — Upstash Redis caching (warm `/analyze` ≤ 200 ms).
 
 Full detail in [`CHANGELOG.md`](./CHANGELOG.md); the roadmap lives in [`PLAN.md`](./PLAN.md).
 
@@ -144,7 +195,7 @@ Verify:
 
 ```bash
 curl http://localhost:8000/health
-# {"status":"ok","version":"1.0.10","db":"up","cache":"unconfigured"}
+# {"status":"ok","version":"1.0.11","db":"up","cache":"unconfigured"}
 
 curl http://localhost:8000/analyze/octocat
 ```

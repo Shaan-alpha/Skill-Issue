@@ -16,76 +16,46 @@
 
 ## High-level data flow
 
+```mermaid
+flowchart TD
+    U(["User enters github.com/username"])
+
+    FE["<b>Next.js 16 App Router</b> · Vercel<br/>landing · analyze flow · results · receipts<br/>streams the narrative over SSE (v0.4.0+)<br/><i>renders facts; never computes a score</i>"]
+
+    subgraph BE ["FastAPI backend — Python 3.12, asyncio end to end"]
+        direction TB
+        ING["<b>Ingestion</b> · httpx + GraphQL<br/>profile · pinned · repos · commits<br/>PRs · issues · languages · contributions"]
+        P1["<b>Scoring pass 1 — deterministic</b><br/>repo_quality 30 · maturity 20 · oss_collab 15<br/>recruiter_signal 15 · consistency 10 · trajectory 10<br/>→ base total → tier"]
+        P2["<b>Scoring pass 2 — tier-gated depth</b><br/>licence · workflows · README · review depth<br/>dep files · commit quality · cross-repo<br/>→ re-score"]
+        TB["<b>Tier ladder + badges</b> · deterministic<br/>7 tiers Hobbyist → Principal, intra-tier sub-rank<br/>8 stackable, signal-driven badges"]
+        NAR["<b>Narrative formatter</b> · Groq, mode-aware<br/>receives the score JSON, never raw data<br/>streams SSE back to the frontend"]
+        CACHE["<b>app/cache/</b> — Upstash layer (v0.7.0)<br/>A · report cache, 6 h TTL<br/>B · singleflight SET-NX lock<br/>C · GH API cache, per endpoint<br/>D · narrative cache + daily budget<br/><i>every layer fail-open</i>"]
+        ING --> P1 --> P2 --> TB --> NAR
+        ING -.-> CACHE
+        P1 -.-> CACHE
+        NAR -.-> CACHE
+    end
+
+    REDIS[("<b>Upstash Redis</b><br/>report · GH API · narrative<br/>daily budget · singleflight")]
+    NEON[("<b>Neon Postgres</b><br/>users · sessions<br/>analyses + runs · narratives")]
+    OAUTH["<b>GitHub OAuth</b><br/>auth + higher rate limits"]
+
+    U --> FE -->|"HTTP / fetch"| ING
+    CACHE <--> REDIS
+    TB --> NEON
+    NAR -->|"SSE"| FE
+    OAUTH --> FE
+    OAUTH --> NEON
+
+    classDef det fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#d1fae5
+    classDef ai fill:#312e81,stroke:#818cf8,stroke-width:2px,color:#e2e8f0
+    classDef store fill:#1e293b,stroke:#475569,stroke-width:1.5px,color:#cbd5e1
+    class P1,P2,TB det
+    class NAR ai
+    class REDIS,NEON,OAUTH,CACHE store
 ```
-                     ┌────────────────────────────────────┐
-                     │  User: enters github.com/username  │
-                     └────────────────────────────────────┘
-                                       │
-                                       ▼
-              ┌────────────────────────────────────────────────┐
-              │ Next.js 16 App Router (frontend, Vercel)       │
-              │  - Landing, analyze flow, results, receipts    │
-              │  - Streams narrative via SSE (v0.4.0+)         │
-              └────────────────────────────────────────────────┘
-                                       │ HTTP / fetch
-                                       ▼
-              ┌────────────────────────────────────────────────┐
-              │ FastAPI backend (Python 3.12, async)           │
-              │  ┌──────────────────────────────────────────┐  │
-              │  │ Ingestion layer (httpx + GraphQL)        │  │
-              │  │   - profile, pinned, repos, commits,     │  │
-              │  │     PRs, issues, langs, contribs         │  │
-              │  └──────────────────────────────────────────┘  │
-              │  ┌──────────────────────────────────────────┐  │
-              │  │ Two-pass scoring engine (deterministic)  │  │
-              │  │   pass 1: repo_quality(30) + maturity    │  │
-              │  │   (20) + oss_collab(15) + consistency    │  │
-              │  │   (10) + recruiter_signal(15) +          │  │
-              │  │   trajectory(10) → base total → tier     │  │
-              │  │   pass 2: tier-gated depth enrichment    │  │
-              │  │   (licence / workflows / README /        │  │
-              │  │   review depth / dep files / commit      │  │
-              │  │   quality / cross-repo) → re-score       │  │
-              │  └──────────────────────────────────────────┘  │
-              │  ┌──────────────────────────────────────────┐  │
-              │  │ Tier ladder + badges (deterministic)     │  │
-              │  │   7 tiers (Hobbyist → Principal),        │  │
-              │  │   intra-tier sub-rank, 8 stackable       │  │
-              │  │   signal-driven badges                   │  │
-              │  └──────────────────────────────────────────┘  │
-              │  ┌──────────────────────────────────────────┐  │
-              │  │ Narrative formatter (Groq, mode-aware)   │  │
-              │  │   - receives score JSON, never raw data  │  │
-              │  │   - streams SSE back to frontend         │  │
-              │  └──────────────────────────────────────────┘  │
-              │  ┌──────────────────────────────────────────┐  │
-              │  │ app/cache/ — Upstash Redis layer (v0.7.0)│  │
-              │  │   Layer A: Report cache (6h TTL)         │  │
-              │  │   Layer B: singleflight SET-NX lock      │  │
-              │  │   Layer C: GH API cache (per-endpoint)   │  │
-              │  │   Layer D: narrative + daily budget      │  │
-              │  │   Every layer is fail-open.              │  │
-              │  └──────────────────────────────────────────┘  │
-              └────────────────────────────────────────────────┘
-                                │              │
-                  ┌─────────────┘              └────────────┐
-                  ▼                                          ▼
-        ┌──────────────────┐                   ┌─────────────────────┐
-        │ Upstash Redis    │                   │ Neon Postgres        │
-        │ - Report cache   │                   │ - users               │
-        │ - GH API cache   │                   │ - sessions            │
-        │ - narrative cache│                   │ - analyses + runs    │
-        │ - daily budget   │                   │ - narratives          │
-        │ - singleflight   │                   │                       │
-        └──────────────────┘                   └─────────────────────┘
-                                │
-                                ▼
-                       ┌──────────────────┐
-                       │ GitHub OAuth     │
-                       │ (auth + higher   │
-                       │  rate limits)    │
-                       └──────────────────┘
-```
+
+Green nodes are guiding principle 1 in the diagram: pure functions of GitHub data, no I/O, no model. The single blue node is the only place an LLM runs, and it is downstream of every number it will describe.
 
 ---
 
