@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from unittest.mock import patch
 
 import pytest
 
@@ -16,7 +17,7 @@ class _BoomLLM(FakeNarrativeLLM):
         super().__init__(tokens=[])
         self.calls = 0
 
-    async def stream_chat(self, messages, temperature, max_output_tokens=1200):  # type: ignore[no-untyped-def, override]
+    async def stream_chat(self, messages, **kwargs):  # type: ignore[no-untyped-def, override]
         self.calls += 1
         raise RuntimeError("provider 502")
         yield ""  # pragma: no cover - keeps function a generator
@@ -243,3 +244,153 @@ async def test_refund_delegates_to_budget() -> None:
     svc = NarrativeService(cache=object(), budget=_Budget(), llm=object())
     await svc.refund(subject="ip:1.2.3.4", consumed_day="2026-07-24")
     assert calls["args"] == ("ip:1.2.3.4", "2026-07-24")
+
+
+# --- Empty and truncated streams (v1.0.12) ---
+
+
+@pytest.mark.asyncio
+async def test_empty_stream_falls_back_instead_of_yielding_nothing() -> None:
+    """A reasoning model can spend its whole budget thinking and emit no prose.
+    Yielding nothing renders a blank card; serve the fallback instead."""
+    cache = NarrativeCache()
+    budget = DailyBudget(limit=10)
+    llm = FakeNarrativeLLM(tokens=[])
+    svc = NarrativeService(cache=cache, budget=budget, llm=llm)
+
+    meta = NarrativeStreamMeta()
+    out = "".join([c async for c in svc.stream_narrative("roast", _report(), meta=meta)])
+
+    assert out != ""
+    assert "[AI narrator offline" in out
+    assert meta.is_fallback is True
+    assert meta.fallback_reason == "error"
+
+
+@pytest.mark.asyncio
+async def test_empty_stream_is_never_cached() -> None:
+    """Caching '' poisons the key for the full 24h TTL, because `aget` returns
+    '' and the service treats any non-None value as a hit."""
+    cache = NarrativeCache()
+    budget = DailyBudget(limit=10)
+    llm = FakeNarrativeLLM(tokens=[])
+    svc = NarrativeService(cache=cache, budget=budget, llm=llm)
+
+    report = _report()
+    async for _ in svc.stream_narrative("roast", report):
+        pass
+
+    key = cache.key(report.username, cache.scores_hash(report), "roast")
+    assert await cache.aget(key) is None
+
+
+@pytest.mark.asyncio
+async def test_truncated_stream_is_flagged_and_not_cached() -> None:
+    """A guillotined narrative must not be served from cache for 24h as though
+    it were complete."""
+    cache = NarrativeCache()
+    budget = DailyBudget(limit=10)
+    llm = FakeNarrativeLLM(tokens=["Half a roast that stops mid-"], finish_reason="length")
+    svc = NarrativeService(cache=cache, budget=budget, llm=llm)
+
+    report = _report()
+    meta = NarrativeStreamMeta()
+    out = "".join([c async for c in svc.stream_narrative("roast", report, meta=meta)])
+
+    assert out == "Half a roast that stops mid-"
+    assert meta.truncated is True
+    key = cache.key(report.username, cache.scores_hash(report), "roast")
+    assert await cache.aget(key) is None
+
+
+@pytest.mark.asyncio
+async def test_complete_stream_is_still_cached_and_unflagged() -> None:
+    cache = NarrativeCache()
+    budget = DailyBudget(limit=10)
+    llm = FakeNarrativeLLM(tokens=["A whole roast."], finish_reason="stop")
+    svc = NarrativeService(cache=cache, budget=budget, llm=llm)
+
+    report = _report()
+    meta = NarrativeStreamMeta()
+    async for _ in svc.stream_narrative("roast", report, meta=meta):
+        pass
+
+    assert meta.truncated is False
+    key = cache.key(report.username, cache.scores_hash(report), "roast")
+    assert await cache.aget(key) == "A whole roast."
+
+
+@pytest.mark.asyncio
+async def test_service_forwards_reasoning_effort() -> None:
+    """Thinking is billed from the same budget as the prose, so effort must be
+    turned down or the visible answer gets squeezed out."""
+    cache = NarrativeCache()
+    budget = DailyBudget(limit=10)
+    llm = FakeNarrativeLLM(tokens=["x"], finish_reason="stop")
+    svc = NarrativeService(cache=cache, budget=budget, llm=llm, reasoning_effort="low")
+
+    async for _ in svc.stream_narrative("roast", _report()):
+        pass
+
+    assert llm.last_reasoning_effort == "low"
+
+
+# --- Fallback is reported as an alertable signal (v1.0.12) ---
+
+
+@pytest.mark.asyncio
+async def test_upstream_failure_reports_an_alertable_fallback() -> None:
+    """The 2026-08-16 model retirement served stand-in text for three days with
+    green health checks. The degradation itself must be the signal."""
+    cache = NarrativeCache()
+    budget = DailyBudget(limit=10)
+    svc = NarrativeService(cache=cache, budget=budget, llm=_BoomLLM())
+
+    with patch("app.narrative.service.record_narrative_fallback") as report:
+        async for _ in svc.stream_narrative("roast", _report()):
+            pass
+
+    assert report.call_count == 1
+    assert report.call_args.kwargs["reason"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_empty_completion_reports_an_alertable_fallback() -> None:
+    cache = NarrativeCache()
+    budget = DailyBudget(limit=10)
+    svc = NarrativeService(cache=cache, budget=budget, llm=FakeNarrativeLLM(tokens=[]))
+
+    with patch("app.narrative.service.record_narrative_fallback") as report:
+        async for _ in svc.stream_narrative("roast", _report()):
+            pass
+
+    assert report.call_args.kwargs["reason"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_budget_exhaustion_reports_as_budget_not_error() -> None:
+    """Hitting the cap is capacity behaviour. Reporting it as an error would
+    make the real alert noisy enough to ignore."""
+    cache = NarrativeCache()
+    budget = DailyBudget(limit=0)
+    svc = NarrativeService(cache=cache, budget=budget, llm=FakeNarrativeLLM(tokens=["x"]))
+
+    with patch("app.narrative.service.record_narrative_fallback") as report:
+        async for _ in svc.stream_narrative("roast", _report()):
+            pass
+
+    assert report.call_args.kwargs["reason"] == "budget"
+
+
+@pytest.mark.asyncio
+async def test_healthy_stream_reports_no_fallback() -> None:
+    cache = NarrativeCache()
+    budget = DailyBudget(limit=10)
+    llm = FakeNarrativeLLM(tokens=["A whole roast."], finish_reason="stop")
+    svc = NarrativeService(cache=cache, budget=budget, llm=llm)
+
+    with patch("app.narrative.service.record_narrative_fallback") as report:
+        async for _ in svc.stream_narrative("roast", _report()):
+            pass
+
+    assert report.call_count == 0

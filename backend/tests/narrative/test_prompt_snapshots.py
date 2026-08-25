@@ -38,7 +38,7 @@ def test_roast_prompt_stable_snapshot() -> None:
     dumped = json.dumps(msgs, sort_keys=True, indent=2)
     digest = hashlib.sha256(dumped.encode()).hexdigest()
 
-    assert digest == "4ee41afec0afeabb48cb9f0ae8418a42d3aa00b9be9296da3dbfdae71a7bc0d3"
+    assert digest == "9f7d938b3eb7360a06c6f76b7642683158834707a2e4f488a58c5d35db08b86a"
 
 
 def test_mentor_prompt_stable_snapshot() -> None:
@@ -46,4 +46,4 @@ def test_mentor_prompt_stable_snapshot() -> None:
     dumped = json.dumps(msgs, sort_keys=True, indent=2)
     digest = hashlib.sha256(dumped.encode()).hexdigest()
 
-    assert digest == "face531cc392324efa4e312748fae7e8111ca902293b6b0655b831c648e2e99b"
+    assert digest == "a84470dca2b67364127359ac9e2420d186dc240b94e763a276ca3f07ff6ed981"

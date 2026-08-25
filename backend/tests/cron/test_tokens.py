@@ -19,6 +19,23 @@ def _enc_key(monkeypatch) -> bytes:
     return load_enc_key()
 
 
+def _app_fallback_token(monkeypatch, value: str = "app-fallback-token") -> str:
+    """Force the app-fallback token that `resolve_token_for_analysis` will read.
+
+    `app/cron/tokens.py` does `from app.settings import settings`, which binds
+    the settings *object* at import time. Rebuilding `app.settings.settings`
+    (as `_enc_key` does) rebinds only that module's name — the cron module keeps
+    the original object, still carrying whatever `GITHUB_TOKEN` was in the
+    developer's `.env`. Setting the env var alone therefore did nothing, and the
+    assertion compared against a real `ghp_` token from disk. Patch the
+    attribute on the object the module actually holds.
+    """
+    from app.cron import tokens as tokens_module
+
+    monkeypatch.setattr(tokens_module.settings, "github_token", value)
+    return value
+
+
 async def _make_user_and_analysis(db, login: str = "alice") -> tuple[User, Analysis]:
     u = User(github_id=hash(login) & 0xFFFF, github_login=login, name=login, avatar_url=None)
     db.add(u)
@@ -31,6 +48,7 @@ async def _make_user_and_analysis(db, login: str = "alice") -> tuple[User, Analy
 
 async def test_resolves_active_session_token(db, monkeypatch):
     monkeypatch.setenv("GITHUB_TOKEN", "app-fallback-token")
+    _app_fallback_token(monkeypatch)
     key = _enc_key(monkeypatch)
     user, analysis = await _make_user_and_analysis(db)
 
@@ -53,6 +71,7 @@ async def test_resolves_active_session_token(db, monkeypatch):
 
 async def test_falls_back_when_session_expired(db, monkeypatch):
     monkeypatch.setenv("GITHUB_TOKEN", "app-fallback-token")
+    _app_fallback_token(monkeypatch)
     key = _enc_key(monkeypatch)
     user, analysis = await _make_user_and_analysis(db)
 
@@ -75,6 +94,7 @@ async def test_falls_back_when_session_expired(db, monkeypatch):
 
 async def test_falls_back_when_no_session_at_all(db, monkeypatch):
     monkeypatch.setenv("GITHUB_TOKEN", "app-fallback-token")
+    _app_fallback_token(monkeypatch)
     _enc_key(monkeypatch)
     _, analysis = await _make_user_and_analysis(db)
     await db.commit()
@@ -86,6 +106,7 @@ async def test_falls_back_when_no_session_at_all(db, monkeypatch):
 
 async def test_picks_most_recently_used_session_when_multiple(db, monkeypatch):
     monkeypatch.setenv("GITHUB_TOKEN", "app-fallback-token")
+    _app_fallback_token(monkeypatch)
     key = _enc_key(monkeypatch)
     user, analysis = await _make_user_and_analysis(db)
     now = datetime.now(UTC)

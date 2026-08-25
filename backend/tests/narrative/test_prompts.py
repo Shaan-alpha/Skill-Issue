@@ -87,3 +87,12 @@ def test_user_payload_is_sorted_json() -> None:
     # Verify it doesn't crash on parse and has no unindented messy keys
     assert isinstance(raw, str)
     json.loads(raw)
+
+
+def test_both_prompts_forbid_markdown() -> None:
+    """The UI renders the narrative verbatim with no markdown parser, so bold
+    syntax reaches the reader as literal asterisks. Both voices must ban it."""
+    for mode in ("roast", "mentor"):
+        system = build_messages(mode, _report())[0]["content"].lower()
+        assert "no markdown" in system
+        assert "asterisk" in system

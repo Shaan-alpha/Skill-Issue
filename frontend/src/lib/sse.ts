@@ -5,7 +5,7 @@ export function createNarrativeEventSource(
   mode: NarrativeMode,
   onChunk: (text: string) => void,
   onError: (err: unknown) => void,
-  onComplete: () => void
+  onComplete: (info: { truncated: boolean }) => void
 ): () => void {
   const baseUrl =
     process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
@@ -21,7 +21,10 @@ export function createNarrativeEventSource(
       // Receiving it is the ONLY signal of a successful completion.
       if (data.done) {
         es.close();
-        onComplete();
+        // `truncated` means the model hit its token ceiling mid-sentence, so
+        // the caller should close the narrative off rather than render the
+        // ragged edge. Absent on older backends — treat that as not truncated.
+        onComplete({ truncated: data.truncated === true });
         return;
       }
       if (data.chunk) {

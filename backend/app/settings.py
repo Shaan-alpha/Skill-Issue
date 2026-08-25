@@ -25,6 +25,13 @@ class Settings(BaseSettings):
     # was sized for llama-3.3-70b, which did no reasoning; on gpt-oss it left
     # only ~90-190 tokens for prose and cut every narrative mid-sentence.
     narrative_max_output_tokens: int = 1200
+    # Reasoning effort for models that think before answering. On gpt-oss the
+    # thinking is billed from `narrative_max_output_tokens`, so the provider
+    # default (medium) can consume most of the budget and leave the visible
+    # narrative truncated — or, at the extreme, empty. "low" keeps the budget
+    # for prose. Ignored for models that don't accept the parameter (gpt-4o
+    # 400s on it), so it is safe to leave set on the OpenAI path.
+    narrative_reasoning_effort: str | None = "low"
     # Global hard $ ceiling / UTC-day (v1.0.4: 50 -> 500, now paired with the
     # per-subject caps below so one IP can't drain the whole global budget).
     narrative_daily_limit: int = 500

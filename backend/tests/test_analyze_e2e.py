@@ -384,6 +384,13 @@ async def test_anonymous_analyze_does_not_persist(db, monkeypatch):
     from app.main import app
 
     monkeypatch.setenv("GITHUB_TOKEN", "project-token")
+    # setenv alone does nothing here: app/dependencies.py binds the settings
+    # object at import via `from app.settings import settings`, so it keeps
+    # whatever GITHUB_TOKEN was on disk. This is the anonymous path, which has
+    # no session token to fall back on, so with an unset token the request 500s
+    # at the "GITHUB_TOKEN not configured" guard. It passed only on machines
+    # with a real token in .env, and failed the moment it ran in CI.
+    monkeypatch.setattr(deps.settings, "github_token", "project-token")
 
     async def fake_ingest(username, gh):
         return type("P", (), {"login": username})()

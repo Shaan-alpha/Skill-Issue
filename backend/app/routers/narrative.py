@@ -143,7 +143,9 @@ async def get_narrative(
 
         # v1.0.7 SI-33: explicit end-of-stream sentinel so the client can tell a
         # normal completion (this) from a dropped connection (EventSource error).
-        yield f"data: {json.dumps({'done': True})}\n\n"
+        # `truncated` rides along so the client can close off a narrative the
+        # model stopped mid-sentence instead of rendering the ragged edge.
+        yield f"data: {json.dumps({'done': True, 'truncated': meta.truncated})}\n\n"
 
     return StreamingResponse(
         event_generator(),

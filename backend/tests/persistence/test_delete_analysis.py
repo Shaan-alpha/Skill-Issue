@@ -45,6 +45,14 @@ async def test_delete_removes_analysis_and_runs(db):
 
     removed = await delete_analysis(db, analysis_id=a.id, owner_id=user.id)
 
+    # The child rows go via the DB's ON DELETE CASCADE (passive_deletes=True),
+    # so SQLAlchemy never marks them deleted in Python. Without this, `db.get`
+    # answers from the identity map and returns the stale run object — the
+    # assertion below failed for that reason, not because the cascade broke.
+    # `expunge_all` (not `expire_all`) because refreshing an expired instance
+    # would emit lazy IO outside the async greenlet context.
+    db.expunge_all()
+
     assert removed is None  # was private
     assert await db.get(type(a), a.id) is None
     assert await db.get(type(run), run.id) is None  # cascade

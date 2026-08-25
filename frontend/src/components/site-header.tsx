@@ -116,6 +116,11 @@ function HeaderInner() {
               My analyses
             </Menu.LinkItem>
             <Menu.Item
+              // A hard navigation is deliberate on sign-out: `router.push()`
+              // keeps Next's client router cache, which can re-render stale
+              // authenticated UI after the session cookie is already gone. A
+              // full document load is the only way to drop that cache.
+              // eslint-disable-next-line @next/next/no-location-assign-relative-destination
               onClick={() => signOut().then(() => (window.location.href = "/"))}
               className="block w-full text-left rounded-md px-3 py-2 hover:bg-accent/10"
             >
