@@ -59,6 +59,7 @@
 | **v1.0.9** | Audit-gate resilience — advisory-registry outages warn instead of hard-blocking CI (shape-based classification, ERROR verdict for unexplained failure) | ✅ shipped |
 | **v1.0.10** | Dependency-manifest drift guard — CI fails if `pyproject.toml` / `uv.lock` / `requirements.txt` disagree | ✅ shipped |
 | **v1.0.11** | Cache Components navigation-state sweep — roast duplication, `/me` staleness, analytics double-count, badge a11y, session snapshot; + fixture time-bomb and backend version-drift guards | ✅ shipped |
+| **v1.0.12** | Narrative output sweep — truncated/empty/markdown narratives, alertable fallback signal; + alembic logging bug, 72 DB tests enabled in CI (12 repaired), Next 16.3.2 | ✅ shipped |
 
 ---
 
@@ -987,6 +988,39 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 - [x] Six PRs reviewed and merged (#59–#64); CI green on `main`.
 - [x] Prod-verified 2026-07-31 — `/_/backend/health` `1.0.10` with db+cache up, site 200, `/analyze/octocat` 200 in 0.63s; **and the reported bug driven in real Chrome: narrative stayed 931 chars / 1 copy across three leave-and-return cycles.**
 - [x] `CHANGELOG.md` `[1.0.11]`; tag `v1.0.11`; release published 2026-07-31, marked Latest. Two further fixes (#66 preview prefixes, #67 CI concurrency) merged *after* the release-prep PR, so the changelog section was completed in #68 before tagging — `release.yml` publishes that section verbatim, so an incomplete section would have shipped as the release notes.
+
+---
+
+## v1.0.12 — Narrative output sweep
+
+**Goal:** Close out three user-reported narrative defects — roasts arriving half-written, roasts arriving blank, and literal `**` around words in both modes — and the class of problem behind them. The v1.0.11 hotfix raised the completion cap for the new reasoning model, which treated the symptom; the model was still spending two-thirds of its budget thinking before writing a word. Chasing the causes surfaced a wider set of problems worth fixing in the same pass.
+
+**No design spec or plan doc:** like v1.0.11 this started as a bug report mid-session, not a planned slice. The investigation and every decision are recorded in [`docs/PROGRESS_LOG.md`](./docs/PROGRESS_LOG.md) (2026-08-25 entry) and in PR **#94**.
+
+**Delivered:**
+- **Truncation, measured rather than inferred.** The 2026-08-19 entry recorded the reasoning-consumes-the-budget theory as unmeasurable — no Groq key was available to the agent then. Measured this time against the live model with the real roast prompt: **386 reasoning tokens to 186 visible** at the provider default, **12 to 209** at `reasoning_effort="low"`. The parameter is gated on the model name, because `gpt-4o` (the default on the OpenAI path) 400s on it.
+- **Truncation is now detectable.** `finish_reason` comes back through a per-call `StreamOutcome` and rides out on the SSE done sentinel; the client trims the dangling fragment to the last complete sentence. Per-call rather than on the client because `get_narrative_service` is `lru_cache`d, so one `NarrativeLLM` is shared by every concurrent request.
+- **Empty narratives no longer stick.** An empty completion was cached, and `aget`'s `is not None` check served it back as a hit, so one blip left a profile blank for the full 24h TTL. Fixed on both sides; the read guard heals keys already poisoned in Redis.
+- **Markdown banned at the prompt and unwrapped at the render.** Prompt compliance is probabilistic, so both layers are needed. Underscores are deliberately left alone — they are load-bearing in the identifiers these narratives quote.
+- **A fourth defect, unreported:** the card recognised only the *budget* fallback header, so on the error path the raw `[AI narrator offline — upstream hiccup]` marker rendered inside the roast with no badge.
+- **The alerting gap from the August incident is closed.** A degraded narrator is now its own fingerprinted Sentry issue. Budget exhaustion is excluded on purpose: it is a designed limit, and alerting on it would make the real alert noise.
+- **A real latent bug in migrations:** `fileConfig` defaulted to `disable_existing_loggers=True`, so running a migration switched off every `app.*` logger in the process. Found via three unrelated test failures; the tests were the symptom.
+
+**Audit, same slice:**
+- **72 DB-fixture tests ran nowhere** — skipped locally *and* excluded from CI as too expensive. CI now starts a throwaway Postgres (trust auth, health-gated). Enabling them found **12 broken tests**, several broken for releases: four queried session rows by the raw cookie value after v1.0.8 hashed them (two had been *passing for the wrong reason*), three compared against a real `GITHUB_TOKEN` from a developer `.env`, one never learned a kwarg added in v0.8.4, one read a stale identity map, three were collateral from the alembic bug.
+- **Seven npm advisories** cleared by `next` 16.2.12 → 16.3.2. `npm audit` reports zero, prod and dev. `pip-audit` was already clean.
+- **All three unresolved Sentry issues were stale** and are resolved with commit references.
+
+**Deliberately not done:** roast temperature stays at 0.95 and the prompts keep their `role: "system"` message, though both sit outside Groq's guidance for reasoning models. They are plausible quality factors but they are voice decisions, not defects — changing them silently would alter the product's tone. Flagged for a deliberate experiment instead.
+
+**Exit criteria:**
+- [x] Every fix written test-first and confirmed failing first with the reported signature.
+- [x] All four version constants at `1.0.12`.
+- [x] Backend `ruff` clean; `pytest -q` green — **456 passed / 0 skipped** with a database, 384 / 72 skipped without one, so local dev still degrades cleanly.
+- [x] Frontend `lint` + `tsc` + `test:run` + `build` clean (103 tests); `npm audit` zero.
+- [x] PR **#94** merged; all five checks green on `main`, including GitGuardian.
+- [ ] Prod-verified after deploy — operator step.
+- [x] `CHANGELOG.md` `[1.0.12]`; tag `v1.0.12`.
 
 ---
 
