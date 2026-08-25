@@ -3,7 +3,7 @@ from typing import Literal
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-VERSION = "1.0.11"
+VERSION = "1.0.12"
 
 
 class Settings(BaseSettings):

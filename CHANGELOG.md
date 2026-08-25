@@ -10,6 +10,14 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ## [Unreleased]
 
+## [1.0.12] — 2026-08-25
+
+### Added
+- **A degraded narrator now raises an alert instead of waiting to be noticed.** When the AI narrator falls back to stand-in text because the provider failed, that is now reported as its own distinct, single grouped issue in Sentry — the signal that was missing when the model retirement in August went unnoticed for three days behind green health checks. Hitting the daily cap is deliberately *not* alerted: it is expected behaviour, and paging on it would make the alert that matters easy to ignore.
+
+### Changed
+- **The daily ceiling on AI narratives is 55, down from 500.** The replacement model's free tier allows 200,000 tokens a day and one narrative costs roughly 3,200, so the real ceiling is about 61 — 500 was a number the app could never reach. Setting our own limit just under the provider's means you get an honest "daily cap reached" message instead of an unexplained upstream failure.
+
 ### Fixed
 - **AI roasts and mentor notes work again.** Groq retired `llama-3.3-70b-versatile`, the model the narrator ran on, on 16 August 2026. Every narrative request had been failing since. Because the narrator is built to degrade quietly rather than error, nothing looked broken — the site simply served its pre-written stand-in text behind an "AI narrator offline" badge for three days. The narrator now runs on Groq's `openai/gpt-oss-120b`.
 - **Roasts and mentor notes are no longer cut off mid-sentence.** The replacement model thinks before it answers, and that thinking is paid for out of the same word allowance as the reply. The allowance had been set for the old model, which did no thinking, so almost all of it was spent before the visible text began — mentor notes were stopping after two sentences, mid-number. The allowance is more than doubled, and is now adjustable without a code change.
@@ -18,25 +26,16 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 - **Asterisks no longer show up around words in roasts and mentor notes.** The narrator had begun emphasising words in Markdown, but the card renders text exactly as written and has no Markdown reader, so `**like this**` reached the page as literal asterisks. Both voices are now told to write plain text, and any markup that slips through anyway is unwrapped before it is displayed.
 - **A narrative cut short now ends on a finished sentence.** When the model does run out of allowance mid-sentence, the backend now says so on the way out, and the card trims the dangling fragment instead of showing it. A cut-short narrative is also no longer cached, so the next visit gets a fresh, complete one.
 - **The "upstream hiccup" notice no longer leaks into the text of a roast.** The stand-in text carries a bracketed header that the card is supposed to strip and replace with an "AI narrator offline" badge. Only the daily-cap wording was ever recognised, so on the other path — a provider error — readers saw the raw `[AI narrator offline — upstream hiccup]` marker sitting inside their roast with no badge to explain it.
-
-### Added
-- **A degraded narrator now raises an alert instead of waiting to be noticed.** When the AI narrator falls back to stand-in text because the provider failed, that is now reported as its own distinct, single grouped issue in Sentry — the signal that was missing when the model retirement in August went unnoticed for three days behind green health checks. Hitting the daily cap is deliberately *not* alerted: it is expected behaviour, and paging on it would make the alert that matters easy to ignore.
-
-### Changed
-- **The daily ceiling on AI narratives is 55, down from 500.** The replacement model's free tier allows 200,000 tokens a day and one narrative costs roughly 3,200, so the real ceiling is about 61 — 500 was a number the app could never reach. Setting our own limit just under the provider's means you get an honest "daily cap reached" message instead of an unexplained upstream failure.
-
 - **Running a database migration no longer silences the application's logs.** Alembic loads its logging config with a setting that switches off every logger already running in the process. Any process that migrated and then kept working went quiet, and in the test suite it made log assertions stop seeing anything for the rest of the run — which is how three tests came to fail only when run after the migration test.
 
 ### Internal
 - **72 tests that ran nowhere now run on every push.** Every test needing a database was skipped locally *and* deliberately excluded from CI as too expensive, so the auth, session, share, refresh and delete paths — the most security-sensitive code in the backend — had no automated verification at all. CI now starts a throwaway Postgres, which is free on GitHub's runners and adds about two minutes. Turning them on found **eleven** already-broken tests, some broken for several releases: four queried session rows by the raw cookie value after v1.0.8 changed storage to a hash (two of those had been passing for the wrong reason and verifying nothing), two compared against a real GitHub token read from the developer's own `.env` instead of the fixture value, one had not been updated when the narrative streamer changed shape back in v0.8.4, one asserted on a stale in-memory object rather than the database, and three were collateral from the Alembic logging bug above. Every one is now fixed, and the whole suite is green with a database attached.
+- Every document that named the retired model is corrected, and each now records the free-tier limits it was checked against, so the next retirement is easier to spot. `NARRATIVE_MODEL` and `NARRATIVE_DAILY_LIMIT` were also un-marked as secrets in deployment config — a model id is not a credential, and hiding it made this outage slower to diagnose.
+- `backend/README.md` had claimed the code's default model was the Groq one. It is `gpt-4o`, which only resolves on the OpenAI path; production always set the model explicitly. The claim is corrected rather than the code, since changing the default would have broken the OpenAI path instead.
 
 ### Security
 - **Seven frontend advisories cleared by moving to Next 16.3.2** (four in `postcss`, one in `sharp`, one in `nanoid`, all reached through Next itself, plus one in a transitive `dompurify`). `npm audit` now reports zero, for production and development dependencies alike. The backend audit was already clean.
 - **`cryptography` 49.0.0 → 50.0.0** ([CVE-2026-69247](https://github.com/advisories/GHSA-g6cj-pr64-35w5)) and **`h2` 4.4.0 → 4.4.1** ([CVE-2026-71554](https://github.com/advisories/GHSA-6hr6-w5qg-qmwg)). Neither appears reachable from this application — nothing here decrypts attacker-supplied PKCS#7 `EnvelopedData`, and the h2 issue needs an HTTP/2-to-1.1 downgrade path — but both are rated critical and the dependency audit blocks on that rating regardless.
-
-### Internal
-- Every document that named the retired model is corrected, and each now records the free-tier limits it was checked against, so the next retirement is easier to spot. `NARRATIVE_MODEL` and `NARRATIVE_DAILY_LIMIT` were also un-marked as secrets in deployment config — a model id is not a credential, and hiding it made this outage slower to diagnose.
-- `backend/README.md` had claimed the code's default model was the Groq one. It is `gpt-4o`, which only resolves on the OpenAI path; production always set the model explicitly. The claim is corrected rather than the code, since changing the default would have broken the OpenAI path instead.
 
 ## [1.0.11] — 2026-07-31
 
