@@ -19,6 +19,69 @@ Format:
 
 ---
 
+## 2026-08-25 — Claude (Opus 5) with Shaan — narrative output defects: truncation, blank roasts, literal `**` in text
+
+**Slice:** none — bug sweep on the narrative layer, continuing the 2026-08-19 incident. Recorded under `CHANGELOG [Unreleased]`.
+
+**Done:**
+- **Measured what the 2026-08-19 entry could only infer.** A Groq key was available locally this session, so the reasoning-as-consumer theory was tested directly against `openai/gpt-oss-120b` with the real roast prompt: **386 reasoning tokens to 186 visible** at the provider default effort — thinking was taking two-thirds of the completion budget. With `reasoning_effort="low"`: **12 reasoning tokens to 209 visible**, a 32× drop, and *more* prose. The inference in the previous entry was correct.
+- Added `NARRATIVE_REASONING_EFFORT` (default `"low"`), plumbed settings → dependencies → `NarrativeService` → `stream_chat`. It is sent only to models that accept it (`gpt-oss`), because `gpt-4o` 400s on the parameter and that is the code default on the OpenAI path.
+- `llm.py` now reports `finish_reason` back to the caller through a per-call `StreamOutcome`, so a stream guillotined at the ceiling is finally distinguishable from a finished one — the exact gap the 2026-08-19 entry flagged as unfixed.
+- Empty completions are no longer cached, and an empty *cached* value is no longer treated as a hit. Both directions mattered: `aput` wrote `""` and `aget`'s `is not None` check served it back for the full 24h TTL, so one blank roast stuck to a profile for a day. The read-side guard also heals keys already poisoned in Redis.
+- An empty completion now falls back to the stand-in text instead of yielding nothing, and the card renders a retry instead of an empty box.
+- Truncation rides out on the SSE done sentinel (`{"done": true, "truncated": bool}`); the client trims the dangling fragment to the last complete sentence. Truncated narratives are not cached.
+- Both system prompts now ban Markdown explicitly, and `stripMarkdownEmphasis` unwraps anything that slips through anyway — prompt compliance is probabilistic, and there is no Markdown renderer in the bundle.
+- Fixed a fourth defect found while reading the render path: the card only recognised the **budget** fallback header, so on the error path `[AI narrator offline — upstream hiccup]` rendered as literal bracketed text inside the roast with no offline badge.
+- Guarded `chunk.choices[0]` against usage-only/keepalive chunks, which carry an empty `choices` list and would have raised `IndexError` into the fail-soft handler.
+
+**Decisions:**
+- **Gated `reasoning_effort` on the model name rather than making it opt-in via env.** An env-only knob would have left production broken until someone set it. Gating means the deployed config is correct out of the box and the OpenAI path cannot 400.
+- **Did not cache truncated narratives.** A cached partial would be served for 24h; re-rolling costs one budget slot and, with effort at `low`, should now essentially never trigger.
+- **Strip Markdown at the render layer rather than adding a Markdown renderer.** Three paragraphs of prose do not justify a parser plus a sanitiser in the bundle, and rendering real Markdown would invite the model to use more of it.
+- **Left `_TEMPERATURE_BY_MODE["roast"] = 0.95` alone.** Groq's reasoning docs recommend 0.5–0.7, so this is out of range and a plausible quality factor — but it is a voice decision, not a defect, and changing it silently would alter the product's tone. Flagged, not touched.
+- **Left the `role: "system"` prompt structure alone** for the same reason: Groq's reasoning guidance says to put instructions in the user message for these models, but restructuring would rewrite both voices and invalidate the prompt snapshots. Worth a deliberate experiment, not a drive-by change.
+
+**Learned / surprises:**
+- **Raising the token cap on 2026-08-19 treated the symptom.** 600 → 1200 bought headroom but left the model still spending most of it thinking; the ratio, not the ceiling, was the defect. The cap and the effort setting are complements — the cap alone just makes truncation rarer and more expensive.
+- **The empty-narrative bug was self-perpetuating in a way a one-off blip is not.** `aput("")` plus `cached is not None` turned a transient empty response into a 24-hour outage for that one profile — and it would have looked, to the user, exactly like "roast mode doesn't work for me".
+- **Sentry was decisive as negative evidence.** The only narrative issue in 90 days is the already-fixed `model_not_found` (last seen 5 days ago). No exceptions since, which ruled out the crash paths early and pointed at silent logic/render bugs instead. The fail-soft design that hid the August outage also means Sentry silence is not proof of health — but here, silence plus visible breakage was itself the clue.
+- **`get_narrative_service` is `@lru_cache`d**, so `NarrativeLLM` is a process-wide singleton shared by every concurrent request. Per-stream state had to be passed in per call (`StreamOutcome`), not stored on the client, or `finish_reason` would race across users.
+
+**Also done this session — the alerting gap is closed.** `app/observability/narrative_health.py` reports a degraded narrator as its own Sentry issue: one stable fingerprint (`["narrative-fallback", "error"]`) covering every upstream fallback regardless of mode or wording, so it can carry a single alert rule. Budget exhaustion is deliberately excluded — it is a designed limit, and alerting on it would make the real alert noise. Usernames go in context, not tags, to keep tag cardinality bounded. Telemetry fails open, with a test pinning that a Sentry failure cannot take down the narrative it is reporting on. Errors *did* previously reach Sentry, but only incidentally, as whatever exception happened to raise; the degradation itself was never the signal.
+
+**Audit findings (whole project, same session):**
+- **72 backend tests run nowhere.** Every `TEST_DATABASE_URL`-gated test — auth routes, sessions, share, refresh, delete, analyses — skips locally *and* is explicitly excluded from CI (`ci.yml`: "out of scope for the cheap pre-merge gate"). That premise is outdated: the `db` fixture builds its own schema via `Base.metadata.create_all` and needs no migrations, so a GitHub Actions `services: postgres` container would enable all 72 at no meaningful cost. This is the largest gap in the project — the least-verified code is also the most security-sensitive.
+- **7 frontend advisories, all transitive through `next@16.2.12`** (postcss ×4 high, sharp ×1 high, nanoid ×1 moderate). The vulnerable range ends at `16.3.0-preview.10`; **`next@16.3.2` is the latest stable and clears all seven** — a minor bump. Backend `pip-audit`: clean.
+- **All 3 unresolved Sentry issues are stale.** `RESOURCE_LIMITS_EXCEEDED` and `TypeError: NoneType` were fixed by `22ed70f` / `bc18afe` on 2026-07-17/18 and have not recurred; `model_not_found` was fixed on 2026-08-19. They need resolving in Sentry so the dashboard reflects reality.
+- **Clean bill elsewhere.** No TODO/FIXME/`@ts-ignore` anywhere in `.py`/`.ts`/`.tsx`. `remotePatterns` is correctly scoped to `avatars.githubusercontent.com` (no SSRF). The other `cached is not None` sites do **not** share the narrative cache's empty-value bug: `dependencies.py` re-validates through Pydantic, and `github/client.py` caches a wrapper dict that is never falsy.
+
+**Acted on the audit, same session — all three items closed.**
+
+*1. CI now runs the DB-fixture tests.* A `services: postgres` block (postgres:18-alpine, health-gated) plus `TEST_DATABASE_URL` on the pytest step. Verified locally against a throwaway container: **456 passed / 0 skipped** with a database, and **384 passed / 72 skipped** without one, so local dev still degrades cleanly. Enabling them surfaced **11 tests that had been broken, some for several releases**:
+- `tests/auth/test_sessions.py` ×4 — queried `Session.id == sid` with the *raw* cookie value after `b498cb6` (SI-21) changed storage to `_hash_session_id(sid)`. The security fix shipped with its own tests silently broken. Two of the six call sites asserted `is None`, so they had been **passing for the wrong reason** — they would have passed even if deletion did nothing. Note `test_session_id_stored_hashed` genuinely wants the raw lookup (finding nothing is its assertion); that one was left alone.
+- `tests/cron/test_tokens.py` ×2 — `monkeypatch.setenv("GITHUB_TOKEN", ...)` had no effect, because `app/cron/tokens.py` does `from app.settings import settings` and so holds the settings *object* bound at import. Rebuilding `app.settings.settings` rebinds only that module's name. The assertion was therefore comparing against **the developer's real `ghp_` token from `backend/.env`** — environment-dependent, and a credential-in-CI-logs risk. Now patches the attribute on the object the module actually holds.
+- `tests/narrative/test_api.py` ×1 — the `fake_stream` double never learned the `meta=` kwarg the router has passed since `78ebc5d` (v0.8.4). Its provider assertion was also environment-dependent: the comment claimed "test env has it unset", but a developer `.env` pointing at Groq made it assert `groq`. Now pinned explicitly.
+- `tests/persistence/test_delete_analysis.py` ×1 — **not a product bug.** Child rows go via `ON DELETE CASCADE` with `passive_deletes=True`, so SQLAlchemy never marks them deleted in Python and `db.get` answered from the identity map. Proved the cascade is sound with raw SQL (0 rows in `analysis_runs`, 0 in `narratives`) before touching the test. Fixed with `expunge_all()` — `expire_all()` emits lazy IO outside the async greenlet context.
+- `tests/share/test_webhook.py` ×3 — **a real latent bug, not a test issue.** `migrations/env.py` called `fileConfig(...)` without `disable_existing_loggers=False`, whose default is to switch off every logger already configured in the process. Running the migration test disabled all `app.*` loggers for the rest of the session, so `caplog` captured nothing. This also means any production process that migrates and then keeps working goes silent. Fixed at the root.
+
+*2. Next 16.2.12 → 16.3.2* clears all seven advisories (the vulnerable range ends at `16.3.0-preview.10`); `npm audit fix` cleared a transitive `dompurify` on top. **`npm audit` now reports 0, prod and dev.** `eslint-config-next` moved in lockstep and its new `no-location-assign-relative-destination` rule flagged the sign-out handler — a deliberate hard navigation (a soft `router.push()` keeps Next's client router cache and can re-render authenticated UI after the cookie is gone), so it is suppressed with that reasoning rather than "fixed" into a bug. Tests, tsc, eslint and a production build all pass on the new version.
+
+*3. All three Sentry issues resolved* with commit references in the activity feed. The backend project's unresolved backlog is now empty, which finally makes "is there anything in Sentry?" a meaningful question.
+
+**Blocked / open:**
+- **Rotate the GitHub token in `backend/.env`.** `tests/cron/test_tokens.py` read it and printed it in full into a pytest assertion diff. It never left the machine, but it is now in terminal scrollback and this session's transcript, so treat it as exposed.
+- `NARRATIVE_REASONING_EFFORT` is not set in Vercel. The code default is `"low"`, so production picks it up on the next deploy with no config change — but if someone later sets it to `medium`/`high`, the token cap needs to rise with it.
+- The Sentry alert **rule** still has to be created in the Sentry UI — the code now emits a groupable, fingerprinted event, but nothing routes it to a human yet.
+- Roast temperature (0.95) and the system-prompt structure remain open quality questions — see Decisions.
+- CI still does not run the DB-fixture tests; enabling them may turn the pipeline red, since 72 tests have never executed.
+
+**Next:**
+- Operator to decide whether this cuts **v1.0.12** alongside the 2026-08-19 fixes already sitting in `[Unreleased]`.
+- Add a `services: postgres` block to `ci.yml` and let the 72 DB tests run.
+- Bump `next` 16.2.12 → 16.3.2 to clear the seven advisories.
+
+---
+
 ## 2026-08-19 — Claude (Opus 5) with Shaan — incident: Groq retired the narrative model; narratives silently on fallback for 3 days
 
 **Slice:** none — production config fix plus doc correction. Recorded under `CHANGELOG [Unreleased]`; operator to decide whether it cuts **v1.0.12**.
