@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.sessions import (
+    _hash_session_id,
     create_session,
     delete_session,
     get_session_with_token,
@@ -33,7 +34,7 @@ async def _user(db: AsyncSession) -> User:
 async def test_create_session_persists_encrypted_token(db: AsyncSession):
     u = await _user(db)
     sid = await create_session(db, user_id=u.id, github_access_token="ghp_x", ttl_days=30)
-    row = await db.scalar(select(Session).where(Session.id == sid))
+    row = await db.scalar(select(Session).where(Session.id == _hash_session_id(sid)))
     assert row is not None
     assert row.access_token_ct != b"ghp_x"  # encrypted
     assert len(row.access_token_nonce) == 12
@@ -54,7 +55,7 @@ async def test_get_expired_session_returns_none(db: AsyncSession):
     u = await _user(db)
     sid = await create_session(db, user_id=u.id, github_access_token="x", ttl_days=30)
     # Manually expire it
-    row = await db.scalar(select(Session).where(Session.id == sid))
+    row = await db.scalar(select(Session).where(Session.id == _hash_session_id(sid)))
     row.expires_at = datetime.now(UTC) - timedelta(seconds=1)
     await db.flush()
     assert await get_session_with_token(db, sid) is None
@@ -67,7 +68,7 @@ async def test_get_unknown_session_returns_none(db: AsyncSession):
 async def test_touch_session_updates_last_used_at(db: AsyncSession):
     u = await _user(db)
     sid = await create_session(db, user_id=u.id, github_access_token="x", ttl_days=30)
-    row = await db.scalar(select(Session).where(Session.id == sid))
+    row = await db.scalar(select(Session).where(Session.id == _hash_session_id(sid)))
     original = row.last_used_at
     await touch_session(db, sid)
     await db.refresh(row)
@@ -78,7 +79,7 @@ async def test_delete_session_removes_row(db: AsyncSession):
     u = await _user(db)
     sid = await create_session(db, user_id=u.id, github_access_token="x", ttl_days=30)
     await delete_session(db, sid)
-    assert await db.scalar(select(Session).where(Session.id == sid)) is None
+    assert await db.scalar(select(Session).where(Session.id == _hash_session_id(sid))) is None
 
 
 async def test_session_id_stored_hashed(db: AsyncSession):
@@ -87,6 +88,7 @@ async def test_session_id_stored_hashed(db: AsyncSession):
     u = await _user(db)
     sid = await create_session(db, user_id=u.id, github_access_token="ghp_x", ttl_days=30)
     # v1.0.8 SI-21: the raw cookie value is NOT stored — the PK is its hash.
+    # This lookup is deliberately by the RAW sid: finding nothing is the point.
     assert await db.scalar(select(Session).where(Session.id == sid)) is None
     expected = hashlib.sha256(sid.encode("utf-8")).hexdigest()
     assert await db.scalar(select(Session).where(Session.id == expected)) is not None
@@ -99,7 +101,7 @@ async def test_session_id_stored_hashed(db: AsyncSession):
 async def test_get_session_with_corrupt_ciphertext_returns_none(db: AsyncSession):
     u = await _user(db)
     sid = await create_session(db, user_id=u.id, github_access_token="ghp_x", ttl_days=30)
-    row = await db.scalar(select(Session).where(Session.id == sid))
+    row = await db.scalar(select(Session).where(Session.id == _hash_session_id(sid)))
     # Flip the last ciphertext byte so the AES-GCM tag check fails on decrypt.
     row.access_token_ct = row.access_token_ct[:-1] + bytes([row.access_token_ct[-1] ^ 0xFF])
     await db.flush()

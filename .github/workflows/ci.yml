@@ -49,6 +49,30 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    # A throwaway Postgres so the DB-fixture tests actually run. They were
+    # skipped here for cost reasons, which meant 72 tests — every auth, session,
+    # share, refresh and delete path — ran nowhere at all. Eleven of them had
+    # been broken for versions before anyone noticed. A service container on a
+    # GitHub-hosted runner is free and adds ~2 minutes.
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: postgres
+          # Trust auth rather than a password: the container is reachable only
+          # from this job, is destroyed with it, and holds nothing but throwaway
+          # fixture data. It also keeps a credential-shaped string out of the
+          # repository, which secret scanners flag on sight.
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: skillissue_test
+        ports:
+          - 5432:5432
+        # Without a health gate the first test can race the server's startup.
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -71,11 +95,13 @@ jobs:
       - name: ruff format --check
         run: uv run ruff format --check .
 
-      - name: pytest (non-DB-fixture)
-        # The DB-fixture tests need TEST_DATABASE_URL pointed at a real
-        # Postgres branch — out of scope for the cheap pre-merge gate. The
-        # 257-test non-DB suite is the right gate for "does the diff break
-        # anything we can run for free."
+      - name: pytest (full suite, including DB fixtures)
+        # TEST_DATABASE_URL points at the service container above, so the
+        # DB-fixture tests run instead of skipping. The `db` fixture builds its
+        # own schema via `Base.metadata.create_all`, so no migration step is
+        # needed to get a usable database.
+        env:
+          TEST_DATABASE_URL: postgresql+asyncpg://postgres@localhost:5432/skillissue_test
         run: uv run pytest -q --no-header
 
       - name: Dependency manifests in sync
