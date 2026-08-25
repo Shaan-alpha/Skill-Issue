@@ -17,7 +17,11 @@ from app.db.models import Base
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # `disable_existing_loggers` defaults to True, which switches off every
+    # logger already configured in the process — including all of `app.*`. Any
+    # process that runs a migration and then keeps working goes silent, and in
+    # the test suite it made `caplog` capture nothing for the rest of the run.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 
