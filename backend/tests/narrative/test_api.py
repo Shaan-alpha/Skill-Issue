@@ -111,7 +111,7 @@ async def test_narrative_sse_streaming_format(_override_deps: None) -> None:
         assert data["chunk"] == tok
     # The stream ends with an explicit done sentinel so the client can tell a
     # normal completion from a dropped connection (SI-33).
-    assert json.loads(lines[4][6:]) == {"done": True}
+    assert json.loads(lines[4][6:]) == {"done": True, "truncated": False}
 
 
 async def test_signed_in_narrative_persists(db, monkeypatch):
@@ -126,6 +126,14 @@ async def test_signed_in_narrative_persists(db, monkeypatch):
         "SESSION_TOKEN_ENC_KEY", base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()
     )
     monkeypatch.setenv("GITHUB_TOKEN", "p")
+
+    # Pin the provider input instead of trusting the ambient environment. The
+    # router holds the settings object via `from app.settings import settings`,
+    # so a developer .env that sets NARRATIVE_BASE_URL (production points at
+    # Groq) made this assert "groq" locally and "openai" in a clean checkout.
+    from app.routers import narrative as narrative_router
+
+    monkeypatch.setattr(narrative_router.settings, "narrative_base_url", None)
 
     from app.auth.sessions import create_session
     from app.db.models import Narrative, User
@@ -173,7 +181,10 @@ async def test_signed_in_narrative_persists(db, monkeypatch):
     async def fake_run_engine(profile, gh):
         return fake_score(profile)
 
-    async def fake_stream(self, mode, report):
+    # The router has passed meta=/subject=/subject_limit= since v0.8.4 (78ebc5d).
+    # This double never learned about them, so the test raised TypeError —
+    # invisible because it needs TEST_DATABASE_URL and never ran.
+    async def fake_stream(self, mode, report, **kwargs):
         for tok in ("Hello ", "world."):
             yield tok
 

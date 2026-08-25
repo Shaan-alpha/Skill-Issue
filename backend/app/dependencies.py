@@ -72,6 +72,7 @@ def get_narrative_service() -> NarrativeService:
         budget=budget,
         llm=llm,
         max_output_tokens=settings.narrative_max_output_tokens,
+        reasoning_effort=settings.narrative_reasoning_effort,
     )
 
 

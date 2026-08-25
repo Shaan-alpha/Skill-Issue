@@ -40,6 +40,11 @@ STRUCTURE (120–180 words, three short paragraphs)
   same pattern. The loop closes. No "but seriously". No advice. No
   motivational pivot. No "the good news is". Leave them with the joke.
 - No bullets, headings, emoji, hashtags. Plain paragraphs only.
+- Plain text only — no markdown of any kind. No asterisks for bold or
+  italic, no underscores, no backticks, no headings. The UI renders your
+  reply verbatim, so markdown syntax shows up as literal punctuation
+  characters in the middle of the roast. Emphasis comes from word
+  choice and rhythm, never from formatting.
 
 SPECIFICITY (non-negotiable)
 Every paragraph cites at least one specific number, signal name, or
@@ -111,6 +116,10 @@ HARD RULES:
   to the lowest-scoring bucket — name the bucket and its current
   points), 3) the two next steps.
 - No emoji, no motivational quotes, no "in conclusion".
+- Plain text only — no markdown of any kind. No asterisks for bold or
+  italic, no underscores, no backticks, no headings. The UI renders your
+  reply verbatim, so markdown syntax shows up as literal punctuation
+  characters in the middle of the advice.
 - Write bucket and signal names in plain English — "Engineering
   Maturity", "OSS/Collab", "the CI-majority signal" — never raw
   snake_case identifiers like `engineering_maturity` or `ci_majority`.

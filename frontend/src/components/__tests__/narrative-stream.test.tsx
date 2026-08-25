@@ -102,3 +102,77 @@ describe("NarrativeStream under Activity (Next 16 Cache Components)", () => {
     expect(occurrences(container.textContent ?? "", NARRATIVE)).toBe(1);
   });
 });
+
+describe("NarrativeStream presentation repairs", () => {
+  function streamThen(es: FakeES, chunks: string[], done: object) {
+    act(() => {
+      for (const c of chunks) {
+        es.onmessage?.({ data: JSON.stringify({ chunk: c }) } as MessageEvent);
+      }
+      es.onmessage?.({ data: JSON.stringify(done) } as MessageEvent);
+    });
+  }
+
+  it("renders bold emphasis as words, not literal asterisks", () => {
+    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
+    const { container } = render(<Host mode="visible" />);
+
+    streamThen(instances[0], ["You shipped **four** repos with **zero tests**."], {
+      done: true,
+    });
+
+    const text = container.textContent ?? "";
+    expect(text).toContain("You shipped four repos with zero tests.");
+    expect(text).not.toContain("**");
+  });
+
+  it("offers a retry instead of a blank card when the stream produces nothing", () => {
+    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
+    const { container } = render(<Host mode="visible" />);
+
+    streamThen(instances[0], [], { done: true });
+
+    const text = container.textContent ?? "";
+    expect(text).toContain("The narrator returned nothing this time");
+    expect(text).toContain("Try Again");
+  });
+
+  it("strips the upstream-error fallback header and badges it as offline", () => {
+    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
+    const { container } = render(<Host mode="visible" />);
+
+    streamThen(
+      instances[0],
+      ["[AI narrator offline — upstream hiccup]\n\nYou sit in Senior territory."],
+      { done: true }
+    );
+
+    const text = container.textContent ?? "";
+    expect(text).not.toContain("[AI narrator offline");
+    expect(text).toContain("Narrator Offline");
+    expect(text).toContain("You sit in Senior territory.");
+  });
+
+  it("closes off a narrative the model stopped mid-sentence", () => {
+    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
+    const { container } = render(<Host mode="visible" />);
+
+    streamThen(instances[0], ["You shipped four repos. Your README is a haiku and"], {
+      done: true,
+      truncated: true,
+    });
+
+    const text = container.textContent ?? "";
+    expect(text).toContain("You shipped four repos.");
+    expect(text).not.toContain("Your README is a haiku and");
+  });
+
+  it("leaves a complete narrative untouched when not truncated", () => {
+    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
+    const { container } = render(<Host mode="visible" />);
+
+    streamThen(instances[0], [NARRATIVE], { done: true, truncated: false });
+
+    expect(occurrences(container.textContent ?? "", NARRATIVE)).toBe(1);
+  });
+});

@@ -3,8 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import { NarrativeMode } from "@/types";
 import { createNarrativeEventSource } from "@/lib/sse";
+import { closeOffTruncated, stripMarkdownEmphasis } from "@/lib/narrative-text";
 import { AnimatePresence, m } from "framer-motion";
 import { AlertCircle, Loader2, RotateCcw, Sparkles, WifiOff } from "lucide-react";
+
+// Kept in sync with `_HEADER_BY_REASON` in backend/app/narrative/fallback.py.
+const FALLBACK_HEADERS = [
+  "[AI narrator offline — daily cap reached]",
+  "[AI narrator offline — upstream hiccup]",
+] as const;
 
 interface NarrativeStreamProps {
   username: string;
@@ -16,6 +23,7 @@ export function NarrativeStream({ username, mode }: NarrativeStreamProps) {
   const [status, setStatus] = useState<
     "idle" | "streaming" | "complete" | "error"
   >("streaming");
+  const [truncated, setTruncated] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
 
   // With `cacheComponents: true`, Next 16 hides a route behind
@@ -36,6 +44,7 @@ export function NarrativeStream({ username, mode }: NarrativeStreamProps) {
     // a restarted stream must replace what a torn-down one left behind.
     let buffer = "";
     setText("");
+    setTruncated(false);
     setStatus("streaming");
 
     const cleanup = createNarrativeEventSource(
@@ -48,8 +57,9 @@ export function NarrativeStream({ username, mode }: NarrativeStreamProps) {
       () => {
         setStatus("error");
       },
-      () => {
+      ({ truncated: wasTruncated }) => {
         completedStreamRef.current = streamId;
+        setTruncated(wasTruncated);
         setStatus("complete");
       }
     );
@@ -57,10 +67,26 @@ export function NarrativeStream({ username, mode }: NarrativeStreamProps) {
     return () => cleanup();
   }, [username, mode, streamId]);
 
-  const isFallback = text.includes("[AI narrator offline — daily cap reached]");
-  const displayText = isFallback
-    ? text.replace("[AI narrator offline — daily cap reached]\n\n", "")
+  // Both fallback headers, not just the budget one: the error header used to
+  // fall through and render as literal bracketed text inside the narrative,
+  // with no offline badge to explain it.
+  const fallbackHeader = FALLBACK_HEADERS.find((h) => text.includes(h));
+  const isFallback = fallbackHeader !== undefined;
+
+  // Strip markdown the model emitted despite the prompt saying not to — there
+  // is no markdown renderer here, so `**like this**` reaches the reader as
+  // literal asterisks. Then close off a narrative cut short at the token
+  // ceiling, once the stream is done and the text has stopped growing.
+  const withoutHeader = isFallback
+    ? text.replace(`${fallbackHeader}\n\n`, "")
     : text;
+  const cleaned = stripMarkdownEmphasis(withoutHeader);
+  const displayText =
+    status === "complete" && truncated ? closeOffTruncated(cleaned) : cleaned;
+
+  // A stream that finished having produced nothing used to render an empty
+  // box: `displayText` was falsy and the spinner was gated on `streaming`.
+  const isEmptyResult = status === "complete" && displayText.trim() === "";
 
   return (
     <div className="relative rounded-2xl bg-white/5 border border-white/10 p-6 backdrop-blur-md min-h-[140px] flex flex-col justify-between overflow-hidden shadow-xl">
@@ -141,6 +167,26 @@ export function NarrativeStream({ username, mode }: NarrativeStreamProps) {
                   />
                 )}
               </AnimatePresence>
+            ) : isEmptyResult ? (
+              <div className="flex flex-col items-center justify-center py-6 text-center space-y-3">
+                <AlertCircle className="w-6 h-6 text-yellow-400" />
+                <div className="text-xs text-muted-foreground max-w-sm">
+                  The narrator returned nothing this time. That is usually a
+                  blip — try again.
+                </div>
+                <button
+                  onClick={() => {
+                    setText("");
+                    setTruncated(false);
+                    setStatus("streaming");
+                    setRetryKey((k) => k + 1);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/15 text-xs text-white font-medium transition-colors border border-white/10"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Try Again</span>
+                </button>
+              </div>
             ) : (
               status === "streaming" && (
                 <div className="flex flex-col items-center justify-center py-8 text-center space-y-2">

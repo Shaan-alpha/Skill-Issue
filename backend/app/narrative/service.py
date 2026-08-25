@@ -8,8 +8,9 @@ from app.models import Report
 from app.narrative.budget import DailyBudget
 from app.narrative.cache import NarrativeCache
 from app.narrative.fallback import fallback_narrative
-from app.narrative.llm import FakeNarrativeLLM, NarrativeLLM
+from app.narrative.llm import FakeNarrativeLLM, NarrativeLLM, StreamOutcome
 from app.narrative.prompts import build_messages
+from app.observability.narrative_health import record_narrative_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,9 @@ class NarrativeStreamMeta:
     # v1.0.5 SI-07: the UTC day a budget slot was consumed, so an abort refund
     # targets the correct day key across a midnight rollover.
     consumed_day: str | None = None
+    # True when the model hit the completion ceiling mid-sentence. Previously
+    # nothing downstream could tell a finished narrative from a guillotined one.
+    truncated: bool = False
 
 
 class NarrativeService:
@@ -49,11 +53,13 @@ class NarrativeService:
         budget: DailyBudget,
         llm: NarrativeLLM | FakeNarrativeLLM,
         max_output_tokens: int = 1200,
+        reasoning_effort: str | None = None,
     ) -> None:
         self._cache = cache
         self._budget = budget
         self._llm = llm
         self._max_output_tokens = max_output_tokens
+        self._reasoning_effort = reasoning_effort
 
     async def stream_narrative(
         self,
@@ -67,7 +73,9 @@ class NarrativeService:
         # 1. Check cache
         cache_key = self._cache.key(report.username, self._cache.scores_hash(report), mode)
         cached = await self._cache.aget(cache_key)
-        if cached is not None:
+        # Truthy, not `is not None`: an empty string cached by an earlier build
+        # would otherwise be served as a hit for the rest of its 24h TTL.
+        if cached:
             logger.info(f"Narrative cache hit for {report.username} ({mode}, score={report.total})")
             if meta is not None:
                 meta.cache_hit = True
@@ -79,9 +87,7 @@ class NarrativeService:
             subject=subject, subject_limit=subject_limit
         )
         if not allowed:
-            logger.warning(
-                f"Daily OpenAI budget exhausted. Using fallback narrative for {report.username} ({mode})"
-            )
+            record_narrative_fallback(reason="budget", mode=mode, username=report.username)
             if meta is not None:
                 meta.is_fallback = True
                 meta.fallback_reason = "budget"
@@ -96,11 +102,14 @@ class NarrativeService:
         # 3. Stream from LLM
         messages = build_messages(mode, report)
         acc: list[str] = []
+        outcome = StreamOutcome()
         try:
             async for chunk in self._llm.stream_chat(
                 messages,
                 temperature=_TEMPERATURE_BY_MODE[mode],
                 max_output_tokens=self._max_output_tokens,
+                reasoning_effort=self._reasoning_effort,
+                outcome=outcome,
             ):
                 acc.append(chunk)
                 yield chunk
@@ -109,14 +118,42 @@ class NarrativeService:
                 f"LLM streaming failed for {report.username} ({mode}): {e}. Activating fallback narrative.",
                 exc_info=True,
             )
+            record_narrative_fallback(
+                reason="error", mode=mode, username=report.username, detail=repr(e)
+            )
             if meta is not None:
                 meta.is_fallback = True
                 meta.fallback_reason = "error"
             yield fallback_narrative(mode, report, reason="error")
             return
 
-        # 4. Cache successful result
+        # 4. An empty completion is a failure, not a narrative. A reasoning
+        # model can spend its entire completion budget thinking and emit no
+        # prose at all; yielding nothing renders a blank card downstream.
         full_text = "".join(acc)
+        if not full_text.strip():
+            record_narrative_fallback(
+                reason="error",
+                mode=mode,
+                username=report.username,
+                detail=f"empty completion (finish_reason={outcome.finish_reason!r})",
+            )
+            if meta is not None:
+                meta.is_fallback = True
+                meta.fallback_reason = "error"
+            yield fallback_narrative(mode, report, reason="error")
+            return
+
+        if outcome.truncated:
+            logger.warning(
+                f"Narrative truncated at the token ceiling for {report.username} ({mode}); "
+                f"not caching a partial narrative."
+            )
+            if meta is not None:
+                meta.truncated = True
+            return
+
+        # 5. Cache successful result
         await self._cache.aput(cache_key, full_text)
 
     async def refund(self, *, subject: str | None = None, consumed_day: str | None = None) -> None:
