@@ -13,11 +13,11 @@ Pattern:
             # cache one more time; if still empty, fall through to live work.
             ...
 
-`got_lock=False` covers three cases the caller treats the same way (try the
-cache once more, otherwise run live):
-  1. Another caller is holding the lock RIGHT NOW (we waited, they finished).
-  2. We waited the full timeout and the holder never released.
-  3. Redis itself is unreachable (fail-open).
+A waiter that outlasts the holder acquires the lock itself (True), so callers
+must re-check their cache after entering: the previous holder has usually just
+filled it (double-checked locking). `got_lock=False` means only that we waited
+the full timeout and the holder never released. When Redis is unreachable
+there is no lock to wait for, and the caller proceeds at once (True).
 """
 
 from __future__ import annotations
@@ -58,6 +58,11 @@ async def singleflight(
     holder_id = secrets.token_hex(8)
 
     got = await cache.set_nx(NAMESPACE_LOCK, lock_key, holder_id, ttl_seconds=ttl_seconds)
+    if got is None:
+        # Redis is unreachable, so there is no lock to wait for. Polling it would
+        # stall every cold request for max_wait_seconds during an outage.
+        yield True
+        return
     if got:
         try:
             yield True
@@ -73,7 +78,11 @@ async def singleflight(
         await asyncio.sleep(poll_interval_seconds)
         waited += poll_interval_seconds
         # Try the lock once more in case the holder finished.
-        if await cache.set_nx(NAMESPACE_LOCK, lock_key, holder_id, ttl_seconds=ttl_seconds):
+        acquired = await cache.set_nx(NAMESPACE_LOCK, lock_key, holder_id, ttl_seconds=ttl_seconds)
+        if acquired is None:
+            yield True
+            return
+        if acquired:
             try:
                 yield True
             finally:

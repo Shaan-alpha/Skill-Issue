@@ -86,52 +86,48 @@ async def get_report_for_user(
         raise HTTPException(status_code=400, detail="Invalid GitHub username")
 
     cache = get_cache()
+    if cache is None:
+        return await _live_ingest_bounded(username, session, cache=None)
+
     cache_key = report_key(username)
+    cached = await _read_cached_report(cache, cache_key)
+    if cached is not None:
+        return cached
 
-    # Layer A: try the Report cache first.
-    if cache is not None:
-        cached = await cache.get_json(NAMESPACE_REPORT, cache_key)
+    async with singleflight(cache, NAMESPACE_REPORT, cache_key):
+        # Double-checked: whoever held the lock before us has usually just
+        # cached this exact report. Re-reading costs one Redis GET; skipping it
+        # repeated a whole GitHub ingest for every request that had waited.
+        cached = await _read_cached_report(cache, cache_key)
         if cached is not None:
-            try:
-                return Report.model_validate(cached)
-            except Exception:
-                logger.warning(
-                    "cached Report for %s failed validation; ignoring",
-                    cache_key,
-                    exc_info=True,
-                )
+            return cached
+        report = await _live_ingest_bounded(username, session, cache)
+        await _write_cached_report(cache, cache_key, report)
+        return report
 
-    # Layer B: singleflight around the cold ingest.
-    if cache is not None:
-        async with singleflight(cache, NAMESPACE_REPORT, cache_key) as got:
-            if not got:
-                # Another holder finished; check the cache one more time.
-                cached = await cache.get_json(NAMESPACE_REPORT, cache_key)
-                if cached is not None:
-                    try:
-                        return Report.model_validate(cached)
-                    except Exception:
-                        pass
-                # Lock holder timed out or returned bad data — fall through
-                # to a live ingest, no lock held.
 
-            report = await _live_ingest_bounded(username, session, cache)
+async def _read_cached_report(cache: RedisCache, cache_key: str) -> Report | None:
+    """Layer A lookup; a value that no longer validates is treated as a miss."""
+    cached = await cache.get_json(NAMESPACE_REPORT, cache_key)
+    if cached is None:
+        return None
+    try:
+        return Report.model_validate(cached)
+    except Exception:
+        logger.warning("cached Report for %s failed validation; ignoring", cache_key, exc_info=True)
+        return None
 
-            # Populate the cache for next time.
-            try:
-                await cache.set_json(
-                    NAMESPACE_REPORT,
-                    cache_key,
-                    json.loads(report.model_dump_json()),
-                    ttl_seconds=settings.cache_report_ttl_seconds,
-                )
-            except Exception:
-                logger.warning("report cache set failed for %s", cache_key, exc_info=True)
 
-            return report
-
-    # No cache configured — original behaviour.
-    return await _live_ingest_bounded(username, session, cache=None)
+async def _write_cached_report(cache: RedisCache, cache_key: str, report: Report) -> None:
+    try:
+        await cache.set_json(
+            NAMESPACE_REPORT,
+            cache_key,
+            json.loads(report.model_dump_json()),
+            ttl_seconds=settings.cache_report_ttl_seconds,
+        )
+    except Exception:
+        logger.warning("report cache set failed for %s", cache_key, exc_info=True)
 
 
 async def _live_ingest_bounded(

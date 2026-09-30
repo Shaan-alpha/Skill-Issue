@@ -7,6 +7,7 @@ user should NOT hit it (cache hit).
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
@@ -119,3 +120,26 @@ async def test_no_cache_configured_falls_through(monkeypatch) -> None:
     await get_report_for_user("octocat")
     await get_report_for_user("octocat")
     assert call_count["n"] == 2  # both calls hit the live path
+
+
+async def test_concurrent_cold_requests_share_one_ingest(monkeypatch, fake_cache) -> None:
+    """A request that waited on another's singleflight lock must reuse the
+    report that request cached, not run the same GitHub ingest after it."""
+    calls = {"n": 0}
+
+    async def slow_ingest(
+        username: str, session: Any, cache: Any, *, fresh: bool = False
+    ) -> Report:
+        calls["n"] += 1
+        await asyncio.sleep(0.3)  # longer than one lock-poll interval (0.2s)
+        return _stub_report(username)
+
+    monkeypatch.setattr(dep_module, "_live_ingest", slow_ingest)
+    monkeypatch.setattr(dep_module, "get_cache", lambda: fake_cache)
+
+    first, second = await asyncio.gather(
+        get_report_for_user("octocat"), get_report_for_user("octocat")
+    )
+
+    assert calls["n"] == 1
+    assert first.username == second.username == "octocat"
