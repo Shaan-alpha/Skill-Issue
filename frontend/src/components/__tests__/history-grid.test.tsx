@@ -154,6 +154,22 @@ describe("HistoryGrid delete failures", () => {
     });
 
     expect(screen.getByText(/couldn't delete/i)).toBeInTheDocument();
+    // The notice says the analysis is back, so it must actually be back: the
+    // refreshed server list is unchanged and will not re-add it on its own.
+    expect(screen.getByText("@octocat")).toBeInTheDocument();
     expect(refresh).toHaveBeenCalled();
+  });
+
+  it("restores the card when the server cannot be reached", async () => {
+    global.fetch = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    render(<HistoryGrid analyses={analyses} />);
+    fireEvent.click(screen.getByRole("button", { name: /delete @octocat/i }));
+
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+    });
+
+    expect(screen.getByText(/nothing was deleted/i)).toBeInTheDocument();
+    expect(screen.getByText("@octocat")).toBeInTheDocument();
   });
 });
