@@ -4,8 +4,9 @@ JSON renderer in prod (one JSON object per line, parseable by every log
 aggregator). ConsoleRenderer in dev (coloured, single-line, human readable).
 
 The `request_id` field is bound by RequestIDMiddleware (see `middleware.py`)
-and propagates into every structlog call within the request scope via
-`structlog.contextvars`.
+and propagates via `structlog.contextvars` into every line logged within the
+request: structlog calls and stdlib `logging` records alike, since the root
+handler renders stdlib records through the same processors.
 """
 
 from __future__ import annotations
@@ -50,14 +51,36 @@ def init_logging(
         cache_logger_on_first_use=False,
     )
 
-    # Mirror stdlib logging into structlog so libraries (httpx, uvicorn,
-    # asyncpg, etc.) end up in the same JSON stream.
-    logging.basicConfig(
-        format="%(message)s",
-        stream=stream or sys.stdout,
-        level=getattr(logging, level.upper(), logging.INFO),
-        force=True,
+    # Every application module (and every library) logs through the stdlib.
+    # Render those records with the same renderer, so each line carries the
+    # level, logger name, timestamp and the request's request_id -- the
+    # correlation OBSERVABILITY.md documents. A bare "%(message)s" format
+    # (before v1.0.13) dropped all four.
+    formatter = structlog.stdlib.ProcessorFormatter(
+        foreign_pre_chain=[
+            structlog.contextvars.merge_contextvars,
+            structlog.stdlib.add_log_level,
+            structlog.stdlib.add_logger_name,
+            timestamper,
+        ],
+        processors=[
+            structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+            structlog.processors.format_exc_info,
+            renderer,
+        ],
     )
+    handler = logging.StreamHandler(stream or sys.stdout)
+    handler.setFormatter(formatter)
+    root = logging.getLogger()
+    for existing in list(root.handlers):  # same effect as basicConfig(force=True)
+        root.removeHandler(existing)
+    root.addHandler(handler)
+    root.setLevel(getattr(logging, level.upper(), logging.INFO))
+
+    # httpx logs every outbound request at INFO: hundreds of lines per cron run,
+    # each mirrored as a Sentry breadcrumb beside the HttpxIntegration's own.
+    for noisy in ("httpx", "httpcore"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
 def get_request_id() -> str | None:

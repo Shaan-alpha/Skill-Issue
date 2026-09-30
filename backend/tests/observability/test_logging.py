@@ -80,3 +80,43 @@ def test_nested_call_inherits_request_id():
 
     payload = json.loads(buf.getvalue().strip().splitlines()[-1])
     assert payload["request_id"] == "nested-456"
+
+
+def test_stdlib_records_render_as_json_with_request_id():
+    """Every app module logs through the stdlib. Those lines must carry the
+    level, logger, timestamp and request_id that OBSERVABILITY.md promises."""
+    buf = StringIO()
+    init_logging(level="INFO", log_format="json", stream=buf)
+    structlog.contextvars.bind_contextvars(request_id="3f2c6a8e-0000-4000-8000-000000000000")
+    try:
+        logging.getLogger("app.ratelimit").warning("rate_limit.throttled name=%s", "analyze")
+    finally:
+        structlog.contextvars.clear_contextvars()
+    payload = json.loads(buf.getvalue().strip().splitlines()[-1])
+    assert payload["event"] == "rate_limit.throttled name=analyze"
+    assert payload["level"] == "warning"
+    assert payload["logger"] == "app.ratelimit"
+    assert payload["request_id"] == "3f2c6a8e-0000-4000-8000-000000000000"
+    assert "timestamp" in payload
+
+
+def test_stdlib_exceptions_keep_their_traceback():
+    buf = StringIO()
+    init_logging(level="INFO", log_format="json", stream=buf)
+    try:
+        raise ValueError("boom")
+    except ValueError:
+        logging.getLogger("app.cron.refresh").exception("cron record_run failed")
+    payload = json.loads(buf.getvalue().strip().splitlines()[-1])
+    assert payload["level"] == "error"
+    assert "ValueError: boom" in payload["exception"]
+
+
+def test_httpx_request_lines_are_not_logged_at_info():
+    buf = StringIO()
+    init_logging(level="INFO", log_format="json", stream=buf)
+    logging.getLogger("httpx").info(
+        'HTTP Request: GET https://api.github.com/users/x "HTTP/2 200 OK"'
+    )
+    logging.getLogger("httpcore.http2").info("send_request_headers.started")
+    assert buf.getvalue() == ""
