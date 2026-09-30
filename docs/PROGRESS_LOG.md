@@ -45,6 +45,18 @@ Format:
   - frontend Sentry carries `release` and filters the known noise;
   - the narrative cap defaults to 55.
 
+- **Whole-branch review by a fresh reviewer: "with fixes".** No Critical issues; both Important items fixed test-first:
+  - a failed history delete claimed the card was back but left it hidden;
+  - the abort refund ran detached under anyio cancellation; it now uses the spec's shielded anyio scope, bounded at 2s.
+
+  Minors deferred to a follow-up:
+  - share-toast wording for 401 and deleted-elsewhere;
+  - stale `locks.py` docstrings and CI/`.vercelignore` comments;
+  - a stale refresh test name;
+  - `release` on the server and edge Sentry SDKs;
+  - two narrow C6 timing windows;
+  - a detached-`session.user` comment in the narrative route.
+
 **Decisions (operator, via questions):**
 - Majors are deferred to v1.0.14, one per commit.
 - Python stays on 3.12, because a runtime bump goes straight to production.
