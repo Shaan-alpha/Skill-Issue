@@ -60,6 +60,8 @@
 | **v1.0.10** | Dependency-manifest drift guard — CI fails if `pyproject.toml` / `uv.lock` / `requirements.txt` disagree | ✅ shipped |
 | **v1.0.11** | Cache Components navigation-state sweep — roast duplication, `/me` staleness, analytics double-count, badge a11y, session snapshot; + fixture time-bomb and backend version-drift guards | ✅ shipped |
 | **v1.0.12** | Narrative output sweep — truncated/empty/markdown narratives, alertable fallback signal; + alembic logging bug, 72 DB tests enabled in CI (12 repaired), Next 16.3.2 | ✅ shipped |
+| **v1.0.13** | Audit remediation + dependency refresh — two critical Next.js advisories, commit-before-response, singleflight coalescing, fresh force refresh, cron classification, honest share/delete UI, structured logs; `requirements.txt` generated in CI | 🚧 PR open, tag pending |
+| **v1.0.14** | Toolchain majors — TypeScript 6, Vitest 5, jest-dom 7, Sentry SDK 11, framer-motion 13, openai 3, SQLAlchemy 2.1, each proven alone | 📋 proposed |
 
 ---
 
@@ -1021,6 +1023,49 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 - [x] PR **#94** merged; all five checks green on `main`, including GitGuardian.
 - [ ] Prod-verified after deploy — operator step.
 - [x] `CHANGELOG.md` `[1.0.12]`; tag `v1.0.12`.
+
+---
+
+## v1.0.13 — Audit remediation + dependency refresh
+
+**Goal:** Act on a whole-project audit (2026-09-30). Production was healthy, but two critical Next.js advisories were open, CI could no longer merge anything (every Dependabot PR was red), and a set of latent defects was hiding behind green dashboards.
+
+**Design spec:** [`docs/superpowers/specs/2026-09-30-v1.0.13-audit-remediation-design.md`](./docs/superpowers/specs/2026-09-30-v1.0.13-audit-remediation-design.md) · **Plan:** [`docs/superpowers/plans/2026-09-30-v1.0.13-audit-remediation.md`](./docs/superpowers/plans/2026-09-30-v1.0.13-audit-remediation.md)
+
+**Delivered:**
+- **Security:** `next` 16.3.2 → 16.3.7 (two critical RCEs), `vitest` 4.1.11, `npm audit fix`, and the unused `@axe-core/cli` removed (it pulled `chromedriver` and an unpatchable `adm-zip`). `npm audit` reports 0. The CI gate is back at `high`.
+- **CI:** `backend/requirements.txt` is no longer committed. CI exports it from `uv.lock` for `pip-audit`, which ends the Dependabot drift failures. Ignore rules cover the majors that are blocked upstream. `setup-node` v7, `setup-uv` v10.2, Node pinned to `24.x`.
+- **Commit before responding:** FastAPI runs a yield dependency's teardown after the response unless it is function-scoped, and `get_db` commits there. The new `DbSession` alias fixes every route except the streaming narrative, and a structural test guards it.
+- **Singleflight:** double-checked cache read (N concurrent cold requests made N ingests); `set_nx` returns `None` on a Redis error, so an outage no longer stalls each cold analysis for 25s.
+- **Force refresh:** reads GitHub fresh (`GitHubClient(read_cache=False)`) through `get_fresh_report_for_user`, which is deliberately not a dependency. Its hourly cap now fails closed, via the shared `hourly_limit_allows`.
+- **Cron:** outcomes are classified from the real `HTTPException` chain, so the rate-limit halt fires. The old tests had stubbed a raw httpx error that production never raises.
+- **Narrative:** the budget refund now covers `CancelledError` too, is shielded, and happens only when a slot was consumed.
+- **Observability:** stdlib logs render as JSON with `level`, `logger`, `timestamp` and `request_id`; `httpx` logs at WARNING; `HEAD /health` works. The frontend Sentry carries `release` and filters the Outlook-scanner and injected-script noise. `NARRATIVE_DAILY_LIMIT` defaults to 55.
+- **UI:** a failed share, revoke or delete reports its real outcome.
+
+**Deliberately not done:** majors (→ v1.0.14); Python 3.13/3.14 (its own slice, because previews are disabled); a CSP report endpoint (it needs a quota decision first); a migrations-vs-models drift check in CI; `/health` returning 503 when degraded; friendlier OAuth callback errors; a history pagination tiebreaker.
+
+**Exit criteria:**
+- [x] Every correctness fix test-first, watched failing with the described signature.
+- [x] Backend: ruff clean; full suite green with a database attached.
+- [x] Frontend: lint, tsc, vitest and a production build pass; `npm audit` reports 0.
+- [x] All four version constants at `1.0.13`.
+- [ ] PR checks green and merged; prod smoke passed.
+- [ ] Housekeeping: blocked Dependabot PRs closed; Sentry noise archived.
+- [ ] `CHANGELOG.md` `[1.0.13]`; tag `v1.0.13` (operator checkpoint).
+
+---
+
+## v1.0.14 — Toolchain majors (proposed)
+
+**Goal:** Take the major upgrades v1.0.13 deferred, one package per commit, each proven locally before it lands.
+
+**Candidates:** TypeScript 6.0 (typescript-eslint supports < 6.1), Vitest 5 + `@vitest/ui` 5, `@testing-library/jest-dom` 7, `@sentry/nextjs` 11 (read the migration guide against `src/observability`), framer-motion 13 (visual check at 360/768/1024), openai-python 3 (the narrator's client), SQLAlchemy 2.1 (asyncpg + PgBouncer). Still blocked upstream: ESLint 10 (eslint-plugin-react) and TypeScript 7 (typescript-eslint).
+
+**Exit criteria:**
+- [ ] Each major lands in its own commit with the full suite green.
+- [ ] Dependabot ignore rules removed for each major taken.
+- [ ] `CHANGELOG.md` `[1.0.14]`; tag `v1.0.14`.
 
 ---
 

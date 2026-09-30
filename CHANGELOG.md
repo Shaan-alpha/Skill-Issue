@@ -10,6 +10,35 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ## [Unreleased]
 
+## [1.0.13] — 2026-09-30
+
+A maintenance release from a full review of the project. It closes two critical security advisories, gets the build pipeline merging again, and fixes a set of quiet reliability bugs. How scores are calculated has not changed.
+
+### Security
+- **Closed two critical Next.js vulnerabilities** by moving to Next.js 16.3.7. Both allowed remote code execution on affected hosts: one through the image optimizer when handling AVIF files, one on Windows servers. Dependency audits now report zero known vulnerabilities, in production and development dependencies alike.
+- **The build pipeline blocks high-severity advisories again.** It had been lowered to block only critical ones in July, while Next.js had no patched release, and was never raised back.
+
+### Fixed
+- **Fixed a timing issue that could make a fresh sign-in look signed out.** The server confirmed the sign-in before it had finished saving it, so the page could ask "who am I?" a moment too early. The same issue could make a newly saved analysis look unsaved, or bring a deleted one back on refresh. Every change is now saved before the server answers.
+- **Refresh on your history page now fetches fresh data from GitHub.** It was rebuilding the analysis from GitHub responses cached up to an hour earlier, so recent work often did not show up.
+- **Revoking a share link now tells you if it failed.** A failed revoke used to say "Share revoked" while the link stayed public. A failed share or a failed delete now says so too, instead of silently doing nothing.
+- **Several people analyzing the same profile at once no longer repeat the same work.** Each request after the first re-ran the whole analysis instead of reusing the result it had just waited for.
+- **Analyses no longer stall for 25 seconds when the cache service is down.** They carry on without it straight away.
+- **Leaving a page while the AI narrator is still writing gives you that narrative back** from your daily allowance in the common case, not only sometimes.
+- **The daily refresh of saved analyses now stops when GitHub's rate limit is reached**, instead of retrying every remaining profile with a spent token. It also records deleted accounts and organizations correctly.
+- **The refresh limit on your history page stays in force during a cache outage.** It had been lifted entirely in that case.
+
+### Changed
+- **Server logs are structured again.** Every line carries its severity, its source, and a request ID that links it to the matching error reports, and routine lines for every outgoing request no longer drown out the rest.
+- **The health endpoint answers HEAD requests**, which uptime monitors commonly send.
+- **Error reports from the site now name the release they came from.** Two known sources of noise, an email link scanner and an injected browser script, are filtered out, which also stops them using up the session-replay allowance.
+- **The AI narrator's daily limit now defaults to 55**, matching production and the provider's free tier, so losing one setting can no longer raise it silently.
+
+### Internal
+- Dependencies refreshed within their current major versions: Next.js 16.3.7, React 19.3, FastAPI 0.142, Starlette 1.7, sentry-sdk 2.71, uvicorn 0.54 and more. Major upgrades (TypeScript 6, Vitest 5, jest-dom 7, Sentry SDK 11, framer-motion 13, openai 3, SQLAlchemy 2.1) are planned separately as v1.0.14.
+- The backend's generated `requirements.txt` is no longer committed. CI exports it from the lockfile for its security audit; Dependabot's backend updates had been failing on it every time.
+- Dependabot ignores the major versions that cannot merge yet (ESLint 10 and TypeScript 7 are blocked upstream). Node is pinned to 24.x, and an unused accessibility CLI that downloaded a browser driver on every deploy is gone.
+
 ## [1.0.12] — 2026-08-25
 
 ### Added

@@ -19,6 +19,59 @@ Format:
 
 ---
 
+## 2026-09-30 — Claude (Opus 5.5) with Shaan — v1.0.13: full audit, remediation and dependency refresh
+
+**Slice:** v1.0.13 (spec `docs/superpowers/specs/2026-09-30-v1.0.13-audit-remediation-design.md`, plan `docs/superpowers/plans/2026-09-30-v1.0.13-audit-remediation.md`).
+
+**Done:**
+- **Audited production first.** `/health` was green on 1.0.12, the narrator streamed a real roast in about 6s, Vercel showed no runtime errors, and the cron ran daily. The Sentry MCP was re-authenticated this session: the backend has been clean since the 2026-08-19 model retirement, and the frontend's three unresolved issues are all noise (the Outlook link scanner, an injected `app:///executors/` script, one network blip).
+- **Found CI unable to merge anything.** Two critical Next.js advisories tripped the audit gate on every PR. Dependabot's uv PRs failed the `requirements.txt` drift guard because Dependabot rewrites that generated file independently of `uv.lock`, and the ESLint 10 and TypeScript 7 majors are blocked upstream. 12 PRs had piled up red.
+- **Security and dependencies:**
+  - next 16.3.7, `npm audit fix`, and the unused `@axe-core/cli` removed. `npm audit` reports 0 and the gate is back at `high`.
+  - The backend moved to the latest release within each major, and `openai` gained a `<3` bound.
+  - `requirements.txt` is now generated in CI. The production build log proves Vercel installs from `uv.lock`, which was the proof v1.0.10 had marked as missing.
+- **Eight correctness defects fixed, each shown failing first:**
+  - commits happened after the response was sent;
+  - singleflight re-ran the ingest after waiting;
+  - an Upstash outage caused a 25s stall per cold analysis;
+  - force refresh served GitHub responses up to an hour old;
+  - its cap failed open on Redis errors;
+  - the cron's rate-limit halt and outcome classes were dead code;
+  - the budget refund missed disconnects that arrive as cancellation;
+  - share, revoke and delete failures were reported as success or not at all.
+- **Observability:**
+  - stdlib logs are now JSON carrying `request_id`, and `httpx` is quiet;
+  - `HEAD /health` works;
+  - frontend Sentry carries `release` and filters the known noise;
+  - the narrative cap defaults to 55.
+
+**Decisions (operator, via questions):**
+- Majors are deferred to v1.0.14, one per commit.
+- Python stays on 3.12, because a runtime bump goes straight to production.
+- `requirements.txt` is generated in CI.
+- After merge: close the blocked Dependabot PRs and archive the Sentry noise.
+
+**Decisions (mine, recorded as rulings):**
+- **Commit ordering:** a function-scoped `DbSession` alias rather than explicit commits in each handler, so a new route can't regress it. The streaming narrative route keeps a request-scoped session, and a structural test walks every route.
+- **Fresh refresh path:** `get_fresh_report_for_user` is deliberately not a FastAPI dependency, because a `fresh` query parameter on `/analyze` would bypass every cache.
+- **Superseded tests:** two old tests pinned the defects themselves (the lock stall, the 500 default). They were rewritten, not kept.
+
+**Learned / surprises:**
+- **FastAPI runs yield-dependency teardown after the response by default.** This was verified with uvicorn: `/write` returned in 0.13s while its commit hadn't happened. TestClient-style tests can't see it, because they await teardown before returning.
+- **FastAPI 0.141+ keeps included routers behind `_IncludedRouter` wrappers.** `app.routes` no longer lists their routes; walk `original_router.routes`.
+- **The cron tests passed for the wrong reason** by stubbing an exception type production never raises. This is the same class of problem as the 2026-08-25 session tests. Prefer stubbing at the outermost external boundary (here `ingest_profile`), not an internal seam.
+- **A 19-agent audit workflow hit the plan's session usage limit** after about 6 minutes and returned nothing. The audit was redone inline, and each finding was then proven by a failing test.
+- **`claude mcp login` needs a real TTY.** A console window launched via `Start-Process` works; the agent's Bash tool does not.
+
+**Blocked / open:**
+- The tag `v1.0.13` is an operator checkpoint.
+- Housekeeping (Dependabot PRs, Sentry archive) comes after merge.
+- Still operator-side: the Sentry alert rule for the `narrative-fallback` fingerprint, source-map upload (`SENTRY_AUTH_TOKEN`), WAF/BotID/branch protection.
+
+**Next:** v1.0.14 majors; then a Python 3.13/3.14 slice; then v1.1.0 Progress Pulse.
+
+---
+
 ## 2026-08-25 — Claude (Opus 5) with Shaan — narrative output defects: truncation, blank roasts, literal `**` in text
 
 **Slice:** none — bug sweep on the narrative layer, continuing the 2026-08-19 incident. Recorded under `CHANGELOG [Unreleased]`.

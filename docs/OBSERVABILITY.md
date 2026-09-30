@@ -59,26 +59,31 @@ When wired, intended rules:
 
 ## Logs — how they're shaped
 
-Backend logs are JSON in production (`LOG_FORMAT=json`), with the structlog
-pipeline merging contextvars (including `request_id`) into every event. A
-typical line:
+Backend logs are JSON in production (`LOG_FORMAT=json`). Application modules
+log through the standard library (`logging.getLogger(__name__)`), and since
+v1.0.13 the root handler renders those records through structlog's
+`ProcessorFormatter`, so every line (stdlib or structlog) carries the level,
+the logger name, an ISO timestamp and the request's `request_id` from
+structlog's contextvars. Before v1.0.13 stdlib records printed as a bare
+message, with none of those fields. A typical line:
 
 ```json
 {
-  "event": "analyze_completed",
-  "level": "info",
-  "logger": "app.dependencies",
-  "timestamp": "2026-05-22T14:32:18.105Z",
-  "request_id": "11111111-2222-3333-4444-555555555555",
-  "username": "octocat",
-  "tier": "Hobbyist",
-  "score": 26,
-  "latency_ms": 187
+  "event": "rate_limit.throttled name=analyze subject_type=ip limit=20",
+  "level": "warning",
+  "logger": "app.ratelimit",
+  "timestamp": "2026-09-30T14:32:18.105Z",
+  "request_id": "11111111-2222-3333-4444-555555555555"
 }
 ```
 
-Local dev defaults to `LOG_FORMAT=console` — same fields, single-line
-human-readable, no JSON wrapping.
+A `logger.exception(...)` call adds an `exception` field holding the
+traceback. `httpx` and `httpcore` log from WARNING: at INFO they printed one
+line per outbound request (hundreds per cron run), each also mirrored as a
+Sentry breadcrumb next to the one the HttpxIntegration already records.
+
+Local dev defaults to `LOG_FORMAT=console`: the same fields, single-line and
+human-readable, with no JSON wrapping.
 
 ## Event-name conventions
 
@@ -171,6 +176,20 @@ Two constraints:
   `NEXT_PUBLIC_` prefix — Next.js never inlines un-prefixed vars into client
   bundles, so the browser rate was silently pinned to its fallback. That env
   name remains valid for the **backend** service only.
+
+### Release and noise filters (v1.0.13)
+
+Frontend events carry `release: APP_VERSION`, as backend events already did,
+so an error can be tied to the deploy that introduced it. Two sources of
+production noise are dropped in the SDK before they reach Sentry or trigger a
+replay:
+
+- `ignoreErrors`: the Outlook/Teams link-scanner rejection `Object Not Found
+  Matching Id:…, MethodName:…, ParamCount:…`, for any `MethodName`. Sentry's
+  built-in filter only matches `MethodName:simulateEvent`. It cost 32 replays
+  before the filter.
+- `denyUrls`: frames from `app:///executors/`, an injected script that is not
+  this app's bundle.
 
 ## PII contract
 
