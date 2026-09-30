@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import hashlib
 import json
 import logging
@@ -9,6 +8,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Annotated, Literal
 from urllib.parse import urlparse
 
+import anyio
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,6 +30,9 @@ from app.settings import settings
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["narrative"])
+
+# Ceiling on the abort refund (one Upstash DECR pair in practice).
+_REFUND_TIMEOUT_SECONDS = 2.0
 
 
 def _scores_hash(report: Report) -> str:
@@ -106,13 +109,12 @@ async def get_narrative(
             # a cache hit, not on the budget fallback, not before consumption.
             if meta.consumed_day is not None:
                 logger.warning("narrative.budget.refunded_on_abort")
-                refund = asyncio.ensure_future(
-                    service.refund(subject=subject, consumed_day=meta.consumed_day)
-                )
-                # Shielded: under anyio's level-triggered cancellation this
-                # await is cancelled again, but the refund still completes.
-                with contextlib.suppress(asyncio.CancelledError):
-                    await asyncio.shield(refund)
+                # Shielded so the refund completes inside the response even
+                # though this task is being cancelled (Starlette cancels through
+                # an anyio task group), and bounded so a hung Upstash cannot
+                # hold the worker.
+                with anyio.move_on_after(_REFUND_TIMEOUT_SECONDS, shield=True):
+                    await service.refund(subject=subject, consumed_day=meta.consumed_day)
             raise
 
         # Skip the persist branch for cross-site navigations (CSRF): this is a

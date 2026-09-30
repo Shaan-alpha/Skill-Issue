@@ -116,3 +116,54 @@ async def test_no_refund_when_no_slot_was_consumed():
     await body.__anext__()
     await body.aclose()
     assert budget._remaining == 0
+
+
+class _SlowRefundBudget(DailyBudget):
+    """In-process budget whose refund takes one network round trip, like an
+    Upstash DECR."""
+
+    def __init__(self) -> None:
+        super().__init__(limit=5)
+        self.refunds_done = 0
+
+    async def arefund(self, *, subject=None, consumed_day=None) -> None:
+        await asyncio.sleep(0.05)
+        self.refunds_done += 1
+
+
+async def test_refund_completes_within_the_response_on_an_asgi_disconnect():
+    """uvicorn advertises ASGI spec 2.3, so Starlette watches for http.disconnect
+    and cancels the stream through an anyio task group. The refund must finish
+    inside the response, not as a detached task that outlives it."""
+    budget = _SlowRefundBudget()
+    service = NarrativeService(cache=NarrativeCache(), budget=budget, llm=_StallingLLM())
+    response = await get_narrative(
+        request=_request(),
+        username="octocat",
+        _rl=None,
+        report=_report(),
+        service=service,
+        db=AsyncMock(),
+        session=None,
+        mode="roast",
+    )
+    first_chunk_sent = asyncio.Event()
+
+    async def receive():
+        await first_chunk_sent.wait()
+        return {"type": "http.disconnect"}
+
+    async def send(message):
+        if message["type"] == "http.response.body" and message.get("body"):
+            first_chunk_sent.set()
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0", "spec_version": "2.3"},
+        "method": "GET",
+        "path": "/narrative/octocat",
+        "headers": [],
+    }
+    await response(scope, receive, send)
+
+    assert budget.refunds_done == 1
