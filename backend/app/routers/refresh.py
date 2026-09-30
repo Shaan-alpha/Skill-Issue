@@ -7,12 +7,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import _ResolvedSession, require_session, require_trusted_origin
 from app.cache.keys import NAMESPACE_REPORT, report_key
 from app.cache.rate_limit import try_increment_counter
-from app.db.session import get_db
+from app.db.session import DbSession
 from app.dependencies import get_cache, get_report_for_user
 from app.models import Report
 from app.persistence.analyses import get_user_analysis_by_target, record_run
@@ -25,7 +24,7 @@ router = APIRouter(prefix="/me", tags=["me"])
 @router.post("/refresh/{username}")
 async def force_refresh(
     username: str,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
     session: Annotated[_ResolvedSession, Depends(require_session)],
     _origin: Annotated[None, Depends(require_trusted_origin)],
 ) -> object:

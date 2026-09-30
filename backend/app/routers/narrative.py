@@ -67,6 +67,9 @@ async def get_narrative(
     _rl: Annotated[None, Depends(narrative_rate_limiter)],
     report: Annotated[Report, Depends(get_report_for_user)],
     service: Annotated[NarrativeService, Depends(get_narrative_service)],
+    # Request-scoped on purpose: the stream writes after this handler returns
+    # and commits explicitly. Every other route uses the function-scoped
+    # DbSession so its commit lands before the response (v1.0.13).
     db: Annotated[AsyncSession, Depends(get_db)],
     session: Annotated[object | None, Depends(optional_session)],
     mode: str = Query("roast", description="Narrative mode: roast or mentor"),

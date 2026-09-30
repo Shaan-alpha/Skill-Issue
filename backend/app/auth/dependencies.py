@@ -4,12 +4,11 @@ import re
 from typing import Annotated
 
 from fastapi import Cookie, Depends, HTTPException, Request, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import settings as settings_module
 from app.auth.sessions import get_session_with_token, touch_session
 from app.db.models import User
-from app.db.session import get_db
+from app.db.session import DbSession
 
 
 def _origin_allowed(origin: str) -> bool:
@@ -60,7 +59,7 @@ class _ResolvedSession:
 
 
 async def optional_session(
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
     si_session: Annotated[str | None, Cookie()] = None,
 ) -> _ResolvedSession | None:
     """Resolve the session cookie if present; never raises on absence."""

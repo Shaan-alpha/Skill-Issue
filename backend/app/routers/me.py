@@ -4,11 +4,10 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import require_user
 from app.db.models import Analysis, User
-from app.db.session import get_db
+from app.db.session import DbSession
 from app.persistence.analyses import list_user_analyses
 
 router = APIRouter(tags=["me"])
@@ -16,7 +15,7 @@ router = APIRouter(tags=["me"])
 
 @router.get("/me")
 async def me(
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
     user: Annotated[User, Depends(require_user)],
 ) -> dict[str, Any]:
     count = await db.scalar(
@@ -35,7 +34,7 @@ async def me(
 
 @router.get("/me/analyses")
 async def my_analyses(
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
     user: Annotated[User, Depends(require_user)],
     sort: Literal["recent", "score_desc", "score_asc"] = Query("recent"),
     page: int = Query(1, ge=1),
