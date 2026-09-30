@@ -73,7 +73,7 @@ app.include_router(cron.router)
 app.include_router(refresh.router)
 
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 async def health() -> dict[str, str]:
     db_status = "up"
     try:

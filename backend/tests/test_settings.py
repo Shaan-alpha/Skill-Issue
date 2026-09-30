@@ -40,7 +40,7 @@ def test_session_ttl_overridable(monkeypatch):
 
 def test_v1_0_4_cost_control_defaults():
     s = Settings()
-    assert s.narrative_daily_limit == 500
+    assert s.narrative_daily_limit == 55  # v1.0.13: matches production (Groq free tier)
     assert s.narrative_anon_ip_daily_limit == 10
     assert s.narrative_user_daily_limit == 40
     assert s.trusted_client_ip_header == "x-forwarded-for"
@@ -97,3 +97,12 @@ def test_version_matches_pyproject():
         (Path(__file__).parent.parent / "pyproject.toml").read_text(encoding="utf-8")
     )
     assert pyproject["project"]["version"] == VERSION
+
+
+def test_narrative_daily_limit_defaults_below_the_groq_free_tier(monkeypatch):
+    """Production runs 55 via env (Groq's free tier is about 61 a day); the code
+    default must not reopen the gap if that env var is ever lost."""
+    from app.settings import Settings
+
+    monkeypatch.delenv("NARRATIVE_DAILY_LIMIT", raising=False)
+    assert Settings(_env_file=None).narrative_daily_limit == 55
