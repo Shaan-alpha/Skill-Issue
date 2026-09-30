@@ -55,3 +55,6 @@ coverage/
 
 # --- Misc ---
 *.local
+
+# Generated on the fly by CI for pip-audit (v1.0.13). Vercel installs from uv.lock.
+backend/requirements.txt
