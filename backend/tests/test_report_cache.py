@@ -8,13 +8,15 @@ user should NOT hit it (cache hit).
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 
 from app import dependencies as dep_module
-from app.dependencies import get_cache, get_report_for_user
+from app.cache.keys import NAMESPACE_REPORT, report_key
+from app.dependencies import get_cache, get_fresh_report_for_user, get_report_for_user
 from app.models import Report, ScoreBreakdown, ScoreResult, TierInfo
 
 
@@ -52,7 +54,9 @@ def patched_live_ingest(monkeypatch, fake_cache):
     cache is returned."""
     call_count = {"n": 0}
 
-    async def fake_ingest(username: str, session: Any, cache: Any) -> Report:
+    async def fake_ingest(
+        username: str, session: Any, cache: Any, *, fresh: bool = False
+    ) -> Report:
         call_count["n"] += 1
         return _stub_report(username)
 
@@ -109,7 +113,9 @@ async def test_no_cache_configured_falls_through(monkeypatch) -> None:
     """When get_cache() returns None, every call hits _live_ingest."""
     call_count = {"n": 0}
 
-    async def fake_ingest(username: str, session: Any, cache: Any) -> Report:
+    async def fake_ingest(
+        username: str, session: Any, cache: Any, *, fresh: bool = False
+    ) -> Report:
         call_count["n"] += 1
         return _stub_report(username)
 
@@ -143,3 +149,28 @@ async def test_concurrent_cold_requests_share_one_ingest(monkeypatch, fake_cache
 
     assert calls["n"] == 1
     assert first.username == second.username == "octocat"
+
+
+async def test_fresh_report_bypasses_the_report_cache(monkeypatch, fake_cache) -> None:
+    """A force refresh ignores the cached report, ingests with GitHub cache reads
+    off, and writes the fresh report under the same lowercased key."""
+    seen = {}
+
+    async def fresh_ingest(
+        username: str, session: Any, cache: Any, *, fresh: bool = False
+    ) -> Report:
+        seen["fresh"] = fresh
+        return _stub_report(username, total=91)
+
+    monkeypatch.setattr(dep_module, "_live_ingest", fresh_ingest)
+    monkeypatch.setattr(dep_module, "get_cache", lambda: fake_cache)
+    stale = _stub_report("octocat", total=12)
+    await fake_cache.set_json(
+        NAMESPACE_REPORT, report_key("octocat"), json.loads(stale.model_dump_json())
+    )
+
+    report = await get_fresh_report_for_user("OctoCat", session=None)
+
+    assert seen["fresh"] is True
+    assert report.total == 91
+    assert (await fake_cache.get_json(NAMESPACE_REPORT, report_key("octocat")))["total"] == 91

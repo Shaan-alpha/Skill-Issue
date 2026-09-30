@@ -3,6 +3,7 @@ import respx
 from httpx import HTTPStatusError, Response
 
 from app.cache.client import RedisCache
+from app.cache.keys import NAMESPACE_GH, gh_request_key
 from app.github.client import GitHubClient
 
 
@@ -89,3 +90,23 @@ async def test_no_cache_param_means_no_caching(fake_cache: RedisCache) -> None:
             await gh.get_user("octocat")
         # No cache → every call hits GitHub.
         assert route.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_read_cache_false_goes_live_and_refreshes_the_entry(fake_cache: RedisCache) -> None:
+    """Force refresh must see GitHub as it is now, not a response cached up to
+    an hour ago, and must leave the fresh response behind for later reads."""
+    url = "https://api.github.com/users/octocat"
+    key = gh_request_key("GET", url, None, None)
+    await fake_cache.set_json(
+        NAMESPACE_GH, key, {"status": 200, "body": {"login": "octocat", "public_repos": 1}}
+    )
+    with respx.mock:
+        respx.get(url).mock(
+            return_value=Response(200, json={"login": "octocat", "public_repos": 99})
+        )
+        async with GitHubClient(token="t", cache=fake_cache, read_cache=False) as gh:
+            user = await gh.get_user("octocat")
+
+    assert user["public_repos"] == 99
+    assert (await fake_cache.get_json(NAMESPACE_GH, key))["body"]["public_repos"] == 99

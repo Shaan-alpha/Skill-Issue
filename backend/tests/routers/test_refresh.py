@@ -153,7 +153,7 @@ async def test_refresh_happy_path_returns_report_and_writes_run(db, monkeypatch)
         return stub
 
     monkeypatch.setattr(
-        "app.routers.refresh.get_report_for_user", _fake_get_report_for_user, raising=False
+        "app.routers.refresh.get_fresh_report_for_user", _fake_get_report_for_user, raising=False
     )
 
     try:
@@ -203,7 +203,7 @@ async def test_refresh_continues_when_cache_delete_fails(db, monkeypatch):
         return stub
 
     monkeypatch.setattr(
-        "app.routers.refresh.get_report_for_user", _fake_get_report_for_user, raising=False
+        "app.routers.refresh.get_fresh_report_for_user", _fake_get_report_for_user, raising=False
     )
 
     try:

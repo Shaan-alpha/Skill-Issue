@@ -21,6 +21,7 @@ async def test_uses_session_token_when_session_present(monkeypatch):
             max_retries: int = 3,
             max_calls=None,
             is_shared_token=False,
+            read_cache=True,
         ):
             captured["token"] = token
 
@@ -61,6 +62,7 @@ async def test_falls_back_to_project_token_when_no_session(monkeypatch):
             max_retries: int = 3,
             max_calls=None,
             is_shared_token=False,
+            read_cache=True,
         ):
             captured["token"] = token
 
@@ -112,7 +114,7 @@ async def test_ingest_deadline_maps_to_503(monkeypatch):
 
     import app.dependencies as deps
 
-    async def _slow(username, session, cache):
+    async def _slow(username, session, cache, *, fresh=False):
         await asyncio.sleep(1.0)
 
     monkeypatch.setattr(deps, "_live_ingest", _slow)
@@ -174,3 +176,30 @@ async def test_shared_breaker_bypasses_signed_in(monkeypatch, fake_cache):
 
     out = await deps._live_ingest("octocat", FakeSession(), cache=fake_cache)
     assert out is sentinel
+
+
+@pytest.mark.asyncio
+async def test_fresh_ingest_turns_off_github_cache_reads(monkeypatch) -> None:
+    import app.dependencies as deps
+
+    captured: dict = {}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_exc):
+            return None
+
+    monkeypatch.setattr(deps, "GitHubClient", FakeClient)
+    monkeypatch.setattr(deps, "ingest_profile", AsyncMock(return_value=object()))
+    monkeypatch.setattr(deps, "run_scoring_engine", AsyncMock(return_value=object()))
+
+    class Session:
+        access_token = "user-token"
+
+    await deps._live_ingest("octocat", Session(), cache=None, fresh=True)
+    assert captured["read_cache"] is False

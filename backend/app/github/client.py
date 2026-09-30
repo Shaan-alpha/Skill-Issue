@@ -132,6 +132,7 @@ class GitHubClient:
         max_calls: int | None = None,
         is_shared_token: bool = False,
         cache: RedisCache | None = None,
+        read_cache: bool = True,
     ) -> None:
         headers: dict[str, str] = {
             "Accept": "application/vnd.github+json",
@@ -146,6 +147,7 @@ class GitHubClient:
         self._live_calls = 0
         self._is_shared_token = is_shared_token
         self._cache = cache
+        self._read_cache = read_cache
 
     async def __aenter__(self) -> Self:
         return self
@@ -163,13 +165,16 @@ class GitHubClient:
         # Try the cache before hitting GitHub.
         if self._cache is not None:
             cache_key = gh_request_key(method, url, params, body)
-            try:
-                cached = await self._cache.get_json(NAMESPACE_GH, cache_key)
-            except Exception:
-                cached = None
-                logger.warning("cache get raised in GitHubClient", exc_info=True)
-            if cached is not None:
-                return _CachedResponse(status_code=cached["status"], json_body=cached["body"])
+            # A force refresh reads live but still writes through, so the next
+            # ordinary analysis benefits from the fresh responses.
+            if self._read_cache:
+                try:
+                    cached = await self._cache.get_json(NAMESPACE_GH, cache_key)
+                except Exception:
+                    cached = None
+                    logger.warning("cache get raised in GitHubClient", exc_info=True)
+                if cached is not None:
+                    return _CachedResponse(status_code=cached["status"], json_body=cached["body"])
 
         # v1.0.5 SI-03: count only live calls (cache hits returned above are
         # free) and hard-cap per-analysis fan-out. One GitHubClient == one

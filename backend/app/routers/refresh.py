@@ -9,10 +9,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
 from app.auth.dependencies import _ResolvedSession, require_session, require_trusted_origin
-from app.cache.keys import NAMESPACE_REPORT, report_key
 from app.cache.rate_limit import try_increment_counter
 from app.db.session import DbSession
-from app.dependencies import get_cache, get_report_for_user
+from app.dependencies import get_cache, get_fresh_report_for_user
 from app.models import Report
 from app.persistence.analyses import get_user_analysis_by_target, record_run
 from app.ratelimit import hour_bucket, seconds_until_next_hour
@@ -50,12 +49,11 @@ async def force_refresh(
                 headers={"Retry-After": str(retry_after)},
             )
 
-    # Invalidate Layer A so the live pipeline runs cold for this target.
-    if cache is not None:
-        await cache.delete(NAMESPACE_REPORT, report_key(username))
-
     started_at = datetime.now(UTC)
-    report: Report = await get_report_for_user(username, session=session)
+    # Fresh from GitHub: the report cache AND the GitHub response cache are
+    # skipped, then refilled. Clearing only the report cache (v0.8.2) rebuilt
+    # the report from GitHub responses up to an hour old.
+    report: Report = await get_fresh_report_for_user(username, session=session)
     completed_at = datetime.now(UTC)
 
     scores_hash = hashlib.sha256(
