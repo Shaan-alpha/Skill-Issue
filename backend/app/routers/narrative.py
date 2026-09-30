@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import hashlib
 import json
 import logging
@@ -97,13 +99,20 @@ async def get_narrative(
                 acc.append(chunk)
                 payload = json.dumps({"chunk": chunk})
                 yield f"data: {payload}\n\n"
-        except GeneratorExit:
-            # Client aborted mid-stream (v1.0.5 SI-07): refund the LLM slot IFF
-            # one was truly consumed — not on a cache hit, not on the budget
-            # fallback (nothing consumed there).
-            if not meta.cache_hit and meta.fallback_reason != "budget":
+        except (GeneratorExit, asyncio.CancelledError):
+            # Client left mid-stream (v1.0.5 SI-07). A disconnect usually lands
+            # as cancellation while we await the model; GeneratorExit covers a
+            # close at a yield. Refund exactly when a slot was consumed: not on
+            # a cache hit, not on the budget fallback, not before consumption.
+            if meta.consumed_day is not None:
                 logger.warning("narrative.budget.refunded_on_abort")
-                await service.refund(subject=subject, consumed_day=meta.consumed_day)
+                refund = asyncio.ensure_future(
+                    service.refund(subject=subject, consumed_day=meta.consumed_day)
+                )
+                # Shielded: under anyio's level-triggered cancellation this
+                # await is cancelled again, but the refund still completes.
+                with contextlib.suppress(asyncio.CancelledError):
+                    await asyncio.shield(refund)
             raise
 
         # Skip the persist branch for cross-site navigations (CSRF): this is a
