@@ -136,3 +136,24 @@ describe("HistoryGrid under Activity (Next 16 Cache Components)", () => {
     expect(screen.queryByText("@octocat")).not.toBeInTheDocument();
   });
 });
+
+describe("HistoryGrid delete failures", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    refresh.mockReset();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("tells the user when the delete fails", async () => {
+    global.fetch = vi.fn().mockResolvedValue(new Response(null, { status: 500 }));
+    render(<HistoryGrid analyses={analyses} />);
+    fireEvent.click(screen.getByRole("button", { name: /delete @octocat/i }));
+
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+    });
+
+    expect(screen.getByText(/couldn't delete/i)).toBeInTheDocument();
+    expect(refresh).toHaveBeenCalled();
+  });
+});

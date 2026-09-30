@@ -13,6 +13,9 @@ export function HistoryGrid({ analyses }: { analyses: SavedAnalysis[] }) {
   // The analysis currently in its undo window (removed from view, not yet deleted).
   const [pending, setPending] = useState<SavedAnalysis | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // A delete that failed after its undo window closed. The card comes back on
+  // the refresh below; this says why instead of leaving it unexplained.
+  const [notice, setNotice] = useState<string | null>(null);
   // Server ordering, so Undo can re-insert a card at its place. State rather
   // than a ref because it is rewritten by the resync below, and writing a ref
   // during render is not allowed.
@@ -42,7 +45,10 @@ export function HistoryGrid({ analyses }: { analyses: SavedAnalysis[] }) {
       method: "DELETE",
       credentials: "include",
     })
-      .catch(() => {})
+      .then((r) => {
+        if (!r.ok) setNotice("Couldn't delete that analysis, so it's back in your history.");
+      })
+      .catch(() => setNotice("Couldn't reach the server, so nothing was deleted."))
       .finally(() => router.refresh());
   }
 
@@ -56,6 +62,7 @@ export function HistoryGrid({ analyses }: { analyses: SavedAnalysis[] }) {
   }
 
   function handleDelete(id: number) {
+    setNotice(null);
     // A second delete while one is pending commits the first immediately.
     flushPending();
     const target = items.find((a) => a.id === id);
@@ -104,6 +111,21 @@ export function HistoryGrid({ analyses }: { analyses: SavedAnalysis[] }) {
             className="font-medium text-accent hover:underline"
           >
             Undo
+          </button>
+        </div>
+      )}
+      {notice && !pending && (
+        <div
+          role="status"
+          className="fixed inset-x-4 bottom-6 z-50 mx-auto flex max-w-md items-center justify-between gap-3 rounded-2xl border border-border bg-card/90 px-4 py-2 text-sm shadow-lg backdrop-blur"
+        >
+          <span className="text-muted-foreground">{notice}</span>
+          <button
+            type="button"
+            onClick={() => setNotice(null)}
+            className="shrink-0 font-medium text-accent hover:underline"
+          >
+            Dismiss
           </button>
         </div>
       )}
