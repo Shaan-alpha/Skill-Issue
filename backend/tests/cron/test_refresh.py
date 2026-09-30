@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import httpx
 import pytest
 
+from app.cron import refresh as refresh_module
 from app.cron.refresh import RefreshChunkSummary, run_refresh_chunk
 from app.cron.tokens import TokenSource
+from app.ingestion.profile import NotAnIndividualError
 
 
 def _stub_analysis(analysis_id: int, target: str = "octocat", user_id: int = 1):
@@ -182,3 +185,56 @@ async def test_deadline_guard_exits_cleanly(stub_db, monkeypatch):
     assert summary.deadline_reached is True
     assert summary.succeeded == 3
     assert summary.processed == 3
+
+
+def _github_error(status: int, headers: dict | None = None) -> httpx.HTTPStatusError:
+    request = httpx.Request("GET", "https://api.github.com/users/octocat")
+    response = httpx.Response(status, request=request, headers=headers or {})
+    return httpx.HTTPStatusError(str(status), request=request, response=response)
+
+
+async def _run_through_real_ingest(monkeypatch, ingest_error: BaseException):
+    """Drive the chunk through the production path, `_fetch_report` into
+    `_live_ingest`, stubbing only the GitHub-facing call, so the exception the
+    cron sees is exactly the one production raises. (The older tests stub
+    `_fetch_report` itself with a raw httpx error, which production never
+    raises: `_live_ingest` converts it to an HTTPException first.)"""
+    stale = [_stub_analysis(i, target=f"user{i}") for i in range(1, 4)]
+    monkeypatch.setattr(refresh_module, "_fetch_stale_analyses", AsyncMock(return_value=stale))
+    monkeypatch.setattr(
+        refresh_module, "_resolve_token", AsyncMock(return_value=("tok", TokenSource.USER_SESSION))
+    )
+    monkeypatch.setattr("app.dependencies.ingest_profile", AsyncMock(side_effect=ingest_error))
+    return await run_refresh_chunk(AsyncMock())
+
+
+async def test_a_spent_token_halts_the_chunk_through_the_real_path(monkeypatch):
+    summary = await _run_through_real_ingest(
+        monkeypatch, _github_error(403, {"X-RateLimit-Remaining": "0"})
+    )
+    assert summary.rate_limited == 1
+    assert summary.processed == 1
+    assert summary.outcomes[0].status == "rate_limited"
+
+
+async def test_a_missing_user_is_not_found_through_the_real_path(monkeypatch):
+    summary = await _run_through_real_ingest(monkeypatch, _github_error(404))
+    assert [o.status for o in summary.outcomes] == ["not_found"] * 3
+
+
+async def test_an_organisation_is_org_detected_through_the_real_path(monkeypatch):
+    summary = await _run_through_real_ingest(monkeypatch, NotAnIndividualError("an Organization"))
+    assert [o.status for o in summary.outcomes] == ["org_detected"] * 3
+
+
+async def test_cancellation_is_not_swallowed(monkeypatch):
+    stale = [_stub_analysis(1), _stub_analysis(2)]
+    monkeypatch.setattr(refresh_module, "_fetch_stale_analyses", AsyncMock(return_value=stale))
+    monkeypatch.setattr(
+        refresh_module, "_resolve_token", AsyncMock(return_value=("tok", TokenSource.USER_SESSION))
+    )
+    monkeypatch.setattr(
+        refresh_module, "_fetch_report", AsyncMock(side_effect=asyncio.CancelledError())
+    )
+    with pytest.raises(asyncio.CancelledError):
+        await run_refresh_chunk(AsyncMock())
