@@ -2,15 +2,14 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Cookie, HTTPException, Query, status
 from fastapi.responses import RedirectResponse, Response
 from httpx import HTTPStatusError
-from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.auth.oauth as _oauth_mod
 from app.auth.oauth import build_authorize_url, generate_state_token
 from app.auth.sessions import create_session, delete_session
-from app.db.session import get_db
+from app.db.session import DbSession
 from app.persistence.users import upsert_user_from_github_payload
 from app.settings import Settings, settings
 
@@ -43,7 +42,7 @@ async def login() -> RedirectResponse:
 
 @router.get("/callback")
 async def callback(
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
     code: str | None = Query(default=None),
     state: str | None = Query(default=None),
     error: str | None = Query(default=None),
@@ -101,7 +100,7 @@ async def callback(
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
     si_session: Annotated[str | None, Cookie()] = None,
 ) -> Response:
     if si_session:

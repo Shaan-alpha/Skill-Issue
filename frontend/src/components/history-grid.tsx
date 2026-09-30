@@ -13,6 +13,9 @@ export function HistoryGrid({ analyses }: { analyses: SavedAnalysis[] }) {
   // The analysis currently in its undo window (removed from view, not yet deleted).
   const [pending, setPending] = useState<SavedAnalysis | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // A delete that failed after its undo window closed. The card comes back on
+  // the refresh below; this says why instead of leaving it unexplained.
+  const [notice, setNotice] = useState<string | null>(null);
   // Server ordering, so Undo can re-insert a card at its place. State rather
   // than a ref because it is rewritten by the resync below, and writing a ref
   // during render is not allowed.
@@ -37,12 +40,32 @@ export function HistoryGrid({ analyses }: { analyses: SavedAnalysis[] }) {
     setOrder(analyses.map((a) => a.id));
   }
 
-  function commitDelete(id: number) {
-    void fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL ?? ""}/analyses/${id}`, {
+  // Put a card back at its server position (Undo, and a delete that failed).
+  function restore(item: SavedAnalysis) {
+    setItems((prev) => {
+      if (prev.some((a) => a.id === item.id)) return prev;
+      const next = [...prev, item];
+      next.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+      return next;
+    });
+  }
+
+  function commitDelete(item: SavedAnalysis) {
+    // On failure the card is restored here, not left to router.refresh(): the
+    // server list comes back unchanged, so the resync above never re-adds it.
+    void fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL ?? ""}/analyses/${item.id}`, {
       method: "DELETE",
       credentials: "include",
     })
-      .catch(() => {})
+      .then((r) => {
+        if (r.ok) return;
+        restore(item);
+        setNotice("Couldn't delete that analysis, so it's back in your history.");
+      })
+      .catch(() => {
+        restore(item);
+        setNotice("Couldn't reach the server, so nothing was deleted.");
+      })
       .finally(() => router.refresh());
   }
 
@@ -51,11 +74,12 @@ export function HistoryGrid({ analyses }: { analyses: SavedAnalysis[] }) {
       clearTimeout(timer.current);
       timer.current = null;
     }
-    if (pending) commitDelete(pending.id);
+    if (pending) commitDelete(pending);
     setPending(null);
   }
 
   function handleDelete(id: number) {
+    setNotice(null);
     // A second delete while one is pending commits the first immediately.
     flushPending();
     const target = items.find((a) => a.id === id);
@@ -63,7 +87,7 @@ export function HistoryGrid({ analyses }: { analyses: SavedAnalysis[] }) {
     setItems((prev) => prev.filter((a) => a.id !== id));
     setPending(target);
     timer.current = setTimeout(() => {
-      commitDelete(target.id);
+      commitDelete(target);
       setPending(null);
       timer.current = null;
     }, UNDO_WINDOW_MS);
@@ -75,12 +99,7 @@ export function HistoryGrid({ analyses }: { analyses: SavedAnalysis[] }) {
       timer.current = null;
     }
     if (pending) {
-      const restored = pending;
-      setItems((prev) => {
-        const next = [...prev, restored];
-        next.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
-        return next;
-      });
+      restore(pending);
       setPending(null);
     }
   }
@@ -104,6 +123,21 @@ export function HistoryGrid({ analyses }: { analyses: SavedAnalysis[] }) {
             className="font-medium text-accent hover:underline"
           >
             Undo
+          </button>
+        </div>
+      )}
+      {notice && !pending && (
+        <div
+          role="status"
+          className="fixed inset-x-4 bottom-6 z-50 mx-auto flex max-w-md items-center justify-between gap-3 rounded-2xl border border-border bg-card/90 px-4 py-2 text-sm shadow-lg backdrop-blur"
+        >
+          <span className="text-muted-foreground">{notice}</span>
+          <button
+            type="button"
+            onClick={() => setNotice(null)}
+            className="shrink-0 font-medium text-accent hover:underline"
+          >
+            Dismiss
           </button>
         </div>
       )}

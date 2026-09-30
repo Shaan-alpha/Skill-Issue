@@ -16,6 +16,8 @@ from app.ratelimit_fallback import in_process_limiter
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
+    from app.cache.client import RedisCache
+
 logger = logging.getLogger(__name__)
 
 
@@ -75,6 +77,36 @@ def resolve_budget_subject(request: Request, session: object | None) -> tuple[st
     return f"ip:{ip}", settings.narrative_anon_ip_daily_limit
 
 
+async def hourly_limit_allows(
+    cache: RedisCache | None,
+    *,
+    name: str,
+    subject: str,
+    limit: int,
+    now: datetime,
+) -> bool:
+    """Count one hit against an hourly cap; True if it is within the cap.
+
+    Uses Redis when configured. With no cache, or when Redis errors, falls back
+    to the conservative in-process limiter rather than failing open (v1.0.4
+    SI-01). Every hourly cap goes through here so none can drift from that rule.
+    """
+    bucket = hour_bucket(now)
+    if cache is None:
+        allowed = in_process_limiter.check(name=name, subject=subject, limit=limit, bucket=bucket)
+        if not allowed:
+            logger.warning("rate_limit.degraded_local name=%s reason=cache_unconfigured", name)
+        return allowed
+    result = await try_increment_counter(
+        cache, name=name, subject=subject, limit=limit, hour_bucket=bucket
+    )
+    if result.current == 0:
+        # Redis-error sentinel (RedisCache.incr returned 0).
+        logger.warning("rate_limit.degraded_local name=%s reason=redis_error", name)
+        return in_process_limiter.check(name=name, subject=subject, limit=limit, bucket=bucket)
+    return result.allowed
+
+
 def make_rate_limiter(
     *,
     name: str,
@@ -122,28 +154,9 @@ def make_rate_limiter(
                 subject_type = "ip"
 
         now = datetime.now(UTC)
-        bucket = hour_bucket(now)
-        cache = get_cache()
-        if cache is None:
-            # SI-01: no Redis -> conservative in-process limiter, not fail-open.
-            allowed = in_process_limiter.check(
-                name=name, subject=subject, limit=limit, bucket=bucket
-            )
-            if not allowed:
-                logger.warning("rate_limit.degraded_local name=%s reason=cache_unconfigured", name)
-        else:
-            result = await try_increment_counter(
-                cache, name=name, subject=subject, limit=limit, hour_bucket=bucket
-            )
-            if result.current == 0:
-                # Redis-error sentinel (RedisCache.incr returned 0). Degrade to
-                # the in-process limiter instead of failing open (SI-01).
-                allowed = in_process_limiter.check(
-                    name=name, subject=subject, limit=limit, bucket=bucket
-                )
-                logger.warning("rate_limit.degraded_local name=%s reason=redis_error", name)
-            else:
-                allowed = result.allowed
+        allowed = await hourly_limit_allows(
+            get_cache(), name=name, subject=subject, limit=limit, now=now
+        )
         if not allowed:
             retry_after = seconds_until_next_hour(now)
             logger.warning(

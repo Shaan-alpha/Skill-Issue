@@ -49,27 +49,37 @@ export function SaveShareControls({ initialShareSlug, analysisId, username }: Pr
   async function toggleShare() {
     if (!analysisId) return;
     setBusy(true);
+    const url = backendUrl(`/analyses/${analysisId}/share`);
     try {
-      const url = backendUrl(`/analyses/${analysisId}/share`);
       if (shareSlug) {
-        await fetch(url, { method: "DELETE", credentials: "include" });
+        const r = await fetch(url, { method: "DELETE", credentials: "include" });
+        if (!r.ok) {
+          // A 401/403/5xx means the link is still live. Saying "revoked" here
+          // would leave someone believing a public page was gone.
+          setToast("Couldn't revoke the link. It's still public, so try again.");
+          return;
+        }
         setShareSlug(null);
         trackShareToggled({ now: "private" });
         setToast("Share revoked");
       } else {
         const r = await fetch(url, { method: "POST", credentials: "include" });
-        if (r.ok) {
-          const body: ShareResponse = await r.json();
-          setShareSlug(body.share_slug);
-          trackShareToggled({ now: "public" });
-          try {
-            await navigator.clipboard.writeText(body.share_url);
-            setToast("Share URL copied to clipboard");
-          } catch {
-            setToast("Share link ready");
-          }
+        if (!r.ok) {
+          setToast("Couldn't create a share link. Try again.");
+          return;
+        }
+        const body: ShareResponse = await r.json();
+        setShareSlug(body.share_slug);
+        trackShareToggled({ now: "public" });
+        try {
+          await navigator.clipboard.writeText(body.share_url);
+          setToast("Share URL copied to clipboard");
+        } catch {
+          setToast("Share link ready");
         }
       }
+    } catch {
+      setToast("Couldn't reach the server, so nothing changed. Try again.");
     } finally {
       setBusy(false);
       setTimeout(() => setToast(null), 3000);

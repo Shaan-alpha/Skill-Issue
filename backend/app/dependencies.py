@@ -82,69 +82,80 @@ async def get_report_for_user(
 ) -> Report:
     """Validate username, then return a Report — from cache when possible,
     otherwise via live ingest + scoring with singleflight coalescing."""
+    return await _get_report(username, session, fresh=False)
+
+
+async def get_fresh_report_for_user(username: str, session: "_ResolvedSession | None") -> Report:
+    """Force-refresh path: ingest from GitHub without reading any cache layer,
+    then write the fresh report through. Deliberately not a FastAPI dependency:
+    a `fresh` parameter there would let any caller bypass every cache."""
+    return await _get_report(username, session, fresh=True)
+
+
+async def _get_report(username: str, session: "_ResolvedSession | None", *, fresh: bool) -> Report:
     if not _USERNAME_RE.fullmatch(username):
         raise HTTPException(status_code=400, detail="Invalid GitHub username")
 
     cache = get_cache()
+    if cache is None:
+        return await _live_ingest_bounded(username, session, cache=None, fresh=fresh)
+
     cache_key = report_key(username)
-
-    # Layer A: try the Report cache first.
-    if cache is not None:
-        cached = await cache.get_json(NAMESPACE_REPORT, cache_key)
+    if not fresh:
+        cached = await _read_cached_report(cache, cache_key)
         if cached is not None:
-            try:
-                return Report.model_validate(cached)
-            except Exception:
-                logger.warning(
-                    "cached Report for %s failed validation; ignoring",
-                    cache_key,
-                    exc_info=True,
-                )
+            return cached
 
-    # Layer B: singleflight around the cold ingest.
-    if cache is not None:
-        async with singleflight(cache, NAMESPACE_REPORT, cache_key) as got:
-            if not got:
-                # Another holder finished; check the cache one more time.
-                cached = await cache.get_json(NAMESPACE_REPORT, cache_key)
-                if cached is not None:
-                    try:
-                        return Report.model_validate(cached)
-                    except Exception:
-                        pass
-                # Lock holder timed out or returned bad data — fall through
-                # to a live ingest, no lock held.
+    async with singleflight(cache, NAMESPACE_REPORT, cache_key):
+        # Double-checked: whoever held the lock before us has usually just
+        # cached this exact report. Re-reading costs one Redis GET; skipping it
+        # repeated a whole GitHub ingest for every request that had waited.
+        if not fresh:
+            cached = await _read_cached_report(cache, cache_key)
+            if cached is not None:
+                return cached
+        report = await _live_ingest_bounded(username, session, cache, fresh=fresh)
+        await _write_cached_report(cache, cache_key, report)
+        return report
 
-            report = await _live_ingest_bounded(username, session, cache)
 
-            # Populate the cache for next time.
-            try:
-                await cache.set_json(
-                    NAMESPACE_REPORT,
-                    cache_key,
-                    json.loads(report.model_dump_json()),
-                    ttl_seconds=settings.cache_report_ttl_seconds,
-                )
-            except Exception:
-                logger.warning("report cache set failed for %s", cache_key, exc_info=True)
+async def _read_cached_report(cache: RedisCache, cache_key: str) -> Report | None:
+    """Layer A lookup; a value that no longer validates is treated as a miss."""
+    cached = await cache.get_json(NAMESPACE_REPORT, cache_key)
+    if cached is None:
+        return None
+    try:
+        return Report.model_validate(cached)
+    except Exception:
+        logger.warning("cached Report for %s failed validation; ignoring", cache_key, exc_info=True)
+        return None
 
-            return report
 
-    # No cache configured — original behaviour.
-    return await _live_ingest_bounded(username, session, cache=None)
+async def _write_cached_report(cache: RedisCache, cache_key: str, report: Report) -> None:
+    try:
+        await cache.set_json(
+            NAMESPACE_REPORT,
+            cache_key,
+            json.loads(report.model_dump_json()),
+            ttl_seconds=settings.cache_report_ttl_seconds,
+        )
+    except Exception:
+        logger.warning("report cache set failed for %s", cache_key, exc_info=True)
 
 
 async def _live_ingest_bounded(
     username: str,
     session: "_ResolvedSession | None",
     cache: RedisCache | None,
+    *,
+    fresh: bool = False,
 ) -> Report:
     """`_live_ingest` under a wall-clock deadline (v1.0.5 SI-06). On timeout,
     503 and release the worker + DB connection rather than sleeping for minutes
     under GitHub rate-limit backpressure."""
     try:
         return await asyncio.wait_for(
-            _live_ingest(username, session, cache),
+            _live_ingest(username, session, cache, fresh=fresh),
             timeout=settings.analyze_ingest_deadline_seconds,
         )
     except TimeoutError:
@@ -156,6 +167,8 @@ async def _live_ingest(
     username: str,
     session: "_ResolvedSession | None",
     cache: RedisCache | None,
+    *,
+    fresh: bool = False,
 ) -> Report:
     # Funnel guard: every path to the GitHub client passes through here,
     # including the cron refresh (which reaches _live_ingest directly, not via
@@ -186,6 +199,7 @@ async def _live_ingest(
         cache=cache,
         max_calls=settings.gh_max_calls_per_analysis,
         is_shared_token=is_shared,
+        read_cache=not fresh,
     ) as gh:
         try:
             profile = await ingest_profile(username, gh)

@@ -9,6 +9,19 @@ updates:
     groups:
       frontend-minor-patch:
         update-types: ["minor", "patch"]
+    ignore:
+      # Blocked upstream: eslint-plugin-react 7.37.x (pulled in by
+      # eslint-config-next) calls context.getFilename(), which ESLint 10
+      # removed. Revisit when eslint-config-next supports ESLint 10.
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      # Blocked upstream: typescript-eslint supports typescript <6.1.
+      # TypeScript majors are evaluated by hand (v1.0.14).
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      # Tracks the Node runtime (24.x). Bump together with the runtime.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   # Repo-root tooling (@vercel/config, typescript).
   - package-ecosystem: "npm"
@@ -26,6 +39,12 @@ updates:
     groups:
       backend-minor-patch:
         update-types: ["minor", "patch"]
+    ignore:
+      # Majors evaluated by hand in v1.0.14; pyproject bounds them (<3, <2.1).
+      - dependency-name: "openai"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "sqlalchemy"
+        versions: [">=2.1"]
 
   # Keep the SHA-pinned GitHub Actions fresh (pairs with the pins in
   # .github/workflows/*.yml — Dependabot bumps both SHA and version comment).

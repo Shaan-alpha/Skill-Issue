@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -7,6 +8,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Annotated, Literal
 from urllib.parse import urlparse
 
+import anyio
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +30,9 @@ from app.settings import settings
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["narrative"])
+
+# Ceiling on the abort refund (one Upstash DECR pair in practice).
+_REFUND_TIMEOUT_SECONDS = 2.0
 
 
 def _scores_hash(report: Report) -> str:
@@ -67,6 +72,9 @@ async def get_narrative(
     _rl: Annotated[None, Depends(narrative_rate_limiter)],
     report: Annotated[Report, Depends(get_report_for_user)],
     service: Annotated[NarrativeService, Depends(get_narrative_service)],
+    # Request-scoped on purpose: the stream writes after this handler returns
+    # and commits explicitly. Every other route uses the function-scoped
+    # DbSession so its commit lands before the response (v1.0.13).
     db: Annotated[AsyncSession, Depends(get_db)],
     session: Annotated[object | None, Depends(optional_session)],
     mode: str = Query("roast", description="Narrative mode: roast or mentor"),
@@ -94,13 +102,19 @@ async def get_narrative(
                 acc.append(chunk)
                 payload = json.dumps({"chunk": chunk})
                 yield f"data: {payload}\n\n"
-        except GeneratorExit:
-            # Client aborted mid-stream (v1.0.5 SI-07): refund the LLM slot IFF
-            # one was truly consumed — not on a cache hit, not on the budget
-            # fallback (nothing consumed there).
-            if not meta.cache_hit and meta.fallback_reason != "budget":
+        except (GeneratorExit, asyncio.CancelledError):
+            # Client left mid-stream (v1.0.5 SI-07). A disconnect usually lands
+            # as cancellation while we await the model; GeneratorExit covers a
+            # close at a yield. Refund exactly when a slot was consumed: not on
+            # a cache hit, not on the budget fallback, not before consumption.
+            if meta.consumed_day is not None:
                 logger.warning("narrative.budget.refunded_on_abort")
-                await service.refund(subject=subject, consumed_day=meta.consumed_day)
+                # Shielded so the refund completes inside the response even
+                # though this task is being cancelled (Starlette cancels through
+                # an anyio task group), and bounded so a hung Upstash cannot
+                # hold the worker.
+                with anyio.move_on_after(_REFUND_TIMEOUT_SECONDS, shield=True):
+                    await service.refund(subject=subject, consumed_day=meta.consumed_day)
             raise
 
         # Skip the persist branch for cross-site navigations (CSRF): this is a

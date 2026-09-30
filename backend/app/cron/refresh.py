@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
 import httpx
+from fastapi import HTTPException
 
 from app.cron.tokens import TokenSource, resolve_token_for_analysis
 from app.persistence.refresh import iter_stale_analyses
@@ -120,14 +121,31 @@ async def _record_run(db: AsyncSession, analysis: Analysis, report: Report, *, d
 
 
 def _classify(exc: BaseException) -> Status:
-    if isinstance(exc, httpx.HTTPStatusError):
-        if exc.response.status_code == 404:
+    """Map an ingest failure to an outcome.
+
+    `_live_ingest` converts GitHub errors into FastAPI HTTPExceptions before the
+    cron sees them, keeping the httpx error as `__cause__`. Matching only on the
+    httpx type (before v1.0.13) made every outcome `unexpected_error` in
+    production, and the rate-limit halt unreachable.
+    """
+    if isinstance(exc, HTTPException):
+        if exc.status_code == 404:
             return "not_found"
-        if exc.response.status_code == 422:
+        if exc.status_code == 422:
             return "org_detected"
-        if (
-            exc.response.status_code == 403
-            and exc.response.headers.get("X-RateLimit-Remaining") == "0"
+        if isinstance(exc.detail, dict) and exc.detail.get("error") == "service_busy":
+            return "rate_limited"  # the shared-token quota breaker tripped
+        if isinstance(exc.__cause__, httpx.HTTPStatusError):
+            return _classify(exc.__cause__)
+        return "unexpected_error"
+    if isinstance(exc, httpx.HTTPStatusError):
+        status = exc.response.status_code
+        if status == 404:
+            return "not_found"
+        if status == 422:
+            return "org_detected"
+        if status == 429 or (
+            status == 403 and exc.response.headers.get("X-RateLimit-Remaining") == "0"
         ):
             return "rate_limited"
     return "unexpected_error"
@@ -158,10 +176,11 @@ async def run_refresh_chunk(
         summary.processed += 1
         token, source = await _resolve_token(db, analysis)
         iter_start = clock()
-        # Isolate EVERY per-row failure; rate-limit is the only one that breaks the chunk.
+        # Isolate every per-row failure; cancellation propagates, and a rate
+        # limit is the only failure that ends the chunk.
         try:
             report = await _fetch_report(analysis.target_login, token=token)
-        except BaseException as exc:
+        except Exception as exc:
             outcome_status = _classify(exc)
             duration_ms = int((clock() - iter_start) * 1000)
             summary.outcomes.append(

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, HTTPException
 
 from app.db.models import AnalysisRun, User
-from app.db.session import get_db
+from app.db.session import DbSession
 from app.persistence.analyses import get_analysis_by_slug
 
 router = APIRouter(prefix="/share", tags=["share"])
@@ -15,7 +14,7 @@ router = APIRouter(prefix="/share", tags=["share"])
 @router.get("/{slug}")
 async def get_shared(
     slug: str,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
 ) -> dict[str, Any]:
     a = await get_analysis_by_slug(db, slug)
     if a is None or a.latest_run_id is None:

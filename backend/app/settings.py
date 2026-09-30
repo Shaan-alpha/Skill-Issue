@@ -3,7 +3,7 @@ from typing import Literal
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-VERSION = "1.0.12"
+VERSION = "1.0.13"
 
 
 class Settings(BaseSettings):
@@ -32,9 +32,12 @@ class Settings(BaseSettings):
     # for prose. Ignored for models that don't accept the parameter (gpt-4o
     # 400s on it), so it is safe to leave set on the OpenAI path.
     narrative_reasoning_effort: str | None = "low"
-    # Global hard $ ceiling / UTC-day (v1.0.4: 50 -> 500, now paired with the
-    # per-subject caps below so one IP can't drain the whole global budget).
-    narrative_daily_limit: int = 500
+    # Global LLM ceiling per UTC day. 55 sits just under what Groq's free tier
+    # allows: 200,000 tokens/day at roughly 3,200 per narrative is about 61.
+    # Production also sets NARRATIVE_DAILY_LIMIT=55; the default matches so a
+    # lost env var cannot reopen the gap. Raise both together on a paid tier.
+    # Paired with the per-subject caps below so one IP can't drain the budget.
+    narrative_daily_limit: int = 55
     # v1.0.4 — per-subject daily LLM caps (fairness). Anon by IP, signed-in by
     # user. A narrative runs a real LLM call only if BOTH the global and the
     # caller's subject budget have headroom; otherwise the fallback is served.

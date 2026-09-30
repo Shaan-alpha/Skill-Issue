@@ -8,9 +8,9 @@
 
 | Tool | Pinned (as of 2026-07-13) | Why |
 | --- | --- | --- |
-| **Next.js** | `16.2.12` | App Router, partial prerendering, streaming, Vercel-native. v16 dropped some conventions; check `frontend/AGENTS.md` before assuming v13/v14 patterns. |
+| **Next.js** | `16.3.7` | App Router, partial prerendering, streaming, Vercel-native. v16 dropped some conventions; check `frontend/AGENTS.md` before assuming v13/v14 patterns. |
 | **Cache Components** | enabled v0.8.6 (`cacheComponents: true` in `next.config.ts`) | Powers `/share/[slug]` PPR via `'use cache'` + `cacheTag('share:<slug>')` + `cacheLife({ revalidate: 3600 })`. Incompatible with `export const dynamic = "force-dynamic"` (had to be dropped from `/me` and `/u/[username]/card`). Helpers from `next/cache`: `cacheTag`, `cacheLife`, `revalidateTag(tag, { expire: 0 })`. Stubbed in vitest setup since they throw outside the Next runtime. |
-| **React** | `19.2.8` | Server Components, Actions, the modern data flow |
+| **React** | `19.3.0` | Server Components, Actions, the modern data flow |
 | **TypeScript** | `^5` | Sane component contracts |
 | **TailwindCSS** | `^4` | Utility-first; `@tailwindcss/postcss` is the v4 pipeline. No tailwind.config — config lives in `globals.css` via `@theme`. |
 | **tw-animate-css** | `^1.4` | v4-compatible replacement for `tailwindcss-animate` |
@@ -24,7 +24,7 @@
 
 **Bundler:** Turbopack (Next.js default in 16+).
 
-**Linting / formatting:** **ESLint** via `eslint-config-next` 16.2.12. Decision logged 2026-05-15 — chosen because the Next.js codemods and recommended rules ship through this config. Decision kept through v0.8.0; revisit Biome at v0.9.0 or v1.0 if perf/DX warrants.
+**Linting / formatting:** **ESLint** via `eslint-config-next` 16.3.7. Decision logged 2026-05-15 — chosen because the Next.js codemods and recommended rules ship through this config. Decision kept through v0.8.0; revisit Biome at v0.9.0 or v1.0 if perf/DX warrants.
 
 ---
 
@@ -33,10 +33,10 @@
 | Tool | Pinned (as of 2026-07-13) | Why |
 | --- | --- | --- |
 | **Python** | `3.12+` | Modern type system, performance, structural pattern matching |
-| **FastAPI** | `0.140` | Async-native, Pydantic-integrated, OpenAPI for free. Bumped 0.136→0.139 in the v1.0.x security slice to pull patched Starlette; 0.140 came with the 2026-07-28 dependency refresh. |
+| **FastAPI** | `0.142` | Async-native, Pydantic-integrated, OpenAPI for free. Bumped 0.136→0.139 in the v1.0.x security slice to pull patched Starlette; 0.140 came with the 2026-07-28 dependency refresh, 0.142 with v1.0.13. Since 0.141 an included router's routes sit behind a wrapper instead of being copied into `app.routes`. |
 | **Starlette** | `1.3.1+` | ASGI toolkit under FastAPI; imported directly in `main.py`. Pinned at the CVE-patched floor (PYSEC-2026-248/249, CVE-2026-48817/48818). |
 | **Pydantic** | `2.13` | Models for every API boundary and every scorer output |
-| **pydantic-settings** | `2.14` | `.env` + env-var loading for `Settings` |
+| **pydantic-settings** | `2.15` | `.env` + env-var loading for `Settings` |
 | **httpx** | `0.28` (with `h2`) | Async HTTP client with HTTP/2 multiplexing |
 | **SQLAlchemy** | `2.0.x` (async) + `asyncpg>=0.31` | Async ORM + Postgres driver for Neon. Statement cache disabled for pgBouncer transaction-mode pooling. |
 | **Alembic** | `1.18+` | Hand-authored migrations; reversibility tested in pytest. |

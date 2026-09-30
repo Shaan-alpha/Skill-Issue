@@ -78,15 +78,16 @@ class RedisCache:
         value: str,
         *,
         ttl_seconds: int,
-    ) -> bool:
-        """SET NX with TTL — used by singleflight locks. Returns True if
-        the caller acquired the key, False if someone else already holds it."""
+    ) -> bool | None:
+        """SET NX with TTL — used by singleflight locks. True if the caller
+        acquired the key, False if someone else already holds it, None if
+        Redis could not be reached (so there is no lock to wait for)."""
         full = self._build_key(namespace, key)
         try:
             result = await self._redis.set(full, value, ex=ttl_seconds, nx=True)
         except Exception:
             logger.warning("cache SETNX failed for %s", full, exc_info=True)
-            return False
+            return None
         # upstash-redis returns True/"OK" on success, None on NX-failure.
         return result is True or result == "OK"
 

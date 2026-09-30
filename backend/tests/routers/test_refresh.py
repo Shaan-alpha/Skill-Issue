@@ -153,7 +153,7 @@ async def test_refresh_happy_path_returns_report_and_writes_run(db, monkeypatch)
         return stub
 
     monkeypatch.setattr(
-        "app.routers.refresh.get_report_for_user", _fake_get_report_for_user, raising=False
+        "app.routers.refresh.get_fresh_report_for_user", _fake_get_report_for_user, raising=False
     )
 
     try:
@@ -203,7 +203,7 @@ async def test_refresh_continues_when_cache_delete_fails(db, monkeypatch):
         return stub
 
     monkeypatch.setattr(
-        "app.routers.refresh.get_report_for_user", _fake_get_report_for_user, raising=False
+        "app.routers.refresh.get_fresh_report_for_user", _fake_get_report_for_user, raising=False
     )
 
     try:
@@ -241,3 +241,45 @@ async def test_refresh_saved_target_does_not_404_on_ownership(db, monkeypatch):
         assert not (r.status_code == 404 and r.json() == {"detail": "no_saved_analysis"})
     finally:
         app.dependency_overrides.clear()
+
+
+async def test_refresh_stays_capped_while_redis_errors(db, monkeypatch):
+    """A Redis outage must degrade to the in-process cap, as the analyze and
+    narrative limiters have since v1.0.4, not remove the cap entirely."""
+    sid = await _setup_signed_in(db, monkeypatch)
+    u = await db.scalar(select(User).where(User.github_login == "alice"))
+    await upsert_analysis(db, user_id=u.id, target_login="octocat")
+    await db.commit()
+
+    from unittest.mock import AsyncMock
+
+    from app.cache.client import RedisCache
+    from app.db.session import get_db
+    from app.main import app
+    from app.ratelimit_fallback import InProcessRateLimiter
+    from tests.conftest import FakeRedis
+
+    async def _o():
+        yield db
+
+    app.dependency_overrides[get_db] = _o
+    broken = FakeRedis()
+    broken.fail_next = 10_000
+    cache = RedisCache(redis=broken)
+    monkeypatch.setattr("app.dependencies.get_cache", lambda: cache)
+    monkeypatch.setattr("app.routers.refresh.get_cache", lambda: cache, raising=False)
+    monkeypatch.setattr("app.ratelimit.in_process_limiter", InProcessRateLimiter())
+    monkeypatch.setattr(
+        "app.routers.refresh.get_fresh_report_for_user", AsyncMock(return_value=_stub_report())
+    )
+    monkeypatch.setattr("app.routers.refresh.record_run", AsyncMock())
+
+    try:
+        async with await _client() as ac:
+            ac.cookies.set("si_session", sid)
+            statuses = [(await ac.post("/me/refresh/octocat")).status_code for _ in range(11)]
+    finally:
+        app.dependency_overrides.clear()
+
+    assert statuses[:10] == [200] * 10
+    assert statuses[10] == 429

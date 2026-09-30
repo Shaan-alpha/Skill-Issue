@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 import pytest
 
@@ -96,17 +97,14 @@ async def test_lock_release_makes_next_caller_acquire(fake_cache: RedisCache) ->
 
 @pytest.mark.asyncio
 async def test_caller_proceeds_when_redis_fails(fake_cache: RedisCache, fake_redis) -> None:
-    """If Redis is unreachable, the lock acquisition silently falls through
-    (got=False signals 'no lock held'); caller proceeds with live work."""
-    fake_redis.fail_next = 100  # every redis call raises for this test
-    async with singleflight(
-        fake_cache,
-        "report",
-        "octocat",
-        poll_interval_seconds=0.005,
-        max_wait_seconds=0.02,
-    ) as got:
-        assert got is False
+    """With Upstash down there is no lock to wait for: the caller proceeds with
+    live work at once. Polling the dead lock (before v1.0.13) stalled every cold
+    analysis for the full wait during an outage."""
+    fake_redis.fail_next = 1_000  # every redis call raises for this test
+    started = time.monotonic()
+    async with singleflight(fake_cache, "report", "octocat", max_wait_seconds=2.0) as got:
+        assert got is True
+    assert time.monotonic() - started < 1.0
 
 
 async def test_lock_ttl_is_sixty() -> None:

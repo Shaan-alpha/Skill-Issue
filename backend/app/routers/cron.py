@@ -4,12 +4,11 @@ import hmac
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import settings as settings_module
 from app.auth.sessions import purge_expired_sessions
 from app.cron import run_refresh_chunk
-from app.db.session import get_db
+from app.db.session import DbSession
 
 router = APIRouter(prefix="/cron", tags=["cron"])
 
@@ -47,7 +46,7 @@ def require_cron_auth(
 # fire 405'd before any handler code ran.
 @router.api_route("/refresh-saved-analyses", methods=["GET", "POST"])
 async def refresh_saved_analyses(
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
     _auth: Annotated[None, Depends(require_cron_auth)],
 ) -> dict[str, object]:
     summary = await run_refresh_chunk(db)

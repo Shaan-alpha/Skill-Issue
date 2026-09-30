@@ -36,3 +36,11 @@ async def test_health_reports_cache_field() -> None:
     assert "cache" in body
     # Tests run without UPSTASH_REDIS_REST_URL → "unconfigured" is expected.
     assert body["cache"] in ("up", "down", "unconfigured")
+
+
+@pytest.mark.asyncio
+async def test_health_answers_head_requests() -> None:
+    """Uptime monitors commonly probe with HEAD; it returned 405."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.head("/health")
+    assert response.status_code == 200

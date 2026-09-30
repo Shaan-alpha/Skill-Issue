@@ -3,11 +3,10 @@ from __future__ import annotations
 from typing import Annotated, Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import require_trusted_origin, require_user
 from app.db.models import User
-from app.db.session import get_db
+from app.db.session import DbSession
 from app.persistence.analyses import (
     AnalysisNotFound,
     delete_analysis,
@@ -38,7 +37,7 @@ def _public_share_url(slug: str) -> str:
 async def share_analysis(
     analysis_id: int,
     background_tasks: BackgroundTasks,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
     user: Annotated[User, Depends(require_user)],
     _origin: Annotated[None, Depends(require_trusted_origin)],
 ) -> dict[str, Any]:
@@ -56,7 +55,7 @@ async def share_analysis(
 async def revoke_share(
     analysis_id: int,
     background_tasks: BackgroundTasks,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
     user: Annotated[User, Depends(require_user)],
     _origin: Annotated[None, Depends(require_trusted_origin)],
 ) -> Response:
@@ -75,7 +74,7 @@ async def revoke_share(
 async def delete_analysis_route(
     analysis_id: int,
     background_tasks: BackgroundTasks,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
     user: Annotated[User, Depends(require_user)],
     _origin: Annotated[None, Depends(require_trusted_origin)],
 ) -> Response:

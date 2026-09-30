@@ -9,12 +9,11 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.auth.dependencies import is_cross_site_write, optional_session
 from app.db.engine import engine
-from app.db.session import get_db
+from app.db.session import DbSession
 from app.dependencies import get_cache, get_report_for_user
 from app.models import Report
 from app.observability import RequestIDMiddleware, init_logging, init_sentry
@@ -74,7 +73,7 @@ app.include_router(cron.router)
 app.include_router(refresh.router)
 
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 async def health() -> dict[str, str]:
     db_status = "up"
     try:
@@ -112,7 +111,7 @@ async def analyze_user(
     username: str,  # path param forwarded to get_report_for_user via request scope
     _rl: Annotated[None, Depends(analyze_rate_limiter)],
     report: Annotated[Report, Depends(get_report_for_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
     session: Annotated[object | None, Depends(optional_session)],
 ) -> Report:
     """Ingest + score. Persists when a session is present; anonymous calls write nothing.

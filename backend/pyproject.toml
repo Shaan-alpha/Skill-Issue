@@ -1,6 +1,6 @@
 [project]
 name = "skill-issue-backend"
-version = "1.0.12"
+version = "1.0.13"
 description = "Skill Issue backend — FastAPI service that ingests a GitHub profile and returns a deterministic engineering report."
 readme = "README.md"
 authors = [
@@ -16,7 +16,7 @@ dependencies = [
     "h2>=4.4.1",  # CVE-2026-71554 (duplicate Host header request smuggling)
     "httpx>=0.28.1",
     "joserfc>=1.6.8",  # CVE-2026-49852 (JWT); security floor, transitive via authlib
-    "openai>=1.50",
+    "openai>=2.49,<3",  # v3 is a major API change; evaluated in v1.0.14
     "pydantic>=2",
     "pydantic-settings>=2.14.2",  # GHSA-4xgf-cpjx-pc3j
     "sentry-sdk[fastapi]>=2.66.0",
