@@ -74,3 +74,37 @@ describe("sentry.client init", () => {
     expect(lastInitOptions().tracesSampleRate).toBe(0);
   });
 });
+
+describe("sentry.client release and noise filters", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    initSpy.mockClear();
+    vi.stubEnv("NEXT_PUBLIC_SENTRY_DSN", "https://key@o1.ingest.sentry.io/1");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("tags events with the app release and drops known third-party noise", async () => {
+    const { APP_VERSION } = await import("@/lib/site");
+    await import("../sentry.client");
+    const options = lastInitOptions() as InitOptions & {
+      release?: string;
+      ignoreErrors?: RegExp[];
+      denyUrls?: RegExp[];
+    };
+
+    expect(options.release).toBe(APP_VERSION);
+    // Microsoft's Outlook/Teams link scanner: 33 events and 32 replays in Sentry.
+    expect(
+      (options.ignoreErrors ?? []).some((pattern) =>
+        pattern.test(
+          "Non-Error promise rejection captured with value: Object Not Found Matching Id:1, MethodName:update, ParamCount:4",
+        ),
+      ),
+    ).toBe(true);
+    // An injected executor script, not this app's bundle.
+    expect((options.denyUrls ?? []).some((pattern) => pattern.test("app:///executors/200.js"))).toBe(true);
+  });
+});
