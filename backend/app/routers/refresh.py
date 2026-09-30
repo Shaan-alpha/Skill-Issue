@@ -9,12 +9,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
 from app.auth.dependencies import _ResolvedSession, require_session, require_trusted_origin
-from app.cache.rate_limit import try_increment_counter
 from app.db.session import DbSession
 from app.dependencies import get_cache, get_fresh_report_for_user
 from app.models import Report
 from app.persistence.analyses import get_user_analysis_by_target, record_run
-from app.ratelimit import hour_bucket, seconds_until_next_hour
+from app.ratelimit import hourly_limit_allows, seconds_until_next_hour
 from app.settings import settings
 
 router = APIRouter(prefix="/me", tags=["me"])
@@ -31,23 +30,21 @@ async def force_refresh(
     if analysis is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no_saved_analysis")
 
-    cache = get_cache()
-    if cache is not None:
-        now = datetime.now(UTC)
-        result = await try_increment_counter(
-            cache,
-            name="force_refresh",
-            subject=f"user:{session.user.id}",
-            limit=settings.force_refresh_per_user_per_hour,
-            hour_bucket=hour_bucket(now),
+    now = datetime.now(UTC)
+    allowed = await hourly_limit_allows(
+        get_cache(),
+        name="force_refresh",
+        subject=f"user:{session.user.id}",
+        limit=settings.force_refresh_per_user_per_hour,
+        now=now,
+    )
+    if not allowed:
+        retry_after = seconds_until_next_hour(now)
+        return JSONResponse(
+            {"detail": "rate_limited", "retry_after_seconds": retry_after},
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            headers={"Retry-After": str(retry_after)},
         )
-        if not result.allowed:
-            retry_after = seconds_until_next_hour(now)
-            return JSONResponse(
-                {"detail": "rate_limited", "retry_after_seconds": retry_after},
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                headers={"Retry-After": str(retry_after)},
-            )
 
     started_at = datetime.now(UTC)
     # Fresh from GitHub: the report cache AND the GitHub response cache are
