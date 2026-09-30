@@ -3,10 +3,10 @@
   "private": true,
   "description": "Repo-root tooling manifest. Holds @vercel/config so Vercel can resolve vercel.ts. No application code lives here — frontend and backend each have their own manifests.",
   "engines": {
-    "node": ">=24"
+    "node": "24.x"
   },
   "devDependencies": {
-    "@vercel/config": "^0.5.0",
+    "@vercel/config": "^0.7.2",
     "typescript": "^7.0.2"
   }
 }
