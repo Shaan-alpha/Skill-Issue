@@ -60,7 +60,7 @@
 | **v1.0.10** | Dependency-manifest drift guard — CI fails if `pyproject.toml` / `uv.lock` / `requirements.txt` disagree | ✅ shipped |
 | **v1.0.11** | Cache Components navigation-state sweep — roast duplication, `/me` staleness, analytics double-count, badge a11y, session snapshot; + fixture time-bomb and backend version-drift guards | ✅ shipped |
 | **v1.0.12** | Narrative output sweep — truncated/empty/markdown narratives, alertable fallback signal; + alembic logging bug, 72 DB tests enabled in CI (12 repaired), Next 16.3.2 | ✅ shipped |
-| **v1.0.13** | Audit remediation + dependency refresh — two critical Next.js advisories, commit-before-response, singleflight coalescing, fresh force refresh, cron classification, honest share/delete UI, structured logs; `requirements.txt` generated in CI | 🚧 PR open, tag pending |
+| **v1.0.13** | Audit remediation + dependency refresh — two critical Next.js advisories, commit-before-response, singleflight coalescing, fresh force refresh, cron classification, honest share/delete UI, structured logs; `requirements.txt` generated in CI | ✅ shipped |
 | **v1.0.14** | Toolchain majors — TypeScript 6, Vitest 5, jest-dom 7, Sentry SDK 11, framer-motion 13, openai 3, SQLAlchemy 2.1, each proven alone | 📋 proposed |
 
 ---
@@ -1050,9 +1050,9 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 - [x] Backend: ruff clean; full suite green with a database attached.
 - [x] Frontend: lint, tsc, vitest and a production build pass; `npm audit` reports 0.
 - [x] All four version constants at `1.0.13`.
-- [ ] PR checks green and merged; prod smoke passed.
-- [ ] Housekeeping: blocked Dependabot PRs closed; Sentry noise archived.
-- [ ] `CHANGELOG.md` `[1.0.13]`; tag `v1.0.13` (operator checkpoint).
+- [x] PR **#111** checks green and merged; prod smoke passed: `/health` reports 1.0.13 on GET and HEAD, the narrator streams, and log lines arrive in Vercel as JSON carrying a `request_id` that matches the response's `X-Request-Id`.
+- [x] Housekeeping: Dependabot PRs 12 → 1 (blocked majors and superseded updates closed with notes; #75 kept for v1.0.14); Sentry FRONTEND-3/4/5 archived until escalating; 0 open Dependabot alerts (21 marked fixed).
+- [x] `CHANGELOG.md` `[1.0.13]`; tag `v1.0.13` on `d1b1e58`; GitHub Release published.
 
 ---
 

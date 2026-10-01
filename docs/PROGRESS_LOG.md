@@ -19,6 +19,35 @@ Format:
 
 ---
 
+## 2026-10-01 — Claude (Opus 5.5) with Shaan — v1.0.13 released
+
+**Slice:** v1.0.13 closeout.
+
+**Done:**
+- **Merged and deployed.** PR #111 merged as `d1b1e58`, with all five checks green on the PR and on `main`.
+- **Production verified:**
+  - `/health` returns `{"status":"ok","version":"1.0.13","db":"up","cache":"up"}`, and `HEAD /health` returns 200 (it was 405).
+  - Security headers are unchanged.
+  - A live mentor narrative streamed (292 chunks in 4.3s, ended by the done sentinel, not truncated).
+  - A cache-hit request's log line reached Vercel as JSON (`event`, `level`, `logger`, `timestamp`) with a `request_id` matching the response's `X-Request-Id`.
+  - The new deployment logged zero `HTTP Request:` lines, even with a live Groq call.
+- **Dependabot alerts: 17 open → 0**; GitHub marked 21 as fixed.
+- **Dependabot PRs: 12 → 1.**
+  - Dependabot closed #20, #73 and #74 itself once the ignore rules landed, with a generic "no longer updated" note, so each now also has a comment naming the real blocker.
+  - It also closed the superseded group PRs #107–#110.
+  - #71, #77, #78 and #80 were closed by hand as superseded.
+  - #75 (jest-dom 7) stays open for v1.0.14.
+- **Sentry:** FRONTEND-3/4/5 archived "until escalating" through a headless Sentry MCP session, so they return on their own if they recur.
+- **Released:** tagged `v1.0.13` on `d1b1e58`, and `release.yml` published the GitHub Release from `CHANGELOG [1.0.13]`.
+
+**Blocked / open:**
+- The deferred minors in the 2026-09-30 entry.
+- Operator items: the Sentry alert rule and source-map upload; browser-only checks of sign-in and share revoke on production.
+
+**Next:** v1.0.14, toolchain majors.
+
+---
+
 ## 2026-09-30 — Claude (Opus 5.5) with Shaan — v1.0.13: full audit, remediation and dependency refresh
 
 **Slice:** v1.0.13 (spec `docs/superpowers/specs/2026-09-30-v1.0.13-audit-remediation-design.md`, plan `docs/superpowers/plans/2026-09-30-v1.0.13-audit-remediation.md`).
