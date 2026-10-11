@@ -7,7 +7,7 @@
 [![Version](https://img.shields.io/github/v/release/Shaan-alpha/Skill-Issue?style=for-the-badge&label=release&color=10b981)](https://github.com/Shaan-alpha/Skill-Issue/releases)
 [![License](https://img.shields.io/github/license/Shaan-alpha/Skill-Issue?style=for-the-badge&color=475569)](./LICENSE)
 [![Live](https://img.shields.io/badge/live-skillissue.tech-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://skillissue.tech)
-[![Status](https://img.shields.io/badge/status-v1.0.11%20·%20live-10b981?style=for-the-badge)](https://skillissue.tech)
+[![Status](https://img.shields.io/badge/status-v1.0.13%20·%20live-10b981?style=for-the-badge)](https://skillissue.tech)
 
 [![Next.js](https://img.shields.io/badge/Next.js%2016-000000?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React%2019-149eca?style=for-the-badge&logo=react&logoColor=white)](https://react.dev/)
@@ -44,7 +44,7 @@ Drop in a username. Skill Issue analyzes repositories, engineering maturity, OSS
 | 🔓 **Tier-gated depth** | Higher tiers unlock richer signals: SPDX licence detection, CI workflows, PR review depth, commit-message quality, cross-repo refactor |
 | 🔥 **Two voices** | **Roast Mode** for what a blunt senior would say · **Mentor Mode** for how to fix it |
 | 🧾 **GitHub Receipts™** | Shareable 1200×630 scorecards for LinkedIn, X, Discord, portfolios |
-| ⚡ **Fast on repeat** | Warm `/analyze/{user}` p95 ≤ 200 ms, backed by Upstash Redis |
+| ⚡ **Fast on repeat** | Warm `/analyze/{user}` is served from an Upstash Redis report cache, designed for a p95 of at most 200 ms; the live measurement is still pending |
 
 ### The scoring rubric
 
@@ -105,13 +105,13 @@ flowchart TD
     class GH,PG,L,OAUTH,OG store
 ```
 
-Green is the part that must be right, and is pure: same GitHub data in, same score out, every point carrying its evidence. `p95 ≤ 200 ms` on a warm `/analyze` is layer A doing its job; if Redis is down, all four layers degrade to a slower but correct answer rather than an error.
+Green is the part that must be right, and is pure: same GitHub data in, same score out, every point carrying its evidence. A warm `/analyze` is answered from layer A, designed for a p95 of at most 200 ms (the live measurement is still pending); if Redis is down, all four layers degrade to a slower but correct answer rather than an error.
 
 ---
 
 ## Status
 
-**v1.0.11: live** at [skillissue.tech](https://skillissue.tech), with GitHub OAuth sign-in, Neon Postgres persistence, `/me` history, and opt-in `/share/[slug]` public links.
+**v1.0.13: live** at [skillissue.tech](https://skillissue.tech), with GitHub OAuth sign-in, Neon Postgres persistence, `/me` history, and opt-in `/share/[slug]` public links.
 
 Following the v1.0.0 stable launch, a security-hardening line ran from a full internal audit through v1.0.8, and CI-integrity work through v1.0.10. v1.0.11 closed a navigation-state bug sweep that traced four separate reports back to one root cause.
 
@@ -151,7 +151,7 @@ Following the v1.0.0 stable launch, a security-hardening line ran from a full in
 - **v0.8.1** — nightly cron with bearer auth.
 - **v0.8.0** — Sentry (FE+BE), PostHog (events + web vitals), structlog JSON logging, on-voice 404, full axe a11y pass.
 - **v0.7.2** — prod-certified the perf budget (CLS 0.080 → 0 structurally, perf 90 → 94, LCP 2,804 → 2,773 ms).
-- **v0.7.0** — Upstash Redis caching (warm `/analyze` ≤ 200 ms).
+- **v0.7.0** — Upstash Redis caching (warm `/analyze` designed for a p95 of at most 200 ms; not yet measured live).
 
 Full detail in [`CHANGELOG.md`](./CHANGELOG.md); the roadmap lives in [`PLAN.md`](./PLAN.md).
 
@@ -195,7 +195,7 @@ Verify:
 
 ```bash
 curl http://localhost:8000/health
-# {"status":"ok","version":"1.0.11","db":"up","cache":"unconfigured"}
+# {"status":"ok","version":"1.0.13","db":"up","cache":"unconfigured"}
 
 curl http://localhost:8000/analyze/octocat
 ```
