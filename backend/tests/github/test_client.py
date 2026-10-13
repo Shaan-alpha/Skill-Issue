@@ -189,7 +189,6 @@ async def test_unavailable_repository_reads_as_absent(status: int, body: dict[st
         assert await gh.get_repo_root_contents("owner", "blocked") == []
         assert await gh.list_commits("owner", "blocked", "owner", "2024-01-01") == []
         assert await gh.get_license("owner", "blocked") is None
-        assert await gh.list_workflow_files("owner", "blocked") == []
         assert await gh.get_repo_readme_text("owner", "blocked") == ""
         assert await gh.list_recent_commits_sample("owner", "blocked") == []
 
@@ -289,34 +288,6 @@ async def test_get_license_treats_noassertion_as_none() -> None:
     )
     async with GitHubClient(token="ghs_test") as gh:
         assert await gh.get_license("o", "r") is None
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_list_workflow_files_counts_entries() -> None:
-    respx.get("https://api.github.com/repos/o/r/contents/.github/workflows").mock(
-        return_value=Response(
-            200,
-            json=[
-                {"name": "ci.yml", "type": "file"},
-                {"name": "release.yml", "type": "file"},
-                {"name": "examples", "type": "dir"},
-            ],
-        )
-    )
-    async with GitHubClient(token="ghs_test") as gh:
-        files = await gh.list_workflow_files("o", "r")
-    assert files == ["ci.yml", "release.yml"]
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_list_workflow_files_returns_empty_on_404() -> None:
-    respx.get("https://api.github.com/repos/o/r/contents/.github/workflows").mock(
-        return_value=Response(404, json={"message": "Not Found"})
-    )
-    async with GitHubClient(token="ghs_test") as gh:
-        assert await gh.list_workflow_files("o", "r") == []
 
 
 @pytest.mark.asyncio

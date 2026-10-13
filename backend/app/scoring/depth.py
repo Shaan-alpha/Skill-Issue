@@ -49,14 +49,12 @@ def _at_least(profile_tier: TierName, threshold: TierName) -> bool:
 
 async def _enrich_repo_professional(repo_full_name: str, gh: "GitHubClient") -> dict[str, object]:
     owner, name = repo_full_name.split("/", 1)
-    license_task = gh.get_license(owner, name)
-    workflows_task = gh.list_workflow_files(owner, name)
-    readme_task = gh.get_repo_readme_text(owner, name)
-    license_id, workflows, readme = await gather_all(license_task, workflows_task, readme_task)
+    license_id, readme = await gather_all(
+        gh.get_license(owner, name), gh.get_repo_readme_text(owner, name)
+    )
     return {
         "full_name": repo_full_name,
         "license_id": license_id,
-        "workflow_count": len(workflows),
         "readme_length": len(readme or ""),
     }
 
@@ -94,11 +92,6 @@ async def enrich_for_tier(profile: Profile, base_tier: TierName, gh: "GitHubClie
         profile.licensed_repos = [
             str(r["full_name"]) for r in results if r["license_id"] is not None
         ]
-        profile.workflow_counts = {
-            str(r["full_name"]): int(r["workflow_count"])  # type: ignore[arg-type]
-            for r in results
-            if int(r["workflow_count"])  # type: ignore[arg-type]
-        }
         profile.readme_lengths = {
             str(r["full_name"]): int(r["readme_length"])  # type: ignore[arg-type]
             for r in results

@@ -137,21 +137,129 @@ def _review_count_payload(total: int = 0) -> dict[str, object]:
     }
 
 
+def _workflow_files_payload(
+    repos: dict[str, dict[str, list[tuple[str, str]]]],
+) -> dict[str, object]:
+    """`{"r0": {"github": [("ci.yml", "blob")]}}` -> the WorkflowFiles response."""
+    return {
+        "data": {
+            alias: {
+                forge: ({"entries": [{"name": n, "type": t} for n, t in entries]})
+                for forge, entries in dirs.items()
+            }
+            for alias, dirs in repos.items()
+        }
+    }
+
+
 def _mock_graphql(
     *,
     pinned_nodes: list[dict[str, object]] | None = None,
     external_prs: int = 0,
     external_reviews: int = 0,
+    workflow_files: dict[str, object] | Response | None = None,
 ) -> respx.Route:
-    return respx.post("https://api.github.com/graphql").mock(
-        side_effect=graphql_router(
+    responses: dict[str, object] = {
+        "PinnedRepos": _pinned_payload(pinned_nodes),
+        "ExternalPRs": _external_prs_payload(external_prs=external_prs),
+        "ExternalReviewCount": _review_count_payload(external_reviews),
+    }
+    if workflow_files is not None:
+        responses["WorkflowFiles"] = workflow_files
+    return respx.post("https://api.github.com/graphql").mock(side_effect=graphql_router(responses))
+
+
+def _one_repo_with_root(*entries: str) -> list[dict[str, object]]:
+    repos_payload = [_fake_repo("lib", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_commits(repos_payload)
+    _mock_profile_readme()
+    _mock_contents(repos_payload, {"lib": [{"name": e, "type": "dir"} for e in entries]})
+    return repos_payload
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_a_dot_github_without_workflows_is_not_ci() -> None:
+    """`.github` often holds only FUNDING.yml, issue templates, dependabot.yml or
+    assistant instructions. Only workflow files under `.github/workflows` run CI."""
+    _one_repo_with_root(".github", "README.md")
+    # `.github` exists but has no workflows/ directory: GitHub answers null.
+    _mock_graphql(workflow_files={"data": {"r0": {"github": None, "forgejo": None, "gitea": None}}})
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.repos[0].has_ci is False
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_workflow_files_mean_ci_and_are_counted() -> None:
+    _one_repo_with_root(".github")
+    _mock_graphql(
+        workflow_files=_workflow_files_payload(
             {
-                "PinnedRepos": _pinned_payload(pinned_nodes),
-                "ExternalPRs": _external_prs_payload(external_prs=external_prs),
-                "ExternalReviewCount": _review_count_payload(external_reviews),
+                "r0": {
+                    "github": [
+                        ("ci.yml", "blob"),
+                        ("release.yaml", "blob"),
+                        ("README.md", "blob"),
+                        ("templates", "tree"),
+                    ]
+                }
             }
         )
     )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.repos[0].has_ci is True
+    assert profile.workflow_counts == {"octocat/lib": 2}
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_forgejo_workflows_count_as_ci() -> None:
+    _one_repo_with_root(".forgejo")
+    _mock_graphql(
+        workflow_files=_workflow_files_payload({"r0": {"forgejo": [("build.yaml", "blob")]}})
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.repos[0].has_ci is True
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_a_failed_workflow_probe_falls_back_to_the_dot_github_dir() -> None:
+    """The probe only sharpens the CI signal; GitHub failing it must not cost
+    every repo its CI credit."""
+    _one_repo_with_root(".github")
+    _mock_graphql(workflow_files=Response(502))
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.repos[0].has_ci is True
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_no_workflow_probe_without_a_workflow_directory() -> None:
+    _one_repo_with_root("README.md", "tests")
+    route = _mock_graphql()
+
+    async with GitHubClient(token="ghs_test") as gh:
+        await ingest_profile("octocat", gh)
+
+    sent = [json.loads(call.request.content)["query"] for call in route.calls]
+    assert not any("WorkflowFiles" in query for query in sent)
 
 
 def _fake_repo(name: str, *, language: str | None = None) -> dict[str, object]:
@@ -429,7 +537,8 @@ async def test_ingest_profile_detects_readme_tests_ci_and_deployment_hints() -> 
     _mock_languages(repos_payload)
     _mock_commits(repos_payload)
     _mock_profile_readme()
-    _mock_graphql()
+    # Only "polished" has .github, so it is the probe's r0; it runs a ci.yml.
+    _mock_graphql(workflow_files=_workflow_files_payload({"r0": {"github": [("ci.yml", "blob")]}}))
     _mock_contents(
         repos_payload,
         {

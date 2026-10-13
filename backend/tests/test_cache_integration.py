@@ -95,9 +95,6 @@ def _mock_github_for_testuser() -> None:
         respx.get(f"https://api.github.com/repos/{owner}/{name}/license").mock(
             return_value=Response(200, json={"license": {"spdx_id": "MIT"}})
         )
-        respx.get(f"https://api.github.com/repos/{owner}/{name}/contents/.github/workflows").mock(
-            return_value=Response(200, json=[])
-        )
         respx.get(f"https://api.github.com/repos/{owner}/{name}/readme").mock(
             return_value=Response(
                 200,
@@ -138,6 +135,12 @@ def _mock_github_for_testuser() -> None:
                                 "pullRequestReviewContributions": {"nodes": []}
                             }
                         }
+                    }
+                },
+                "WorkflowFiles": {
+                    "data": {
+                        f"r{i}": {"github": {"entries": [{"name": "ci.yml", "type": "blob"}]}}
+                        for i in range(3)
                     }
                 },
                 "ContributionRepos": {

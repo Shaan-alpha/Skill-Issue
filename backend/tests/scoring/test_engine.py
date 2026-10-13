@@ -30,7 +30,6 @@ async def test_engine_runs_depth_for_high_scorer() -> None:
     profile = _profile("profile_senior.json")
     gh = AsyncMock()
     gh.get_license.return_value = "MIT"
-    gh.list_workflow_files.return_value = ["ci.yml"]
     gh.get_repo_readme_text.return_value = "# README\n## Setup"
     gh.get_review_depth.return_value = 200
     gh.get_repo_root_contents.return_value = ["pyproject.toml"]

@@ -53,20 +53,35 @@ async def test_hobbyist_tier_does_no_enrichment() -> None:
 
 
 @pytest.mark.asyncio
-async def test_professional_tier_runs_license_workflow_readme() -> None:
+async def test_professional_tier_runs_license_and_readme() -> None:
     profile = _bare_profile()
     gh = AsyncMock()
     gh.get_license.return_value = "MIT"
-    gh.list_workflow_files.return_value = ["ci.yml", "release.yml"]
     gh.get_repo_readme_text.return_value = "# README\n\n## Setup\n\n## Usage\n"
 
     await enrich_for_tier(profile, "Professional Developer", gh)
 
     assert "alice/a" in profile.licensed_repos
-    assert profile.workflow_counts.get("alice/a") == 2
     assert profile.readme_lengths.get("alice/a", 0) > 0
     gh.get_review_depth.assert_not_called()
     gh.get_contribution_repo_count.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_depth_keeps_the_workflow_counts_ingestion_already_found() -> None:
+    """Ingestion counts every repo's workflow files in one GraphQL probe, so the
+    old per-repo `.github/workflows` listing (one call each for the top ten)
+    would only repeat the work, and overwrite the result."""
+    profile = _bare_profile()
+    profile.workflow_counts = {"alice/a": 2}
+    gh = AsyncMock()
+    gh.get_license.return_value = None
+    gh.get_repo_readme_text.return_value = ""
+
+    await enrich_for_tier(profile, "Staff Engineer", gh)
+
+    assert profile.workflow_counts == {"alice/a": 2}
+    gh.list_workflow_files.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -74,7 +89,6 @@ async def test_senior_tier_adds_review_depth_and_dep_files() -> None:
     profile = _bare_profile()
     gh = AsyncMock()
     gh.get_license.return_value = None
-    gh.list_workflow_files.return_value = []
     gh.get_repo_readme_text.return_value = ""
     gh.get_review_depth.return_value = 250
     gh.get_repo_root_contents.return_value = ["package.json", "src", "Dockerfile"]
@@ -90,7 +104,6 @@ async def test_staff_tier_adds_commit_quality_and_cross_repo() -> None:
     profile = _bare_profile()
     gh = AsyncMock()
     gh.get_license.return_value = None
-    gh.list_workflow_files.return_value = []
     gh.get_repo_readme_text.return_value = ""
     gh.get_review_depth.return_value = None
     gh.get_repo_root_contents.return_value = []

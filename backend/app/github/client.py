@@ -357,23 +357,6 @@ class GitHubClient:
             return None
         return str(spdx)
 
-    async def list_workflow_files(self, owner: str, repo: str) -> list[str]:
-        """Return the names of files (not directories) under .github/workflows.
-
-        Returns [] when the directory doesn't exist (404) or when the whole repo
-        is empty (409 — "Git Repository is empty.").
-        """
-        resp = await self._request(
-            "GET", f"{API_BASE}/repos/{owner}/{repo}/contents/.github/workflows"
-        )
-        if _repo_unavailable(resp):
-            return []
-        resp.raise_for_status()
-        data = resp.json()
-        if not isinstance(data, list):
-            return []
-        return [str(e["name"]) for e in data if e.get("type") == "file"]
-
     async def get_repo_readme_text(self, owner: str, repo: str) -> str:
         """Return decoded README text for any repo, or "" when missing.
 

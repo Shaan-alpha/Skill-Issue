@@ -2,14 +2,20 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
+import httpx
+
+from app.github.client import is_rate_limited
 from app.github.queries import (
     EXTERNAL_PRS,
     EXTERNAL_REVIEW_COUNT,
     PINNED_REPOS,
+    WORKFLOW_FORGES,
     external_merged_prs_query,
+    workflow_files_query,
 )
 from app.models import Profile, Repo
 
@@ -49,43 +55,182 @@ class NotAnIndividualError(Exception):
 # diminishing and the API cost is real.
 ROOT_CONTENT_LIMIT = 20
 
-_TEST_DIRS = {"tests", "test", "__tests__", "spec", "specs"}
-_CI_MARKERS = {
-    ".github",
-    ".circleci",
-    ".gitlab-ci.yml",
-    ".travis.yml",
-    "azure-pipelines.yml",
-    "bitbucket-pipelines.yml",
-    "jenkinsfile",
-}
+# Root-listing heuristics. Names are compared lowercased. The sets follow the
+# 2026-10-13 research (each tool's own docs) and favour precision: names that
+# collide with unrelated projects (app.json is also Expo's config,
+# template.yaml is generic, `specs/` holds spec-driven-development docs) stay
+# out, and so do dead services (Cirrus CI shut down on 2026-06-01).
+_TEST_DIRS = frozenset(
+    {"tests", "test", "__tests__", "spec", "e2e", "cypress", "integration_test", "t", "testdata"}
+)
+_TEST_FILES = frozenset(
+    {
+        "cypress.json",
+        "pytest.ini",
+        ".pytest.ini",
+        "pytest.toml",
+        ".pytest.toml",
+        "conftest.py",
+        "tox.ini",
+        "tox.toml",
+        "noxfile.py",
+        "phpunit.xml",
+        "phpunit.dist.xml",
+        "phpunit.xml.dist",
+        ".rspec",
+        "dart_test.yaml",
+    }
+)
+_TEST_FILE_PREFIXES = (
+    "vitest.config.",
+    "vitest.workspace.",
+    "jest.config.",
+    "playwright.config.",
+    "cypress.config.",
+    "karma.conf.",
+    ".mocharc.",
+)
+_VITEST_PROJECT_CONFIG = re.compile(r"^vitest\.[\w-]+\.config\.")
+# Go test files sit beside the code; .NET test projects are `<Name>.Tests`.
+_TEST_NAME_SUFFIXES = ("_test.go", ".tests", ".test")
+
+_CI_MARKERS = frozenset(
+    {
+        ".gitlab-ci.yml",
+        "azure-pipelines.yml",
+        ".azure-pipelines.yml",
+        "bitbucket-pipelines.yml",
+        "jenkinsfile",
+        ".circleci",
+        ".travis.yml",
+        ".drone.yml",
+        ".woodpecker.yml",
+        ".woodpecker.yaml",
+        ".woodpecker",
+        "buildkite.yml",
+        "buildkite.yaml",
+        "buildkite.json",
+        ".buildkite",
+        "appveyor.yml",
+        ".appveyor.yml",
+        ".semaphore",
+        "codemagic.yaml",
+        "bitrise.yml",
+        "cloudbuild.yaml",
+        "cloudbuild.yml",
+        "cloudbuild.json",
+        "buildspec.yml",
+        ".tekton",
+        ".teamcity",
+    }
+)
+# These directories hold CI only when their `workflows/` subdirectory has a
+# .yml/.yaml file; on their own they often carry just FUNDING.yml, issue
+# templates, dependabot.yml or assistant instructions. _probe_workflow_files
+# checks every candidate repo in one GraphQL query.
+_WORKFLOW_DIRS = tuple(path for _alias, path in WORKFLOW_FORGES)
+_WORKFLOW_FILE_SUFFIXES = (".yml", ".yaml")
+
 _DEPLOYMENT_MARKERS: dict[str, str] = {
     "dockerfile": "dockerfile",
-    "docker-compose.yml": "docker-compose",
+    "containerfile": "containerfile",
+    "compose.yaml": "docker-compose",
+    "compose.yml": "docker-compose",
     "docker-compose.yaml": "docker-compose",
+    "docker-compose.yml": "docker-compose",
     "vercel.json": "vercel",
+    "vercel.toml": "vercel",
+    "vercel.ts": "vercel",
+    "vercel.mts": "vercel",
+    "vercel.js": "vercel",
+    "vercel.mjs": "vercel",
+    "vercel.cjs": "vercel",
     "netlify.toml": "netlify",
     "fly.toml": "fly",
     "render.yaml": "render",
-    "app.yaml": "app-engine",
+    "railway.json": "railway",
+    "railway.toml": "railway",
+    ".railway": "railway",
+    "wrangler.toml": "cloudflare",
+    "wrangler.json": "cloudflare",
+    "wrangler.jsonc": "cloudflare",
+    "procfile": "heroku",
+    "heroku.yml": "heroku",
     "serverless.yml": "serverless",
     "serverless.yaml": "serverless",
-    "procfile": "heroku",
-    "wrangler.toml": "cloudflare",
+    "serverless.ts": "serverless",
+    "serverless.js": "serverless",
+    "serverless.json": "serverless",
+    "sst.config.ts": "sst",
+    "amplify.yml": "amplify",
+    "firebase.json": "firebase",
+    ".firebaserc": "firebase",
+    "samconfig.toml": "aws-sam",
+    "cdk.json": "aws-cdk",
+    "appspec.yml": "aws-codedeploy",
+    ".ebextensions": "elastic-beanstalk",
+    "apprunner.yaml": "aws-app-runner",
+    "pulumi.yaml": "pulumi",
+    "pulumi.yml": "pulumi",
+    "main.tf": "terraform",
+    ".terraform.lock.hcl": "terraform",
+    "chart.yaml": "helm",
+    "helmfile.yaml": "helmfile",
+    "helmfile.yaml.gotmpl": "helmfile",
+    "helmfile.d": "helmfile",
+    "kustomization.yaml": "kustomize",
+    "kustomization.yml": "kustomize",
+    "kustomization": "kustomize",
+    "skaffold.yaml": "skaffold",
+    "railpack.json": "railpack",
+    "nixpacks.toml": "nixpacks",
+    ".do": "digitalocean",
+    "zbpack.json": "zeabur",
+    "captain-definition": "caprover",
+    ".kamal": "kamal",
+    "staticwebapp.config.json": "azure-static-web-apps",
+    "azure.yaml": "azure-developer-cli",
+    ".upsun": "upsun",
+    ".platform.app.yaml": "platform-sh",
+    "app.yaml": "app-engine",
 }
 
 
-def _classify_root_entries(entries: list[str]) -> tuple[bool, bool, bool, list[str]]:
-    """Derive (has_readme, has_tests, has_ci, deployment_hints) from root entry names."""
+class RootSignals(NamedTuple):
+    has_readme: bool
+    has_tests: bool
+    has_ci: bool
+    deployment_hints: list[str]
+    # Of _WORKFLOW_DIRS, the ones present: CI only if their workflows/ hold files.
+    workflow_dirs: tuple[str, ...]
+
+
+def _is_test_entry(name: str) -> bool:
+    return (
+        name in _TEST_DIRS
+        or name in _TEST_FILES
+        or name.startswith(_TEST_FILE_PREFIXES)
+        or _VITEST_PROJECT_CONFIG.match(name) is not None
+        or name.endswith(_TEST_NAME_SUFFIXES)
+    )
+
+
+def _classify_root_entries(entries: list[str]) -> RootSignals:
+    """Derive README / tests / CI / deployment signals from root entry names."""
     lowered = {entry.lower() for entry in entries}
-    has_readme = any(entry.startswith("readme") for entry in lowered)
-    has_tests = bool(lowered & _TEST_DIRS)
-    has_ci = bool(lowered & _CI_MARKERS)
     hints = [hint for marker, hint in _DEPLOYMENT_MARKERS.items() if marker in lowered]
-    # Preserve insertion order, dedupe (e.g. docker-compose.yml + .yaml both map to docker-compose).
+    if any(name.endswith(".tf") for name in lowered):
+        hints.append("terraform")
+    # Preserve insertion order, dedupe (e.g. compose.yaml + docker-compose.yml).
     seen: set[str] = set()
     unique_hints = [h for h in hints if not (h in seen or seen.add(h))]
-    return has_readme, has_tests, has_ci, unique_hints
+    return RootSignals(
+        has_readme=any(entry.startswith("readme") for entry in lowered),
+        has_tests=any(_is_test_entry(name) for name in lowered),
+        has_ci=bool(lowered & _CI_MARKERS),
+        deployment_hints=unique_hints,
+        workflow_dirs=tuple(d for d in _WORKFLOW_DIRS if d in lowered),
+    )
 
 
 def _parse_dt(value: str | None) -> datetime | None:
@@ -112,23 +257,74 @@ def _repo_from_rest(raw: dict[str, Any]) -> Repo:
     )
 
 
-async def _enrich_repo_signals(repo: Repo, gh: GitHubClient) -> None:
-    """Inspect a repo's root contents and populate README/tests/CI/deployment flags.
+async def _enrich_repo_signals(repo: Repo, gh: GitHubClient) -> tuple[str, ...]:
+    """Inspect a repo's root contents and populate README/tests/CI/deployment
+    flags. Returns the workflow directories present, for _probe_workflow_files.
 
     A repository GitHub won't serve (empty, DMCA'd, blocked) reads as an empty
     listing and keeps its conservative `False` flags. A rate limit or a server
     error propagates: scoring the repo as bare would cache a wrong, low report.
     """
     owner, name = repo.full_name.split("/", 1)
-    entries = await gh.get_repo_root_contents(owner, name)
-
-    has_readme, has_tests, has_ci, hints = _classify_root_entries(entries)
-    repo.has_readme = has_readme
-    repo.has_tests = has_tests
-    repo.has_ci = has_ci
-    for hint in hints:
+    signals = _classify_root_entries(await gh.get_repo_root_contents(owner, name))
+    repo.has_readme = signals.has_readme
+    repo.has_tests = signals.has_tests
+    repo.has_ci = signals.has_ci
+    for hint in signals.deployment_hints:
         if hint not in repo.deployment_hints:
             repo.deployment_hints.append(hint)
+    return signals.workflow_dirs
+
+
+async def _probe_workflow_files(
+    candidates: list[tuple[Repo, tuple[str, ...]]], gh: GitHubClient
+) -> dict[str, int]:
+    """Ask every candidate repo for its CI workflow files in one GraphQL query.
+
+    A repo has CI when `.github/workflows` (or the Forgejo / Gitea equivalent)
+    holds a .yml/.yaml file. Returns full_name -> workflow file count. The probe
+    only sharpens the CI signal, so a failed one falls back to the old reading
+    (a `.github` directory counts); a rate limit still propagates.
+    """
+    if not candidates:
+        return {}
+    variables: dict[str, Any] = {"owner": candidates[0][0].full_name.split("/", 1)[0]}
+    variables.update({f"n{i}": repo.name for i, (repo, _dirs) in enumerate(candidates)})
+    data: dict[str, Any] = {}
+    try:
+        data = await gh.graphql(workflow_files_query(len(candidates)), variables) or {}
+    except httpx.HTTPStatusError as e:
+        if is_rate_limited(e.response):
+            raise
+        logger.warning("Workflow probe failed (HTTP %s)", e.response.status_code)
+    except (httpx.TransportError, RuntimeError):
+        logger.warning("Workflow probe failed", exc_info=True)
+
+    counts: dict[str, int] = {}
+    for i, (repo, dirs) in enumerate(candidates):
+        found = data.get(f"r{i}")
+        if found is None:
+            repo.has_ci = repo.has_ci or ".github" in dirs
+            continue
+        count = sum(
+            1
+            for alias, _path in WORKFLOW_FORGES
+            for entry in (found.get(alias) or {}).get("entries") or []
+            if entry.get("type") == "blob"
+            and str(entry.get("name", "")).lower().endswith(_WORKFLOW_FILE_SUFFIXES)
+        )
+        if count:
+            repo.has_ci = True
+            counts[repo.full_name] = count
+    return counts
+
+
+async def _inspect_repo_roots(repos: list[Repo], gh: GitHubClient) -> dict[str, int]:
+    """Root-listing signals for each repo, then one probe of the CI workflow
+    directories found. Returns the workflow file count per repo."""
+    workflow_dirs = await gather_all(*(_enrich_repo_signals(r, gh) for r in repos))
+    candidates = [(r, dirs) for r, dirs in zip(repos, workflow_dirs, strict=True) if dirs]
+    return await _probe_workflow_files(candidates, gh)
 
 
 async def _external_pr_signals(username: str, gh: GitHubClient) -> dict[str, Any]:
@@ -245,8 +441,8 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
     inspected = repos[:ROOT_CONTENT_LIMIT]
     top_repos = [r for r in repos_raw if not r.get("fork")][:10]
     two_years_ago = (datetime.now(UTC) - timedelta(days=730)).isoformat()
-    _, language_maps, commit_lists = await gather_all(
-        gather_all(*(_enrich_repo_signals(r, gh) for r in inspected)),
+    workflow_counts, language_maps, commit_lists = await gather_all(
+        _inspect_repo_roots(inspected, gh),
         gather_all(*(gh.list_languages(*r.full_name.split("/", 1)) for r in inspected)),
         gather_all(
             *(
@@ -282,6 +478,7 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
         external_reviews=external_signals["external_reviews"],
         external_orgs=external_signals["external_orgs"],
         commit_dates=sorted(commit_dates_set),
+        workflow_counts=workflow_counts,
         account_created_at=_parse_dt(user["created_at"]) or datetime.now(UTC),
         company=user.get("company"),
         blog=user.get("blog"),
