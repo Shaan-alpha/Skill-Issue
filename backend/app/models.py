@@ -96,7 +96,10 @@ class Profile(BaseModel):
     has_sponsors_listing: bool = False
     is_github_star: bool = False
     is_developer_program_member: bool = False
-    # --- v0.3.0 depth signals (populated only when base tier unlocks them) ---
+    # --- depth signals ---
+    # licensed_repos, review_avg_comments and cross_repo_contribution_count are
+    # set only when the base tier unlocks them; workflow_counts comes from
+    # ingestion's workflow probe for every profile.
     licensed_repos: list[str] = Field(default_factory=list)
     workflow_counts: dict[str, int] = Field(default_factory=dict)
     review_avg_comments: int | None = None

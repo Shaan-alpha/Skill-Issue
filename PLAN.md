@@ -1070,6 +1070,7 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 - **Bottlenecks:** login-level, per-repo and depth reads run concurrently; the in-flight bound moved into `GitHubClient` so depth enrichment is capped too; `gather_all` cancels siblings on failure. Measured live: 20.0 s → 8.8 s (Senior), Staff 16.9 s → 10.9 s for the depth step alone.
 - **Robustness:** a repo GitHub won't serve reads as absent; rate limits fail the analysis (503 `service_busy`) instead of caching a low score; one immediate retry for 5xx/dropped connections; depth enrichment inside the error mapping; empty profile-README repo tolerated; failed OAuth callbacks land on `/?auth=failed`.
 - **Ops:** narrator timeout 30 s / 1 retry and `max_completion_tokens`; one Sentry event per narrative outage; server/edge Sentry `release`; session lookup releases its DB connection before the ingest; `last_used_at` written at most every 10 min; `/analyze` dedups runs and records real latency; report cache schema → v2.
+- **Review round (fresh-context reviewer, no Critical findings):** GraphQL rate limits (HTTP 200 or 403) raise `GitHubRateLimited` and fail the analysis, and errored GraphQL bodies are never cached; Sentry's auto-enabled OpenAI integration is disabled, because through dedupe it swallowed the fingerprinted narrative-outage event; a 100-commit page cut-off no longer reads as a dry spell, and a cut-off that hides the year before triggers a `per_page=1` look for a commit in it (Learning Trajectory); manifest evidence uses fixed labels, so no repo-owner file name reaches the narrator; plus transaction hygiene, `.env.test`, case-insensitive tool subjects and a count-only `PinnedRepos` query.
 
 **Rulings (recorded in the PR):** this audit is v1.0.14 and the toolchain majors move to v1.0.15; scoring weights change only where Shaan approved them (Recruiter Signal); the new evidence rows carry no points; licence points stay Professional+-gated.
 
@@ -1077,7 +1078,7 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 **Exit criteria:**
 - [x] Every correctness fix test-first, watched failing with the described signature; live checks against GitHub/Groq where the fix depends on them.
-- [x] Backend: ruff clean; full suite green against a real Postgres (792).
+- [x] Backend: ruff clean; full suite green against a real Postgres (831 after the review round).
 - [x] Frontend: lint, tsc, vitest (123) and a production build pass; UI verified in Chrome at five widths.
 - [x] All version constants at `1.0.14`; report cache schema bumped so pre-fix reports are not served.
 - [ ] PR checks green and merged; prod smoke: `/health` 1.0.14, a live analysis shows the new evidence, the narrator streams.

@@ -58,6 +58,13 @@ Format:
   - `?auth=failed`/`cancelled` notice;
   - a history-card refresh now shows the new score.
 - **Merged PR #120** (Next 16.3.8, README fixes) and rebased the branch onto it.
+- **Review round.** A fresh-context reviewer read `1ec5817..3e0171b` and returned "with fixes": no Critical, four Important and ten Minor findings, each with a reproduction. All were fixed test-first:
+  - GraphQL rate limits (an HTTP 200 carrying `RATE_LIMITED`, or a secondary-limit 200/403) now raise `GitHubRateLimited`. The four fail-soft readers and the workflow probe let it through, `/analyze` maps it to 503, and errored GraphQL bodies are never cached;
+  - Sentry's auto-enabled OpenAI integration captured provider exceptions first, and dedupe then dropped our fingerprinted event, so the integration is disabled. A real client with an in-memory transport proves one fingerprinted event per outage;
+  - the 100-commit page cut-off no longer reads as a dry spell (`commit_history_complete_since`). A cut-off that hides the year before triggers one `per_page=1` look for a commit in it, which also fixed a pre-existing Learning Trajectory loss for very active developers;
+  - manifest evidence uses fixed labels (`*.csproj`, `Cargo.toml`), so no file name a repo owner chose reaches the narrator's prompt;
+  - minors: transactions end before slow analyses (stale cookie, `/me/refresh`); a 403 with `Retry-After` counts as a rate limit; `.env.test` is not a test suite; tool-written subjects match case-insensitively; `PinnedRepos` asks for `totalCount` only; `gather_all` moved to `app/concurrency.py`; the run dedupe selects one column; stale docs corrected;
+  - one pushback: "Fortran Free Form" and "Lean 4" need no entries, because GitHub reports a language's Linguist group (checked on fortran-lang/stdlib and leanprover-community/mathlib4).
 
 **Decisions (Shaan, via questions):**
 1. Wire the dead depth signals in at zero cost (evidence rows, no points).
@@ -79,6 +86,9 @@ Format:
 - **Positional `side_effect=[...]` GraphQL mocks encode call order.** The e2e mock's labels had already drifted, with "REVIEW_DEPTH" being consumed by ExternalReviewCount, and parallelising would have broken them silently. `tests/graphql_router.py` routes by operation name now.
 - **`next dev` 16.3.8 regenerates the managed block in `frontend/AGENTS.md`** on every start, so it was committed to keep the tree clean.
 - **Pre-existing test-order dependence:** reloading `app.auth.oauth` in one test broke `pytest.raises` in another whenever the files ran in that order. Fixed by patching module-held settings instead of reloading.
+- **Sentry's dedupe drops a second capture of the same exception object.** Whichever integration captures first wins, here the auto-enabled OpenAI one, and unit tests that mock the SDK can't see it. Only a real client with an in-memory transport showed the lost event.
+- **GitHub's GraphQL API reports rate limits on an HTTP 200.** Status-based error handling and the response cache both treated them as success.
+- **`ruff format` rewrites a `.json` file passed to it explicitly**, as though it were a Python dict literal (four-space indent, trailing comma). Pass it `.py` paths only.
 
 **Blocked / open:**
 - PR to merge, then a prod smoke: `/health` 1.0.14, a live analysis showing the new evidence, the narrator streaming. The tag `v1.0.14` is an operator checkpoint.
@@ -89,6 +99,7 @@ Format:
   - a shared httpx client;
   - batching `/share/{slug}`'s queries.
 - Still operator-side from v1.0.13: the Sentry alert rule and source-map upload.
+- For v1.0.15: Starlette's deprecation warning for its `httpx`-based test client (the one warning in the backend suite).
 
 **Next:** v1.0.15 toolchain majors (Dependabot #116–#119 already open), then a Python 3.13/3.14 slice and v1.1.0 Progress Pulse.
 

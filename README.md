@@ -41,7 +41,7 @@ Drop in a username. Skill Issue analyzes repositories, engineering maturity, OSS
 | 💯 **Engineering score** | 100 points across six weighted signals: every point traceable to evidence, shown on each score card |
 | 🪜 **7-tier ladder** | Hobbyist → Student Builder → Entry-Level → Professional → Senior → Staff → Principal, with intra-tier sub-rank |
 | 🏅 **Stackable badges** | OSS Contributor, PR Master, Maintainer, Star Magnet, Polyglot, Long-haul, Indie Hacker, Toolmaker: deterministic and multi-earnable |
-| 🔓 **Tier-gated depth** | Higher tiers unlock licence credit (Professional+), PR review depth (Senior+) and cross-repo breadth (Staff+). CI workflows, README depth, dependency manifests and commit-message quality are read for every profile at no extra cost |
+| 🔓 **Tier-gated depth** | Higher tiers unlock licence credit (Professional+), PR review depth (Senior+) and cross-repo breadth (Staff+). README depth, dependency manifests and commit-message quality come from data every analysis already reads; CI workflows cost one batched query |
 | 🔥 **Two voices** | **Roast Mode** for what a blunt senior would say · **Mentor Mode** for how to fix it |
 | 🧾 **GitHub Receipts™** | Shareable 1200×630 scorecards for LinkedIn, X, Discord, portfolios |
 | ⚡ **Fast on repeat** | Warm `/analyze/{user}` is served from an Upstash Redis report cache, designed for a p95 of at most 200 ms; the live measurement is still pending |

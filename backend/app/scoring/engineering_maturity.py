@@ -10,7 +10,9 @@ _MANIFESTS_LISTED = 4
 # Exact GitHub Linguist names. A language counts when compile-time type checking
 # is mandatory or the ecosystem default (2026-10-13 research). Python is a
 # deliberate exception, for its type-hint ecosystem; languages whose typing is
-# opt-in (Elixir, Julia, Groovy, Luau) stay out.
+# opt-in (Elixir, Julia, Groovy, Luau) stay out. GitHub reports a language's
+# Linguist group (Fortran Free Form as Fortran, Lean 4 as Lean, TSX as
+# TypeScript), so a group's name covers its members.
 TYPED_LANGUAGES = {
     "TypeScript",
     "Python",

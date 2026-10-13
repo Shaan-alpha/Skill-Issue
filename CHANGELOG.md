@@ -17,12 +17,13 @@ A release from a full review of how scores are calculated, checked against how d
 ### Changed: how scores are calculated
 - **Open-source credit counts only pull requests merged into other people's repositories.** Every merged pull request used to count, including ones into your own repositories, so merging your own work looked like open-source contribution and could earn the OSS Contributor and PR Master badges. Pull requests into private repositories never count.
 - **Recruiter Signal now measures what a hiring manager sees first on your profile:** a written profile README (3 points), three or more pinned repositories (3), a bio (2), a website or "available for hire" (2), a project with more than 50 stars (3), and GitHub recognition such as GitHub Star, Sponsors or the Developer Program (2). GitHub's untouched starter README doesn't count.
-- **Consistency is judged on the last year only.** The quiet stretch before your first commit in that year now counts as a gap, so one recent commit no longer reads as a steady rhythm. A gap older than a year no longer costs you points, and accounts younger than a year are judged from the day they were created.
+- **Consistency is judged on the last year only.** The quiet stretch before your first commit in that year now counts as a gap, so one recent commit no longer reads as a steady rhythm. A gap older than a year no longer costs you points, and accounts younger than a year are judged from the day they were created. If you commit so often that the latest 100 commits we read from a repository don't reach back a full year, the stretch before them isn't counted as a gap.
 - **CI detection is stricter and broader.** A `.github` folder counts only when it holds GitHub Actions workflows, since it often holds nothing but funding links or issue templates. Forgejo and Gitea workflows, Woodpecker, Drone, Buildkite, AppVeyor, Semaphore, Codemagic, Bitrise, Google Cloud Build, AWS CodeBuild, Tekton and TeamCity now count.
-- **Test detection recognises modern setups:** Vitest, Jest, Playwright, Cypress, Mocha, pytest, PHPUnit, RSpec, Dart, Go test files and .NET test projects.
+- **Test detection recognises modern setups:** Vitest, Jest, Playwright, Cypress, Mocha, pytest, PHPUnit, RSpec, Dart, Go test files and .NET test projects. A `.env.test` file no longer counts as a test suite.
 - **Deployment detection is up to date:** `compose.yaml`, `vercel.ts`, Cloudflare's `wrangler.jsonc`, Railway, Firebase, Amplify, SST, AWS SAM, CDK and CodeDeploy, Pulumi, Terraform, Helm, Kustomize, Kamal and more.
 - **36 more statically typed languages earn the typed-language signal**, including Dart, Scala, Haskell, Zig, OCaml, F#, Elm and Gleam.
 - **A pinned repository is no longer mistaken for a deployed one.**
+- **Learning Trajectory looks for older commits before deciding you weren't active the year before.** Very active developers whose latest 100 commits per repository all fell inside the last year used to lose the two-year-activity points.
 
 ### Added
 - **Every score card shows its evidence.** "Why N of M" opens the list of signals behind a score and the points each one earned.
@@ -31,20 +32,21 @@ A release from a full review of how scores are calculated, checked against how d
 
 ### Fixed
 - **Fresh analyses take roughly half as long.** GitHub data is now fetched in parallel, and about 20 redundant GitHub requests per high-tier analysis are gone.
-- **A moment of GitHub rate-limiting no longer leaves a wrongly low score for six hours.** The analysis now says GitHub is busy instead of scoring repositories as if they had no README, tests or CI.
+- **A moment of GitHub rate-limiting no longer leaves a wrongly low score for six hours.** The analysis now says GitHub is busy instead of scoring repositories as if they had no README, tests or CI, or you as if you had no open-source contributions.
 - **One unavailable repository no longer breaks the whole analysis**, whether it was taken down or blocked, and neither does an empty profile-README repository.
 - **Refreshing an analysis from your history now shows the new score.**
 - **Deeper checks for higher tiers return a clear "busy" response** when they hit GitHub's limits, instead of a server error.
-- **Your history records how long an analysis really took**, and viewing the same report again no longer stores another copy of it.
+- **Your history records how long an analysis really took**, and viewing the same report again no longer stores another copy of it or moves it to the top of your Recent list. A fresh analysis or a refresh still does.
 
 ### Security
-- **Text you write on your profile can no longer steer the AI narrator.** The website and bio fields reach it only as a hostname, or as the fact that a bio exists.
+- **Text you write on your profile can no longer steer the AI narrator.** The website and bio fields reach it only as a hostname, or as the fact that a bio exists, and dependency manifests only as known file names, never as a name a repository owner chose.
 - **Closed new Next.js advisories** by moving to Next.js 16.3.8, along with patched versions of two dependencies it pulls in.
 
 ### Changed: reliability and operations
-- **The AI narrator gives up on an unresponsive provider after 30 seconds**, instead of holding the page for minutes.
+- **The AI narrator gives up on an unresponsive provider within about a minute** (a 30-second wait, retried once), instead of holding the page for up to half an hour.
 - **An AI narrator outage raises one alert carrying the provider's error**, instead of up to three separate ones.
 - **Server-side error reports name the release they came from.**
+- **Analyses no longer hold a database connection while they wait on GitHub**, including with an expired sign-in cookie and during a forced refresh.
 
 ### Internal
 - The planned major upgrades (TypeScript 6, Vitest 5, jest-dom 7, Sentry SDK 11, framer-motion 13, openai 3, SQLAlchemy 2.1) move to v1.0.15.
