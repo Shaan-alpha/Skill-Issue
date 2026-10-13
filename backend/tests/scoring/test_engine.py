@@ -30,10 +30,7 @@ async def test_engine_runs_depth_for_high_scorer() -> None:
     profile = _profile("profile_senior.json")
     gh = AsyncMock()
     gh.get_license.return_value = "MIT"
-    gh.get_repo_readme_text.return_value = "# README\n## Setup"
     gh.get_review_depth.return_value = 200
-    gh.get_repo_root_contents.return_value = ["pyproject.toml"]
-    gh.list_recent_commits_sample.return_value = ["feat: add foo"]
     gh.get_contribution_repo_count.return_value = 10
 
     report = await run_scoring_engine(profile, gh)

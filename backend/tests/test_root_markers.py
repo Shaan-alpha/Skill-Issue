@@ -5,7 +5,7 @@ stay out."""
 
 import pytest
 
-from app.ingestion.profile import _classify_root_entries
+from app.ingestion.profile import _classify_root_entries, _manifests
 
 
 def _has_tests(*entries: str) -> bool:
@@ -186,3 +186,82 @@ def test_two_spellings_of_one_tool_are_one_hint() -> None:
         "dockerfile",
         "docker-compose",
     ]
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        "package.json",
+        "pyproject.toml",
+        "requirements.txt",
+        "Pipfile",
+        "setup.py",
+        "setup.cfg",
+        "environment.yml",
+        "Cargo.toml",
+        "go.mod",
+        "Gemfile",
+        "app.gemspec",
+        "composer.json",
+        "pom.xml",
+        "build.gradle",
+        "build.gradle.kts",
+        "build.sbt",
+        "Package.swift",
+        "Podfile",
+        "pubspec.yaml",
+        "mix.exs",
+        "deno.json",
+        "deno.jsonc",
+        "App.csproj",
+        "Lib.fsproj",
+        "Directory.Packages.props",
+        "packages.config",
+        "build.zig.zon",
+        "gleam.toml",
+        "pkg.cabal",
+        "opam",
+        "lib.opam",
+        "Project.toml",
+        "DESCRIPTION",
+        "rebar.config",
+        "vcpkg.json",
+        "conanfile.txt",
+        "shard.yml",
+        "deps.edn",
+        "project.clj",
+        "elm.json",
+        "dub.json",
+        "tool.nimble",
+        "fpm.toml",
+        "alire.toml",
+        "Scarb.toml",
+        "Move.toml",
+        "lakefile.lean",
+        "MODULE.bazel",
+        "flake.nix",
+    ],
+)
+def test_recognises_a_dependency_manifest(entry: str) -> None:
+    assert _manifests([entry]) == [entry.lower()]
+
+
+@pytest.mark.parametrize(
+    "entry",
+    # Lockfiles record resolved versions, and these are build or project files
+    # whose dependencies live elsewhere. Manifest.toml is Julia's and Gleam's lockfile.
+    [
+        "Manifest.toml",
+        "package-lock.json",
+        "Cargo.lock",
+        "poetry.lock",
+        "stack.yaml",
+        "cabal.project",
+        "build.zig",
+        "settings.gradle",
+        "global.json",
+        "dune-project",
+    ],
+)
+def test_lockfiles_and_build_files_are_not_manifests(entry: str) -> None:
+    assert _manifests([entry]) == []

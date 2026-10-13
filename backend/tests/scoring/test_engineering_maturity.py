@@ -107,3 +107,42 @@ def test_statically_typed_primary_language_earns_the_typed_signal(language: str)
 )
 def test_dynamic_primary_language_does_not_earn_the_typed_signal(language: str) -> None:
     assert "typed_language" not in _signals_for_primary_language(language)
+
+
+def _evidence(profile: Profile, signal: str) -> list[tuple[str, int]]:
+    return [(e.detail, e.weight) for e in score(profile).evidence if e.signal == signal]
+
+
+def test_commit_subject_quality_is_shown_as_evidence() -> None:
+    profile = _load("profile_student.json")
+    profile.commit_subjects = ["Add retry budget to the GitHub client"] * 9 + ["wip"] * 3
+
+    assert _evidence(profile, "commit_quality") == [
+        ("75% of 12 commit subjects are specific and fit in 72 characters", 0)
+    ]
+
+
+def test_too_few_commits_to_judge_shows_no_commit_quality() -> None:
+    profile = _load("profile_student.json")
+    profile.commit_subjects = ["Add retry budget to the GitHub client"] * 9
+
+    assert _evidence(profile, "commit_quality") == []
+
+
+def test_dependency_manifests_are_shown_as_evidence() -> None:
+    profile = _load("profile_senior.json")
+    profile.repos[0].manifests = ["package.json", "pyproject.toml"]
+    profile.repos[1].manifests = ["cargo.toml"]
+
+    assert _evidence(profile, "dependency_hygiene") == [
+        ("Dependency manifests in 2 repos: cargo.toml, package.json, pyproject.toml", 0)
+    ]
+
+
+def test_evidence_rows_add_no_points() -> None:
+    profile = _load("profile_senior.json")
+    before = score(profile).points
+    profile.commit_subjects = ["Add retry budget to the GitHub client"] * 20
+    profile.repos[0].manifests = ["package.json"]
+
+    assert score(profile).points == before

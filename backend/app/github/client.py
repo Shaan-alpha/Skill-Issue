@@ -5,7 +5,7 @@ import base64
 import logging
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Any, NamedTuple, Self
 
 import httpx
 
@@ -75,6 +75,14 @@ class _CachedResponse:
             raise httpx.HTTPStatusError(
                 f"Cached {self.status_code}", request=request, response=response
             )
+
+
+class RootEntry(NamedTuple):
+    """One entry of a repository's root listing."""
+
+    name: str
+    type: str  # "file", "dir", "symlink" or "submodule"
+    size: int
 
 
 class GitHubCallCapExceeded(Exception):
@@ -324,8 +332,8 @@ class GitHubClient:
         resp.raise_for_status()
         return resp.json()
 
-    async def get_repo_root_contents(self, owner: str, repo: str) -> list[str]:
-        """Return root-level file and directory names for a repo.
+    async def get_repo_root_contents(self, owner: str, repo: str) -> list[RootEntry]:
+        """Return the root-level entries (name, type, size) of a repo.
 
         Empty repos return 409 ("Git Repository is empty.") on `/contents`; older
         GitHub responses occasionally returned 404 for the same condition. Surface
@@ -340,7 +348,14 @@ class GitHubClient:
         data = resp.json()
         if not isinstance(data, list):
             return []
-        return [str(entry.get("name", "")) for entry in data]
+        return [
+            RootEntry(
+                name=str(entry.get("name", "")),
+                type=str(entry.get("type", "")),
+                size=int(entry.get("size") or 0),
+            )
+            for entry in data
+        ]
 
     async def get_license(self, owner: str, repo: str) -> str | None:
         """Return the repo's SPDX licence id, or None if absent / NOASSERTION.
@@ -356,37 +371,6 @@ class GitHubClient:
         if not spdx or spdx == "NOASSERTION":
             return None
         return str(spdx)
-
-    async def get_repo_readme_text(self, owner: str, repo: str) -> str:
-        """Return decoded README text for any repo, or "" when missing.
-
-        404 = no README file. 409 = repo is empty (no commits yet) — also treated
-        as no README.
-        """
-        resp = await self._request("GET", f"{API_BASE}/repos/{owner}/{repo}/readme")
-        if _repo_unavailable(resp):
-            return ""
-        resp.raise_for_status()
-        content = resp.json().get("content", "")
-        return _decode_readme_content(content)
-
-    async def list_recent_commits_sample(
-        self, owner: str, repo: str, *, limit: int = 100
-    ) -> list[str]:
-        """Return the most-recent commit messages on the default branch (up to limit).
-
-        404 = repo or branch missing. 409 = repo is empty (no commits yet).
-        Both surface as [].
-        """
-        resp = await self._request(
-            "GET",
-            f"{API_BASE}/repos/{owner}/{repo}/commits",
-            params={"per_page": limit},
-        )
-        if _repo_unavailable(resp):
-            return []
-        resp.raise_for_status()
-        return [str(c.get("commit", {}).get("message", "")) for c in resp.json()]
 
     async def get_review_depth(self, username: str) -> int | None:
         """Return the avg bodyText length across the 25 most-recent reviews, or None.

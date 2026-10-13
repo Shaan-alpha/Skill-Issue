@@ -70,4 +70,16 @@ def score(profile: Profile) -> ScoreResult:
             )
             points += 4
 
+    # Context row (no points): README size comes free with the root listing.
+    readmes = [r.readme_bytes for r in non_fork if r.readme_bytes > 0]
+    if readmes:
+        average_kb = sum(readmes) / len(readmes) / 1024
+        evidence.append(
+            Evidence(
+                signal="readme_depth",
+                detail=f"READMEs average {average_kb:.1f} KB across {len(readmes)} repos",
+                weight=0,
+            )
+        )
+
     return make_result(points=points, max_points=MAX_POINTS, evidence=evidence)

@@ -94,3 +94,14 @@ def test_repo_quality_license_majority_does_not_fire_when_few_licensed() -> None
     profile.licensed_repos = [profile.repos[0].full_name]
     result = repo_quality.score(profile)
     assert not any(e.signal == "license_majority" for e in result.evidence)
+
+
+def test_readme_depth_is_shown_as_evidence() -> None:
+    profile = _with_recent_commit(_load("profile_senior.json"))
+    profile.repos[0].readme_bytes = 4096
+    profile.repos[1].readme_bytes = 2048
+    before = score(profile).points
+
+    rows = [(e.detail, e.weight) for e in score(profile).evidence if e.signal == "readme_depth"]
+    assert rows == [("READMEs average 3.0 KB across 2 repos", 0)]
+    assert score(profile).points == before

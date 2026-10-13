@@ -47,23 +47,20 @@ async def test_hobbyist_tier_does_no_enrichment() -> None:
     await enrich_for_tier(profile, "Hobbyist", gh)
     assert profile.licensed_repos == []
     assert profile.workflow_counts == {}
-    assert profile.readme_lengths == {}
     assert profile.review_avg_comments is None
     gh.get_license.assert_not_called()
     gh.list_workflow_files.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_professional_tier_runs_license_and_readme() -> None:
+async def test_professional_tier_reads_licenses() -> None:
     profile = _bare_profile()
     gh = AsyncMock()
     gh.get_license.return_value = "MIT"
-    gh.get_repo_readme_text.return_value = "# README\n\n## Setup\n\n## Usage\n"
 
     await enrich_for_tier(profile, "Professional Developer", gh)
 
-    assert "alice/a" in profile.licensed_repos
-    assert profile.readme_lengths.get("alice/a", 0) > 0
+    assert profile.licensed_repos == ["alice/a"]
     gh.get_review_depth.assert_not_called()
     gh.get_contribution_repo_count.assert_not_called()
 
@@ -77,7 +74,6 @@ async def test_depth_keeps_the_workflow_counts_ingestion_already_found() -> None
     profile.workflow_counts = {"alice/a": 2}
     gh = AsyncMock()
     gh.get_license.return_value = None
-    gh.get_repo_readme_text.return_value = ""
 
     await enrich_for_tier(profile, "Staff Engineer", gh)
 
@@ -86,51 +82,29 @@ async def test_depth_keeps_the_workflow_counts_ingestion_already_found() -> None
 
 
 @pytest.mark.asyncio
-async def test_senior_tier_adds_review_depth_and_dep_files() -> None:
+async def test_senior_tier_adds_review_depth() -> None:
     profile = _bare_profile()
     gh = AsyncMock()
     gh.get_license.return_value = None
-    gh.get_repo_readme_text.return_value = ""
     gh.get_review_depth.return_value = 250
-    gh.get_repo_root_contents.return_value = ["package.json", "src", "Dockerfile"]
 
     await enrich_for_tier(profile, "Senior Engineer", gh)
 
     assert profile.review_avg_comments == 250
-    assert "package.json" in profile.dep_files.get("alice/a", [])
+    gh.get_contribution_repo_count.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_staff_tier_adds_commit_quality_and_cross_repo() -> None:
+async def test_staff_tier_adds_cross_repo_breadth() -> None:
     profile = _bare_profile()
     gh = AsyncMock()
     gh.get_license.return_value = None
-    gh.get_repo_readme_text.return_value = ""
     gh.get_review_depth.return_value = None
-    gh.get_repo_root_contents.return_value = []
-    gh.list_recent_commits_sample.return_value = [
-        "feat: add thing",
-        "fix: handle null",
-        "wip",
-    ]
     gh.get_contribution_repo_count.return_value = 12
 
     await enrich_for_tier(profile, "Staff Engineer", gh)
 
-    assert isinstance(profile.commit_message_quality, int)
-    assert 0 <= profile.commit_message_quality <= 100
     assert profile.cross_repo_contribution_count == 12
-
-
-def test_commit_message_quality_bounds_and_edge_cases() -> None:
-    from app.scoring.depth import _commit_message_quality
-
-    assert _commit_message_quality(["feat: add thing"]) == 100  # conventional
-    assert _commit_message_quality(["x" * 60]) == 100  # long first line
-    assert _commit_message_quality([""]) == 0  # empty must not IndexError
-    # Pathological long/scope message: no crash, bounded processing.
-    huge = "feat(" + "a" * 10_000 + "): " + "z" * 100_000
-    assert isinstance(_commit_message_quality([huge]), int)
 
 
 class _OverlapFake:
@@ -155,17 +129,8 @@ class _OverlapFake:
     async def get_license(self, owner: str, name: str) -> object:
         return await self._call("license", None)
 
-    async def get_repo_readme_text(self, owner: str, name: str) -> object:
-        return await self._call("readme", "")
-
     async def get_review_depth(self, username: str) -> object:
         return await self._call("review_depth", None)
-
-    async def get_repo_root_contents(self, owner: str, name: str) -> object:
-        return await self._call("root_contents", [])
-
-    async def list_recent_commits_sample(self, owner: str, name: str, *, limit: int) -> object:
-        return await self._call("commit_sample", [])
 
     async def get_contribution_repo_count(self, username: str, *, min_commits: int) -> object:
         return await self._call("contribution_repos", 0)
@@ -183,4 +148,22 @@ async def test_unlocked_tiers_enrich_concurrently() -> None:
 
     assert gh.ran_together("license", "review_depth")
     assert gh.ran_together("review_depth", "contribution_repos")
-    assert gh.ran_together("license", "commit_sample")
+    assert gh.ran_together("license", "contribution_repos")
+
+
+@pytest.mark.asyncio
+async def test_depth_spends_no_calls_on_data_ingestion_already_has() -> None:
+    """README size, manifests and commit subjects come from ingestion's own
+    reads now: ten README downloads, five root listings and five commit
+    samples per Staff-tier analysis were spent on nothing."""
+    profile = _bare_profile()
+    gh = AsyncMock()
+    gh.get_license.return_value = None
+    gh.get_review_depth.return_value = None
+    gh.get_contribution_repo_count.return_value = 0
+
+    await enrich_for_tier(profile, "Staff Engineer", gh)
+
+    gh.get_repo_readme_text.assert_not_called()
+    gh.get_repo_root_contents.assert_not_called()
+    gh.list_recent_commits_sample.assert_not_called()

@@ -50,6 +50,9 @@ class NotAnIndividualError(Exception):
     so the frontend can render a specific message."""
 
 
+# Commit messages are attacker-influenced; only a bounded prefix is examined.
+_COMMIT_SUBJECT_MAX = 500
+
 # How many repos to inspect for README / tests / CI / deployment signals.
 # Matches the cap used for language aggregation. Beyond this, signals are
 # diminishing and the API cost is real.
@@ -196,6 +199,68 @@ _DEPLOYMENT_MARKERS: dict[str, str] = {
 }
 
 
+# Root dependency manifests (2026-10-13 research). Lockfiles (manifest.toml is
+# Julia's and Gleam's) and build files whose dependencies live elsewhere
+# (stack.yaml, build.zig, settings.gradle) are not manifests.
+_MANIFEST_FILES = frozenset(
+    {
+        "package.json",
+        "pyproject.toml",
+        "requirements.txt",
+        "pipfile",
+        "setup.py",
+        "setup.cfg",
+        "environment.yml",
+        "cargo.toml",
+        "go.mod",
+        "gemfile",
+        "composer.json",
+        "pom.xml",
+        "build.gradle",
+        "build.gradle.kts",
+        "build.sbt",
+        "package.swift",
+        "podfile",
+        "pubspec.yaml",
+        "mix.exs",
+        "deno.json",
+        "deno.jsonc",
+        "directory.packages.props",
+        "packages.config",
+        "build.zig.zon",
+        "gleam.toml",
+        "opam",
+        "project.toml",
+        "description",
+        "rebar.config",
+        "vcpkg.json",
+        "conanfile.txt",
+        "conanfile.py",
+        "shard.yml",
+        "deps.edn",
+        "project.clj",
+        "elm.json",
+        "dub.json",
+        "dub.sdl",
+        "fpm.toml",
+        "alire.toml",
+        "scarb.toml",
+        "move.toml",
+        "lakefile.lean",
+        "lakefile.toml",
+        "module.bazel",
+        "flake.nix",
+    }
+)
+_MANIFEST_SUFFIXES = (".csproj", ".fsproj", ".vbproj", ".cabal", ".opam", ".gemspec", ".nimble")
+
+
+def _manifests(names: list[str]) -> list[str]:
+    """The dependency manifests among root entry names, lowercased and sorted."""
+    lowered = {name.lower() for name in names}
+    return sorted(n for n in lowered if n in _MANIFEST_FILES or n.endswith(_MANIFEST_SUFFIXES))
+
+
 class RootSignals(NamedTuple):
     has_readme: bool
     has_tests: bool
@@ -275,7 +340,14 @@ async def _enrich_repo_signals(repo: Repo, gh: GitHubClient) -> tuple[str, ...]:
     error propagates: scoring the repo as bare would cache a wrong, low report.
     """
     owner, name = repo.full_name.split("/", 1)
-    signals = _classify_root_entries(await gh.get_repo_root_contents(owner, name))
+    entries = await gh.get_repo_root_contents(owner, name)
+    names = [entry.name for entry in entries]
+    signals = _classify_root_entries(names)
+    repo.readme_bytes = max(
+        (e.size for e in entries if e.type == "file" and e.name.lower().startswith("readme")),
+        default=0,
+    )
+    repo.manifests = _manifests(names)
     repo.has_readme = signals.has_readme
     repo.has_tests = signals.has_tests
     repo.has_ci = signals.has_ci
@@ -467,13 +539,19 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
             languages[language] = languages.get(language, 0) + bytes_count
 
     commit_dates_set: set[datetime] = set()
+    commit_subjects: list[str] = []
     for repo_commits in commit_lists:
         for c in repo_commits:
-            date_str = c.get("commit", {}).get("author", {}).get("date")
+            commit = c.get("commit") or {}
+            date_str = (commit.get("author") or {}).get("date")
             if date_str:
                 # Normalize to a UTC-aware day so downstream date math is safe.
                 day = datetime.strptime(date_str[:10], "%Y-%m-%d").replace(tzinfo=UTC)
                 commit_dates_set.add(day)
+            # Commit messages are untrusted text: keep a bounded first line.
+            subject = str(commit.get("message") or "")[:_COMMIT_SUBJECT_MAX].splitlines()
+            if subject and subject[0].strip():
+                commit_subjects.append(subject[0].strip())
 
     return Profile(
         username=user["login"],
@@ -488,6 +566,7 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
         external_reviews=external_signals["external_reviews"],
         external_orgs=external_signals["external_orgs"],
         commit_dates=sorted(commit_dates_set),
+        commit_subjects=commit_subjects,
         workflow_counts=workflow_counts,
         account_created_at=_parse_dt(user["created_at"]) or datetime.now(UTC),
         company=user.get("company"),

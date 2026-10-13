@@ -65,6 +65,8 @@ class Repo(BaseModel):
     deployment_hints: list[str]  # e.g. ["dockerfile", "vercel"]; deployment artifacts only
     is_pinned: bool = False
     size_kb: int = 0
+    readme_bytes: int = 0  # size of the root README file, 0 when there is none
+    manifests: list[str] = Field(default_factory=list)  # root dependency manifests
     last_commit_at: datetime | None
     created_at: datetime
 
@@ -81,6 +83,8 @@ class Profile(BaseModel):
     external_reviews: int
     external_orgs: set[str] = Field(default_factory=set)
     commit_dates: list[datetime]
+    # First lines of the user's own commits (the same fetch as commit_dates).
+    commit_subjects: list[str] = Field(default_factory=list)
     account_created_at: datetime
     # Recruiter Signal fields
     pinned_count: int = 0
@@ -93,10 +97,7 @@ class Profile(BaseModel):
     # --- v0.3.0 depth signals (populated only when base tier unlocks them) ---
     licensed_repos: list[str] = Field(default_factory=list)
     workflow_counts: dict[str, int] = Field(default_factory=dict)
-    readme_lengths: dict[str, int] = Field(default_factory=dict)
     review_avg_comments: int | None = None
-    dep_files: dict[str, list[str]] = Field(default_factory=dict)
-    commit_message_quality: int | None = None
     cross_repo_contribution_count: int | None = None
 
 

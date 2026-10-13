@@ -7,7 +7,7 @@ import pytest
 import respx
 from httpx import Response
 
-from app.github.client import GitHubClient
+from app.github.client import GitHubClient, RootEntry
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "github_responses"
 
@@ -29,22 +29,28 @@ async def test_get_user_returns_typed_payload() -> None:
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_get_repo_root_contents_returns_entry_names() -> None:
+async def test_get_repo_root_contents_returns_names_types_and_sizes() -> None:
+    """Sizes come free with the listing: they measure README depth without
+    downloading each README."""
     respx.get("https://api.github.com/repos/octocat/Hello-World/contents").mock(
         return_value=Response(
             200,
             json=[
-                {"name": "README.md", "type": "file"},
-                {"name": "tests", "type": "dir"},
-                {"name": "Dockerfile", "type": "file"},
+                {"name": "README.md", "type": "file", "size": 4096},
+                {"name": "tests", "type": "dir", "size": 0},
+                {"name": "Dockerfile", "type": "file", "size": 120},
             ],
         )
     )
 
     async with GitHubClient(token="ghs_test") as gh:
-        names = await gh.get_repo_root_contents("octocat", "Hello-World")
+        entries = await gh.get_repo_root_contents("octocat", "Hello-World")
 
-    assert names == ["README.md", "tests", "Dockerfile"]
+    assert entries == [
+        RootEntry("README.md", "file", 4096),
+        RootEntry("tests", "dir", 0),
+        RootEntry("Dockerfile", "file", 120),
+    ]
 
 
 @pytest.mark.asyncio
@@ -76,19 +82,6 @@ async def test_get_repo_root_contents_returns_empty_for_empty_repo_409() -> None
         names = await gh.get_repo_root_contents("owner", "empty")
 
     assert names == []
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_list_recent_commits_sample_returns_empty_on_409_empty_repo() -> None:
-    respx.get("https://api.github.com/repos/owner/empty/commits").mock(
-        return_value=Response(409, json={"message": "Git Repository is empty."})
-    )
-
-    async with GitHubClient(token="ghs_test") as gh:
-        msgs = await gh.list_recent_commits_sample("owner", "empty", limit=10)
-
-    assert msgs == []
 
 
 @pytest.mark.asyncio
@@ -189,8 +182,6 @@ async def test_unavailable_repository_reads_as_absent(status: int, body: dict[st
         assert await gh.get_repo_root_contents("owner", "blocked") == []
         assert await gh.list_commits("owner", "blocked", "owner", "2024-01-01") == []
         assert await gh.get_license("owner", "blocked") is None
-        assert await gh.get_repo_readme_text("owner", "blocked") == ""
-        assert await gh.list_recent_commits_sample("owner", "blocked") == []
 
 
 @pytest.mark.asyncio
@@ -288,49 +279,6 @@ async def test_get_license_treats_noassertion_as_none() -> None:
     )
     async with GitHubClient(token="ghs_test") as gh:
         assert await gh.get_license("o", "r") is None
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_get_repo_readme_text_returns_decoded() -> None:
-    import base64
-
-    content = "# Hello\nSecond line."
-    respx.get("https://api.github.com/repos/o/r/readme").mock(
-        return_value=Response(
-            200,
-            json={"content": base64.b64encode(content.encode()).decode(), "encoding": "base64"},
-        )
-    )
-    async with GitHubClient(token="ghs_test") as gh:
-        assert await gh.get_repo_readme_text("o", "r") == content
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_get_repo_readme_text_returns_empty_on_404() -> None:
-    respx.get("https://api.github.com/repos/o/r/readme").mock(
-        return_value=Response(404, json={"message": "Not Found"})
-    )
-    async with GitHubClient(token="ghs_test") as gh:
-        assert await gh.get_repo_readme_text("o", "r") == ""
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_list_recent_commits_sample_returns_message_list() -> None:
-    respx.get(url__startswith="https://api.github.com/repos/o/r/commits").mock(
-        return_value=Response(
-            200,
-            json=[
-                {"commit": {"message": "feat: add thing\n\nlong body"}},
-                {"commit": {"message": "wip"}},
-            ],
-        )
-    )
-    async with GitHubClient(token="ghs_test") as gh:
-        msgs = await gh.list_recent_commits_sample("o", "r", limit=10)
-    assert msgs == ["feat: add thing\n\nlong body", "wip"]
 
 
 @pytest.mark.asyncio

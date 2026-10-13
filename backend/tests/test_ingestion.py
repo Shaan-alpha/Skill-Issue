@@ -434,6 +434,74 @@ async def test_external_pr_search_counts_public_repositories_only() -> None:
     assert "is:public" in external_query["variables"]["externalMerged"].split()
 
 
+@pytest.mark.asyncio
+@respx.mock
+async def test_readme_size_and_manifests_come_from_the_root_listing() -> None:
+    """README depth and dependency manifests used to cost ten README downloads
+    and five more root listings in depth enrichment; the listing ingestion
+    already fetches has both."""
+    repos_payload = [_fake_repo("web", language="TypeScript")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_commits(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql()
+    respx.get("https://api.github.com/repos/octocat/web/contents").mock(
+        return_value=Response(
+            200,
+            json=[
+                {"name": "README.md", "type": "file", "size": 5120},
+                {"name": "package.json", "type": "file", "size": 900},
+                {"name": "App.csproj", "type": "file", "size": 300},
+                {"name": "readme-assets", "type": "dir", "size": 0},
+                {"name": "src", "type": "dir", "size": 0},
+            ],
+        )
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    repo = profile.repos[0]
+    assert repo.readme_bytes == 5120
+    assert repo.manifests == ["app.csproj", "package.json"]
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_commit_subjects_come_from_the_users_own_commits() -> None:
+    """Commit-message quality used to sample each repo's latest commits by
+    anyone, bots included, at five extra calls. Ingestion already fetches the
+    user's own commits; their first lines are the subjects."""
+    repos_payload = [_fake_repo("lib", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql()
+    respx.get(url__startswith="https://api.github.com/repos/octocat/lib/commits").mock(
+        return_value=Response(
+            200,
+            json=[
+                {
+                    "commit": {
+                        "author": {"date": "2026-10-02T10:00:00Z"},
+                        "message": "Add retry budget\n\nBody.",
+                    }
+                },
+                {"commit": {"author": {"date": "2026-10-01T10:00:00Z"}, "message": "wip"}},
+            ],
+        )
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.commit_subjects == ["Add retry budget", "wip"]
+
+
 _STARTER_PROFILE_README = """### Hi there 👋
 
 <!--
