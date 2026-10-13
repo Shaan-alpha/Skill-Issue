@@ -5,7 +5,6 @@ from app.scoring.base import make_result
 
 MAX_POINTS = 30
 NINETY_DAYS = timedelta(days=90)
-NON_DEPLOYMENT_HINTS = {"pinned"}
 
 
 def score(profile: Profile) -> ScoreResult:
@@ -35,7 +34,7 @@ def score(profile: Profile) -> ScoreResult:
         )
         points += 8
 
-    if any(set(repo.deployment_hints) - NON_DEPLOYMENT_HINTS for repo in non_fork):
+    if any(repo.deployment_hints for repo in non_fork):
         evidence.append(
             Evidence(
                 signal="deployment_hint",

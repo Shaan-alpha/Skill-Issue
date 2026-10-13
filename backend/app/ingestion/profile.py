@@ -211,8 +211,7 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
     }
 
     for r in repos:
-        if r.name in pinned_names:
-            r.deployment_hints.append("pinned")
+        r.is_pinned = r.name in pinned_names
 
     # Enrich README / tests / CI / deployment signals from each repo's root tree.
     # Capped at ROOT_CONTENT_LIMIT to stay polite to GitHub on heavy profiles.

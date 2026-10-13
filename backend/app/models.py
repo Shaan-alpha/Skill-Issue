@@ -62,7 +62,8 @@ class Repo(BaseModel):
     has_readme: bool
     has_tests: bool
     has_ci: bool
-    deployment_hints: list[str]  # e.g. ["dockerfile", "vercel.json"]
+    deployment_hints: list[str]  # e.g. ["dockerfile", "vercel"]; deployment artifacts only
+    is_pinned: bool = False
     size_kb: int = 0
     last_commit_at: datetime | None
     created_at: datetime

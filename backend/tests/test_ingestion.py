@@ -10,6 +10,7 @@ from httpx import Response
 
 from app.github.client import GitHubClient
 from app.ingestion.profile import ingest_profile
+from app.scoring import engineering_maturity
 
 FIXTURES = Path(__file__).parent / "fixtures" / "github_responses"
 
@@ -186,9 +187,36 @@ async def test_pinned_repos_get_tagged() -> None:
     async with GitHubClient(token="ghs_test") as gh:
         profile = await ingest_profile("octocat", gh)
 
-    pinned = [r for r in profile.repos if "pinned" in r.deployment_hints]
+    pinned = [r for r in profile.repos if r.is_pinned]
     assert len(pinned) == 1
     assert pinned[0].name == first_non_fork_name
+    # A pin is not a deployment artifact, so it never lands in deployment_hints.
+    assert all("pinned" not in r.deployment_hints for r in profile.repos)
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_pinned_repo_with_tests_is_not_production_ready() -> None:
+    """A pin is a curation choice, not a deployment artifact. Pinning a repo that
+    has tests but no deployment config must not earn Engineering Maturity's
+    "Pairs testing with deployment artifacts" signal."""
+    repos_payload = [_fake_repo("tested-lib", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_commits(repos_payload)
+    _mock_profile_readme()
+    _mock_contents(
+        repos_payload,
+        {"tested-lib": [{"name": "README.md", "type": "file"}, {"name": "tests", "type": "dir"}]},
+    )
+    _mock_graphql(pinned_nodes=[{"name": "tested-lib"}])
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    signals = {e.signal for e in engineering_maturity.score(profile).evidence}
+    assert "production_ready" not in signals
 
 
 @pytest.mark.asyncio
@@ -375,7 +403,6 @@ async def test_ingest_profile_detects_readme_tests_ci_and_deployment_hints() -> 
     assert bare.has_readme is False
     assert bare.has_tests is False
     assert bare.has_ci is False
-    # Deployment hints stay empty (or only "pinned" if pinned, which it isn't here)
     assert bare.deployment_hints == []
 
 
