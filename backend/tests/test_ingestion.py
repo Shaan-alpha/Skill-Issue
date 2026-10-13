@@ -818,8 +818,14 @@ async def test_a_rate_limited_graphql_query_fails_the_ingest(
             await ingest_profile("octocat", gh)
 
 
-def _commit(day: datetime) -> dict[str, object]:
-    return {"commit": {"author": {"date": day.strftime("%Y-%m-%dT12:00:00Z")}, "message": "Fix"}}
+def _commit(day: datetime, *, committed: datetime | None = None) -> dict[str, object]:
+    return {
+        "commit": {
+            "author": {"date": day.strftime("%Y-%m-%dT12:00:00Z")},
+            "committer": {"date": (committed or day).strftime("%Y-%m-%dT12:00:00Z")},
+            "message": "Fix",
+        }
+    }
 
 
 @pytest.mark.asyncio
@@ -910,6 +916,32 @@ async def test_no_older_commit_check_when_the_year_before_is_already_visible() -
         await ingest_profile("octocat", gh)
 
     assert [call.request.url.params.get("until") for call in busy.calls] == [None]
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_the_history_boundary_follows_committer_dates() -> None:
+    """GitHub filters and orders a commit list by committer date. A rebased
+    commit keeps its old author date, so taking the boundary from author dates
+    would claim the history complete further back than the page reaches."""
+    repos_payload = [_fake_repo("busy", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql()
+    today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    page = [_commit(today - timedelta(days=i)) for i in range(99)]
+    page.append(_commit(today - timedelta(days=300), committed=today - timedelta(days=10)))
+    respx.get(url__startswith="https://api.github.com/repos/octocat/busy/commits").mock(
+        return_value=Response(200, json=page)
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.commit_history_complete_since == today - timedelta(days=98)
 
 
 @pytest.mark.asyncio

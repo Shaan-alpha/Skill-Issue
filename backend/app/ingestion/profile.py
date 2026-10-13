@@ -310,9 +310,10 @@ def _visible_chars(markdown: str | None) -> int:
     return len(_HTML_COMMENT.sub("", markdown or "").strip())
 
 
-def _commit_day(commit: dict[str, Any]) -> datetime | None:
-    """The commit's author date as a UTC-aware day, so date math stays safe."""
-    date_str = (commit.get("author") or {}).get("date")
+def _commit_day(commit: dict[str, Any], role: str = "author") -> datetime | None:
+    """The commit's author (or committer) date as a UTC-aware day, so date
+    math stays safe."""
+    date_str = (commit.get(role) or {}).get("date")
     if not date_str:
         return None
     return datetime.strptime(date_str[:10], "%Y-%m-%d").replace(tzinfo=UTC)
@@ -561,19 +562,23 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
     # Repos whose full page fits inside the last year: the year before is unseen.
     cut_within_year: list[dict[str, Any]] = []
     for raw, repo_commits in zip(top_repos, commit_lists, strict=True):
-        repo_days: list[datetime] = []
+        committed_days: list[datetime] = []
         for c in repo_commits:
             commit = c.get("commit") or {}
             day = _commit_day(commit)
             if day is not None:
                 commit_dates_set.add(day)
-                repo_days.append(day)
+            if (committed := _commit_day(commit, "committer") or day) is not None:
+                committed_days.append(committed)
             # Commit messages are untrusted text: keep a bounded first line.
             subject = str(commit.get("message") or "")[:_COMMIT_SUBJECT_MAX].splitlines()
             if subject and subject[0].strip():
                 commit_subjects.append(subject[0].strip())
-        if len(repo_commits) >= _COMMITS_PER_REPO and repo_days:
-            oldest = min(repo_days)
+        # GitHub filters and orders the list by committer date, so a full
+        # page's coverage ends at its oldest committer date. A rebased commit
+        # keeps an older author date, which would claim coverage further back.
+        if len(repo_commits) >= _COMMITS_PER_REPO and committed_days:
+            oldest = min(committed_days)
             complete_since = oldest if complete_since is None else max(complete_since, oldest)
             if oldest > one_year_ago:
                 cut_within_year.append(raw)
