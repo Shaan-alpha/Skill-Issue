@@ -8,7 +8,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import text
+from sqlalchemy import select, text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.auth.dependencies import is_cross_site_write, optional_session
@@ -133,12 +133,17 @@ async def analyze_user(
             target_login=report.username,
         )
         shash = _scores_hash(report)
-        latest = (
-            await db.get(AnalysisRun, analysis.latest_run_id) if analysis.latest_run_id else None
+        # Only the hash: the run row also carries the whole report JSON.
+        latest_hash = (
+            await db.scalar(
+                select(AnalysisRun.scores_hash).where(AnalysisRun.id == analysis.latest_run_id)
+            )
+            if analysis.latest_run_id
+            else None
         )
         # A cached report re-served on another page view is the run already
         # recorded; storing it again only duplicated the report JSON.
-        if latest is None or latest.scores_hash != shash:
+        if latest_hash != shash:
             await record_run(
                 db,
                 analysis_id=analysis.id,
