@@ -11,7 +11,7 @@ import pytest
 import respx
 from httpx import Response
 
-from app.github.client import GitHubClient
+from app.github.client import GitHubClient, GitHubRateLimited
 from app.ingestion.profile import ingest_profile
 from app.scoring import engineering_maturity
 from tests.graphql_router import graphql_router
@@ -772,6 +772,50 @@ async def test_a_rate_limited_repo_read_fails_the_ingest_instead_of_scoring_it_l
 
     async with GitHubClient(token="ghs_test", max_retries=1) as gh:
         with pytest.raises(httpx.HTTPStatusError):
+            await ingest_profile("octocat", gh)
+
+
+_GRAPHQL_PRIMARY_LIMIT = Response(
+    200,
+    json={
+        "data": None,
+        "errors": [{"type": "RATE_LIMITED", "message": "API rate limit exceeded for user ID 1."}],
+    },
+    headers={"X-RateLimit-Remaining": "0"},
+)
+_GRAPHQL_SECONDARY_LIMIT = Response(
+    403,
+    json={"message": "You have exceeded a secondary rate limit. Please wait a few minutes."},
+    headers={"Retry-After": "0"},
+)
+
+
+@pytest.mark.asyncio
+@respx.mock
+@pytest.mark.parametrize(
+    "operation", ["PinnedRepos", "ExternalPRs", "ExternalReviewCount", "WorkflowFiles"]
+)
+@pytest.mark.parametrize(
+    "limit", [_GRAPHQL_PRIMARY_LIMIT, _GRAPHQL_SECONDARY_LIMIT], ids=["primary", "secondary"]
+)
+async def test_a_rate_limited_graphql_query_fails_the_ingest(
+    operation: str, limit: Response
+) -> None:
+    """The external-PR, review-count and workflow reads degrade when GitHub
+    can't answer them, but a rate limit read as "none" scored up to 14 points
+    low, and the report cache kept that for six hours."""
+    _one_repo_with_root(".github")
+    responses: dict[str, object] = {
+        "PinnedRepos": _pinned_payload(),
+        "ExternalPRs": _external_prs_payload(external_prs=40),
+        "ExternalReviewCount": _review_count_payload(4),
+        "WorkflowFiles": _workflow_files_payload({"r0": {"github": [("ci.yml", "blob")]}}),
+    }
+    responses[operation] = limit
+    respx.post("https://api.github.com/graphql").mock(side_effect=graphql_router(responses))
+
+    async with GitHubClient(token="ghs_test", max_retries=1) as gh:
+        with pytest.raises(GitHubRateLimited):
             await ingest_profile("octocat", gh)
 
 

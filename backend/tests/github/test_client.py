@@ -7,7 +7,7 @@ import pytest
 import respx
 from httpx import Response
 
-from app.github.client import GitHubClient, RootEntry
+from app.github.client import GitHubClient, GitHubRateLimited, RootEntry
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "github_responses"
 
@@ -409,6 +409,88 @@ async def test_graphql_raises_only_when_no_data_returned() -> None:
     async with GitHubClient(token="ghs_test") as gh:
         with pytest.raises(RuntimeError, match="GraphQL error"):
             await gh.graphql("query {}", {"login": "ghost"})
+
+
+# GitHub documents GraphQL rate limits as HTTP 200 with an error message (primary,
+# x-ratelimit-remaining 0) or 200/403 naming a secondary rate limit. The status
+# alone can't tell a caller it was refused, so the client raises one exception
+# for every shape and fail-soft callers can still let it fail the analysis.
+_PRIMARY_LIMIT_200 = Response(
+    200,
+    json={
+        "data": None,
+        "errors": [{"type": "RATE_LIMITED", "message": "API rate limit exceeded for user ID 1."}],
+    },
+    headers={"X-RateLimit-Remaining": "0"},
+)
+_SECONDARY_LIMIT_200 = Response(
+    200,
+    json={
+        "errors": [
+            {"message": "You have exceeded a secondary rate limit. Please wait a few minutes."}
+        ]
+    },
+)
+_SECONDARY_LIMIT_403 = Response(
+    403,
+    json={"message": "You have exceeded a secondary rate limit. Please wait a few minutes."},
+    headers={"Retry-After": "0"},
+)
+
+
+@pytest.mark.asyncio
+@respx.mock
+@pytest.mark.parametrize(
+    "response",
+    [_PRIMARY_LIMIT_200, _SECONDARY_LIMIT_200, _SECONDARY_LIMIT_403],
+    ids=["primary-200", "secondary-200", "secondary-403"],
+)
+async def test_a_graphql_rate_limit_raises_rate_limited(response: Response) -> None:
+    respx.post("https://api.github.com/graphql").mock(return_value=response)
+
+    async with GitHubClient(token="ghs_test", max_retries=1) as gh:
+        with pytest.raises(GitHubRateLimited):
+            await gh.graphql("query Probe { viewer { login } }", {})
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_review_depth_lets_a_rate_limit_fail_the_analysis() -> None:
+    """Review depth degrades when GitHub can't resolve the query, but a rate
+    limit read as "no reviews" is a low score the report cache keeps for 6 h."""
+    respx.post("https://api.github.com/graphql").mock(return_value=_PRIMARY_LIMIT_200)
+
+    async with GitHubClient(token="ghs_test") as gh:
+        with pytest.raises(GitHubRateLimited):
+            await gh.get_review_depth("antfu")
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_contribution_count_lets_a_rate_limit_fail_the_analysis() -> None:
+    respx.post("https://api.github.com/graphql").mock(return_value=_PRIMARY_LIMIT_200)
+
+    async with GitHubClient(token="ghs_test") as gh:
+        with pytest.raises(GitHubRateLimited):
+            await gh.get_contribution_repo_count("antfu", min_commits=10)
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_a_403_with_retry_after_is_a_rate_limit_not_a_blocked_repo() -> None:
+    """GitHub's older secondary-limit wording never says "rate limit"; the
+    Retry-After header is what marks it."""
+    respx.get("https://api.github.com/repos/owner/repo/languages").mock(
+        return_value=Response(
+            403,
+            json={"message": "You have triggered an abuse detection mechanism."},
+            headers={"Retry-After": "0"},
+        )
+    )
+
+    async with GitHubClient(token="ghs_test", max_retries=1) as gh:
+        with pytest.raises(httpx.HTTPStatusError):
+            await gh.list_languages("owner", "repo")
 
 
 # Regression for SKILL-ISSUE-BACKEND-4 (scoring-engine leg): the review-depth and

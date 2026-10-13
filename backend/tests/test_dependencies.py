@@ -106,6 +106,23 @@ async def test_call_cap_exceeded_maps_to_503(monkeypatch):
     assert exc.value.detail["error"] == "analysis_too_large"
 
 
+async def test_github_rate_limit_from_graphql_maps_to_503(monkeypatch):
+    from fastapi import HTTPException
+
+    import app.dependencies as deps
+    from app.github.client import GitHubRateLimited
+
+    async def _limited(username, gh):
+        raise GitHubRateLimited("GitHub GraphQL rate limit")
+
+    monkeypatch.setattr(deps, "ingest_profile", _limited)
+    monkeypatch.setattr(deps.settings, "github_token", "t", raising=False)
+    with pytest.raises(HTTPException) as exc:
+        await deps._live_ingest("octocat", None, cache=None)
+    assert exc.value.status_code == 503
+    assert exc.value.detail["error"] == "service_busy"
+
+
 async def test_ingest_deadline_maps_to_503(monkeypatch):
     import asyncio
 

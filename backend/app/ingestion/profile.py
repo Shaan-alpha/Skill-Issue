@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 
 import httpx
 
-from app.github.client import is_rate_limited
+from app.github.client import GitHubRateLimited
 from app.github.queries import (
     EXTERNAL_PRS,
     EXTERNAL_REVIEW_COUNT,
@@ -386,11 +386,7 @@ async def _probe_workflow_files(
     data: dict[str, Any] = {}
     try:
         data = await gh.graphql(workflow_files_query(len(candidates)), variables) or {}
-    except httpx.HTTPStatusError as e:
-        if is_rate_limited(e.response):
-            raise
-        logger.warning("Workflow probe failed (HTTP %s)", e.response.status_code)
-    except (httpx.TransportError, RuntimeError):
+    except (httpx.HTTPStatusError, httpx.TransportError, RuntimeError):
         logger.warning("Workflow probe failed", exc_info=True)
 
     counts: dict[str, int] = {}
@@ -429,6 +425,8 @@ async def _external_pr_signals(username: str, gh: GitHubClient) -> dict[str, Any
             EXTERNAL_PRS,
             {"login": username, "externalMerged": external_merged_prs_query(username)},
         )
+    except GitHubRateLimited:
+        raise
     except Exception:
         logger.warning(
             "External PR/badge signals unavailable for %s; degrading to defaults",
@@ -458,6 +456,8 @@ async def _external_review_count(username: str, gh: GitHubClient) -> int:
     """PR review count — isolated because it's the field GitHub most often rejects."""
     try:
         reviews = await gh.graphql(EXTERNAL_REVIEW_COUNT, {"login": username})
+    except GitHubRateLimited:
+        raise
     except Exception:
         logger.warning(
             "External review-count signal unavailable for %s; degrading to 0",

@@ -4,7 +4,7 @@ from httpx import HTTPStatusError, Response
 
 from app.cache.client import RedisCache
 from app.cache.keys import NAMESPACE_GH, gh_request_key
-from app.github.client import GitHubClient
+from app.github.client import GitHubClient, GitHubRateLimited
 
 
 @pytest.mark.asyncio
@@ -112,3 +112,29 @@ async def test_read_cache_false_goes_live_and_refreshes_the_entry(fake_cache: Re
 
     assert user["public_repos"] == 99
     assert (await fake_cache.get_json(NAMESPACE_GH, key))["body"]["public_repos"] == 99
+
+
+@pytest.mark.asyncio
+async def test_a_graphql_body_with_errors_is_not_cached(fake_cache: RedisCache) -> None:
+    """GraphQL reports a rate limit on a 200. Cached, it would refuse every
+    analysis of the user for the next 15 minutes after GitHub recovered."""
+    with respx.mock:
+        respx.post("https://api.github.com/graphql").mock(
+            side_effect=[
+                Response(
+                    200,
+                    json={
+                        "data": None,
+                        "errors": [{"type": "RATE_LIMITED", "message": "API rate limit exceeded"}],
+                    },
+                    headers={"X-RateLimit-Remaining": "0"},
+                ),
+                Response(200, json={"data": {"viewer": {"login": "octocat"}}}),
+            ]
+        )
+        async with GitHubClient(token="t", cache=fake_cache) as gh:
+            with pytest.raises(GitHubRateLimited):
+                await gh.graphql("query Probe { viewer { login } }", {})
+            data = await gh.graphql("query Probe { viewer { login } }", {})
+
+    assert data == {"viewer": {"login": "octocat"}}

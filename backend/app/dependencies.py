@@ -15,6 +15,7 @@ from app.cache.locks import singleflight
 from app.github.client import (
     GitHubCallCapExceeded,
     GitHubClient,
+    GitHubRateLimited,
     is_rate_limited,
     shared_token_quota_ok,
 )
@@ -217,6 +218,9 @@ async def _live_ingest(
         except GitHubCallCapExceeded:
             logger.warning("analyze.call_cap_exceeded")
             raise HTTPException(status_code=503, detail={"error": "analysis_too_large"}) from None
+        except GitHubRateLimited as e:
+            logger.warning("analyze.github_rate_limited")
+            raise HTTPException(status_code=503, detail={"error": "service_busy"}) from e
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:
                 raise HTTPException(

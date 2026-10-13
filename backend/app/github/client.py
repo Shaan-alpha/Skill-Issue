@@ -43,7 +43,29 @@ def is_rate_limited(resp: httpx.Response | _CachedResponse) -> bool:
         return True
     if resp.status_code != 403:
         return False
-    return resp.headers.get("X-RateLimit-Remaining") == "0" or "rate limit" in resp.text.lower()
+    # A secondary limit may carry only Retry-After: GitHub's older wording
+    # ("abuse detection mechanism") never says "rate limit".
+    return (
+        resp.headers.get("X-RateLimit-Remaining") == "0"
+        or "Retry-After" in resp.headers
+        or "rate limit" in resp.text.lower()
+    )
+
+
+def _graphql_rate_limited(resp: httpx.Response | _CachedResponse, errors: list[Any]) -> bool:
+    """Whether a GraphQL body's errors are a rate limit. GitHub reports a
+    primary limit on an HTTP 200 with x-ratelimit-remaining 0, and a secondary
+    one on a 200 or 403 whose message names it."""
+    if resp.headers.get("X-RateLimit-Remaining") == "0":
+        return True
+    return any(
+        isinstance(error, dict)
+        and (
+            error.get("type") == "RATE_LIMITED"
+            or "rate limit" in str(error.get("message", "")).lower()
+        )
+        for error in errors
+    )
 
 
 def _repo_unavailable(resp: httpx.Response | _CachedResponse) -> bool:
@@ -83,6 +105,16 @@ class RootEntry(NamedTuple):
     name: str
     type: str  # "file", "dir", "symlink" or "submodule"
     size: int
+
+
+class GitHubRateLimited(Exception):
+    """GitHub refused a GraphQL request for rate-limit reasons.
+
+    GraphQL reports a rate limit on an HTTP 200 as well as a 403, so a caller
+    can't tell from the status. Fail-soft callers that degrade a signal when
+    GitHub can't answer must let this one through: a rate limit read as "none"
+    is a wrong score that the report cache keeps for six hours.
+    """
 
 
 class GitHubCallCapExceeded(Exception):
@@ -281,12 +313,18 @@ class GitHubClient:
                     body_json: Any = resp.json()
                 except ValueError:
                     body_json = None
-                await self._cache.set_json(
-                    NAMESPACE_GH,
-                    cache_key,
-                    {"status": resp.status_code, "body": body_json},
-                    ttl_seconds=ttl,
+                # GraphQL errors ride on a 200: a rate limit, or a query GitHub
+                # couldn't resolve this time. Neither is an answer to keep.
+                graphql_errors = (
+                    url == GRAPHQL_URL and isinstance(body_json, dict) and body_json.get("errors")
                 )
+                if not graphql_errors:
+                    await self._cache.set_json(
+                        NAMESPACE_GH,
+                        cache_key,
+                        {"status": resp.status_code, "body": body_json},
+                        ttl_seconds=ttl,
+                    )
             except Exception:
                 logger.warning("cache set raised in GitHubClient", exc_info=True)
 
@@ -380,11 +418,14 @@ class GitHubClient:
         RESOURCE_LIMITS_EXCEEDED for hyper-active accounts (SKILL-ISSUE-BACKEND-4) —
         either fully (graphql() raises) or with partial data whose `nodes` field is
         null — so every access below is null-guarded and the call is wrapped.
+        A rate limit still fails the analysis.
         """
         from app.github.queries import REVIEW_DEPTH
 
         try:
             data = await self.graphql(REVIEW_DEPTH, {"login": username})
+        except GitHubRateLimited:
+            raise
         except Exception:
             logger.warning(
                 "Review-depth query failed for %s; skipping signal", username, exc_info=True
@@ -405,7 +446,8 @@ class GitHubClient:
 
         Bonus depth signal — degrades to 0 rather than failing the analysis when
         GitHub can't resolve this `contributionsCollection` query (the same
-        RESOURCE_LIMITS_EXCEEDED rejection hyper-active accounts trigger).
+        RESOURCE_LIMITS_EXCEEDED rejection hyper-active accounts trigger). A rate
+        limit still fails the analysis.
         """
         from datetime import UTC, datetime, timedelta
 
@@ -421,6 +463,8 @@ class GitHubClient:
                     "to": now.isoformat(),
                 },
             )
+        except GitHubRateLimited:
+            raise
         except Exception:
             logger.warning(
                 "Contribution-repo-count query failed for %s; defaulting to 0",
@@ -448,10 +492,14 @@ class GitHubClient:
         resp = await self._request(
             "POST", GRAPHQL_URL, json={"query": query, "variables": variables}
         )
+        if is_rate_limited(resp):
+            raise GitHubRateLimited(f"GitHub GraphQL rate limit (HTTP {resp.status_code})")
         resp.raise_for_status()
         body = resp.json()
         payload = body.get("data")
         errors = body.get("errors")
+        if errors and _graphql_rate_limited(resp, errors):
+            raise GitHubRateLimited(f"GitHub GraphQL rate limit: {errors}")
         # GitHub's GraphQL returns partial `data` alongside `errors` when it can
         # resolve some fields but not others — e.g. RESOURCE_LIMITS_EXCEEDED on an
         # expensive field for a hyper-active account. Downstream ingestion reads
