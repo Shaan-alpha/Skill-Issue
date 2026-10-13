@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import sys
 
 from app.observability.sentry import init_sentry, scrub_event
 
@@ -171,3 +172,36 @@ def test_init_sentry_skips_when_already_initialised(monkeypatch):
         release="0.8.0",
     )
     assert init_calls == []  # second call skipped
+
+
+def test_init_sentry_turns_off_the_openai_integration(monkeypatch):
+    captured: dict = {}
+    monkeypatch.setattr("sentry_sdk.init", lambda **kwargs: captured.update(kwargs))
+    monkeypatch.setattr("sentry_sdk.is_initialized", lambda: False)
+
+    init_sentry(
+        dsn="https://abc@o123.ingest.sentry.io/456",
+        environment="test",
+        traces_sample_rate=0.0,
+        release="0.8.0",
+    )
+
+    assert [type(i).__name__ for i in captured["disabled_integrations"]] == ["OpenAIIntegration"]
+
+
+def test_sentry_still_starts_when_the_openai_integration_cannot_load(monkeypatch):
+    """The integration raises at import when openai is missing or reorganised
+    (openai 3 is planned); telemetry must never stop the app from starting."""
+    captured: dict = {}
+    monkeypatch.setattr("sentry_sdk.init", lambda **kwargs: captured.update(kwargs))
+    monkeypatch.setattr("sentry_sdk.is_initialized", lambda: False)
+    monkeypatch.setitem(sys.modules, "sentry_sdk.integrations.openai", None)
+
+    init_sentry(
+        dsn="https://abc@o123.ingest.sentry.io/456",
+        environment="test",
+        traces_sample_rate=0.0,
+        release="0.8.0",
+    )
+
+    assert captured["disabled_integrations"] == []
