@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 import re
 from datetime import UTC, datetime, timedelta
@@ -8,6 +7,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 
 import httpx
 
+from app.concurrency import gather_all
 from app.github.client import GitHubRateLimited
 from app.github.queries import (
     EXTERNAL_PRS,
@@ -20,28 +20,11 @@ from app.github.queries import (
 from app.models import Profile, Repo
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Collection
+    from collections.abc import Collection
 
     from app.github.client import GitHubClient
 
 logger = logging.getLogger(__name__)
-
-
-async def gather_all[T](*aws: Awaitable[T]) -> list[T]:
-    """`asyncio.gather` that cancels the rest as soon as one awaitable fails.
-
-    Plain gather leaves the siblings running after a failure: they keep calling
-    GitHub for an analysis that has already failed, then hit the closed client
-    and log "Task exception was never retrieved".
-    """
-    tasks = [asyncio.ensure_future(aw) for aw in aws]
-    try:
-        return await asyncio.gather(*tasks)
-    except BaseException:
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
-        raise
 
 
 class NotAnIndividualError(Exception):

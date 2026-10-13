@@ -1066,29 +1066,6 @@ async def test_per_repo_phases_overlap() -> None:
 
 
 @pytest.mark.asyncio
-async def test_gather_all_cancels_the_rest_when_one_fails() -> None:
-    """A failed analysis must not leave sibling GitHub calls running against a
-    client that is about to close."""
-    from app.ingestion.profile import gather_all
-
-    slow_was_cancelled = asyncio.Event()
-
-    async def fails_fast() -> None:
-        raise httpx.ConnectError("boom")
-
-    async def slow() -> None:
-        try:
-            await asyncio.sleep(10)
-        except asyncio.CancelledError:
-            slow_was_cancelled.set()
-            raise
-
-    with pytest.raises(httpx.ConnectError):
-        await gather_all(slow(), fails_fast())
-    assert slow_was_cancelled.is_set()
-
-
-@pytest.mark.asyncio
 async def test_languages_keep_repo_order_when_fetched_concurrently() -> None:
     fake = FakeGitHubClient(repo_count=5)
     profile = await ingest_profile("octocat", fake)

@@ -10,7 +10,7 @@ from ingestion's root listings, workflow probe and commit history.
 
 from typing import TYPE_CHECKING
 
-from app.ingestion.profile import gather_all
+from app.concurrency import gather_all
 from app.models import Profile, Repo, TierName
 
 if TYPE_CHECKING:
