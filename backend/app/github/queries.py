@@ -48,9 +48,13 @@ query ExternalPRs($login: String!, $externalMerged: String!) {
 
 
 def external_merged_prs_query(login: str) -> str:
-    """Search string for merged PRs `login` authored in repositories it doesn't
-    own, newest first (the nodes feed the org-diversity signal)."""
-    return f"author:{login} is:pr is:merged -user:{login} sort:updated-desc"
+    """Search string for merged PRs `login` authored in public repositories it
+    doesn't own, newest first (the nodes feed the org-diversity signal).
+
+    `is:public` keeps the count independent of the token: search also returns
+    private PRs the token can see, and the report cache is keyed by username.
+    """
+    return f"author:{login} is:pr is:merged is:public -user:{login} sort:updated-desc"
 
 
 # Isolated from EXTERNAL_PRS on purpose: pullRequestReviewContributions.totalCount

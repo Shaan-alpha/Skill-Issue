@@ -303,6 +303,29 @@ async def test_merged_prs_into_own_repositories_are_not_external() -> None:
     assert "-user:octocat" in json.dumps(external_query["variables"])
 
 
+@pytest.mark.asyncio
+@respx.mock
+async def test_external_pr_search_counts_public_repositories_only() -> None:
+    """Search results depend on what the token can see: a token with access to
+    private repositories would count private PRs, and the report cache, keyed by
+    username alone, would then serve that count to everyone."""
+    repos_payload = [_fake_repo("alpha-api", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_commits(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    route = _mock_graphql()
+
+    async with GitHubClient(token="ghs_test") as gh:
+        await ingest_profile("octocat", gh)
+
+    sent = [json.loads(call.request.content) for call in route.calls]
+    external_query = next(body for body in sent if "ExternalPRs" in body["query"])
+    assert "is:public" in external_query["variables"]["externalMerged"].split()
+
+
 _RESOURCE_LIMIT_ERROR = {
     "data": None,
     "errors": [
