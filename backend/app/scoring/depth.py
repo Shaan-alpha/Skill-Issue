@@ -4,10 +4,10 @@ The function mutates the input Profile in place. Callers should run the base
 scoring pass, decide a tier, call this, then re-score.
 """
 
-import asyncio
 import re
 from typing import TYPE_CHECKING
 
+from app.ingestion.profile import gather_all
 from app.models import Profile, TierName
 
 if TYPE_CHECKING:
@@ -52,7 +52,7 @@ async def _enrich_repo_professional(repo_full_name: str, gh: "GitHubClient") -> 
     license_task = gh.get_license(owner, name)
     workflows_task = gh.list_workflow_files(owner, name)
     readme_task = gh.get_repo_readme_text(owner, name)
-    license_id, workflows, readme = await asyncio.gather(license_task, workflows_task, readme_task)
+    license_id, workflows, readme = await gather_all(license_task, workflows_task, readme_task)
     return {
         "full_name": repo_full_name,
         "license_id": license_id,
@@ -90,7 +90,7 @@ async def enrich_for_tier(profile: Profile, base_tier: TierName, gh: "GitHubClie
     top5 = non_fork[:5]
 
     if _at_least(base_tier, "Professional Developer"):
-        results = await asyncio.gather(*(_enrich_repo_professional(r.full_name, gh) for r in top10))
+        results = await gather_all(*(_enrich_repo_professional(r.full_name, gh) for r in top10))
         profile.licensed_repos = [
             str(r["full_name"]) for r in results if r["license_id"] is not None
         ]
@@ -107,7 +107,7 @@ async def enrich_for_tier(profile: Profile, base_tier: TierName, gh: "GitHubClie
 
     if _at_least(base_tier, "Senior Engineer"):
         profile.review_avg_comments = await gh.get_review_depth(profile.username)
-        dep_results = await asyncio.gather(*(_enrich_repo_senior(r.full_name, gh) for r in top5))
+        dep_results = await gather_all(*(_enrich_repo_senior(r.full_name, gh) for r in top5))
         profile.dep_files = {
             str(r["full_name"]): list(r["dep_files"])  # type: ignore[arg-type]
             for r in dep_results
@@ -115,7 +115,7 @@ async def enrich_for_tier(profile: Profile, base_tier: TierName, gh: "GitHubClie
         }
 
     if _at_least(base_tier, "Staff Engineer"):
-        commit_samples = await asyncio.gather(
+        commit_samples = await gather_all(
             *(gh.list_recent_commits_sample(*r.full_name.split("/", 1), limit=20) for r in top5)
         )
         all_messages = [m for batch in commit_samples for m in batch]

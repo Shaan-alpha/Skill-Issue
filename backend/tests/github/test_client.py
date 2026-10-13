@@ -1,3 +1,4 @@
+import asyncio
 import json
 from pathlib import Path
 
@@ -207,6 +208,57 @@ async def test_rate_limited_repository_read_is_not_mistaken_for_absent() -> None
     async with GitHubClient(token="ghs_test", max_retries=1) as gh:
         with pytest.raises(httpx.HTTPStatusError):
             await gh.list_languages("owner", "repo")
+
+
+class _InFlight:
+    """Async respx side effect that records the peak number of requests in flight."""
+
+    def __init__(self, response: Response) -> None:
+        self._response = response
+        self.current = 0
+        self.peak = 0
+
+    async def __call__(self, request: httpx.Request) -> Response:
+        self.current += 1
+        self.peak = max(self.peak, self.current)
+        try:
+            await asyncio.sleep(0.01)
+            return self._response
+        finally:
+            self.current -= 1
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_client_caps_live_requests_in_flight() -> None:
+    tracker = _InFlight(Response(200, json={"Python": 1}))
+    respx.get(url__regex=r"https://api\.github\.com/repos/o/r\d+/languages").mock(
+        side_effect=tracker
+    )
+
+    async with GitHubClient(token="ghs_test", max_concurrency=3) as gh:
+        await asyncio.gather(*(gh.list_languages("o", f"r{i}") for i in range(12)))
+
+    assert tracker.peak == 3
+
+
+@pytest.mark.asyncio
+async def test_client_concurrency_defaults_to_the_ingest_setting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app import settings as settings_module
+    from app.settings import Settings
+
+    monkeypatch.setattr(settings_module, "settings", Settings(gh_ingest_concurrency=2))
+    tracker = _InFlight(Response(200, json={"Python": 1}))
+    with respx.mock:
+        respx.get(url__regex=r"https://api\.github\.com/repos/o/r\d+/languages").mock(
+            side_effect=tracker
+        )
+        async with GitHubClient(token="ghs_test") as gh:
+            await asyncio.gather(*(gh.list_languages("o", f"r{i}") for i in range(6)))
+
+    assert tracker.peak == 2
 
 
 @pytest.mark.asyncio

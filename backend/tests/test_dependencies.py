@@ -20,6 +20,7 @@ async def test_uses_session_token_when_session_present(monkeypatch):
             cache=None,
             max_retries: int = 3,
             max_calls=None,
+            max_concurrency=None,
             is_shared_token=False,
             read_cache=True,
         ):
@@ -61,6 +62,7 @@ async def test_falls_back_to_project_token_when_no_session(monkeypatch):
             cache=None,
             max_retries: int = 3,
             max_calls=None,
+            max_concurrency=None,
             is_shared_token=False,
             read_cache=True,
         ):

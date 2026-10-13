@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Self
 
 import httpx
 
+from app import settings as settings_module
 from app.cache.keys import (
     GH_SHARED_QUOTA_KEY,
     NAMESPACE_GH,
@@ -16,7 +17,7 @@ from app.cache.keys import (
     gh_request_key,
     ttl_for_gh_endpoint,
 )
-from app.settings import VERSION, settings
+from app.settings import VERSION
 
 if TYPE_CHECKING:
     from app.cache.client import RedisCache
@@ -155,6 +156,7 @@ class GitHubClient:
         is_shared_token: bool = False,
         cache: RedisCache | None = None,
         read_cache: bool = True,
+        max_concurrency: int | None = None,
     ) -> None:
         headers: dict[str, str] = {
             "Accept": "application/vnd.github+json",
@@ -170,12 +172,46 @@ class GitHubClient:
         self._is_shared_token = is_shared_token
         self._cache = cache
         self._read_cache = read_cache
+        # Per-analysis bound on live requests in flight (v0.9.0 introduced it
+        # around ingestion only; depth enrichment fanned out past it).
+        self._in_flight = asyncio.Semaphore(
+            max_concurrency or settings_module.settings.gh_ingest_concurrency
+        )
 
     async def __aenter__(self) -> Self:
         return self
 
     async def __aexit__(self, *_exc: object) -> None:
         await self._client.aclose()
+
+    async def _send_live(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+        """One logical request against GitHub. Rate limits get up to
+        `max_retries` attempts with a bounded Retry-After sleep between them; a
+        transient failure (5xx or a dropped connection) gets one immediate
+        retry on top of that budget."""
+        rate_limited_attempts = 0
+        retried_transient = False
+        while True:
+            try:
+                resp = await self._client.request(method, url, **kwargs)
+            except httpx.TransportError:
+                if retried_transient:
+                    raise
+                retried_transient = True
+                continue
+            # v1.0.5 SI-06: also honor a plain 429; cap the sleep; parse an
+            # HTTP-date Retry-After safely instead of crashing on float().
+            if is_rate_limited(resp):
+                rate_limited_attempts += 1
+                if rate_limited_attempts < self._max_retries:
+                    ceiling = settings_module.settings.github_retry_after_ceiling_seconds
+                    await asyncio.sleep(_retry_after_seconds(resp, ceiling=ceiling))
+                    continue
+                return resp
+            if resp.status_code in _TRANSIENT_STATUSES and not retried_transient:
+                retried_transient = True
+                continue
+            return resp
 
     async def _request(
         self, method: str, url: str, **kwargs: Any
@@ -206,32 +242,11 @@ class GitHubClient:
             if self._live_calls > self._max_calls:
                 raise GitHubCallCapExceeded(self._live_calls, self._max_calls)
 
-        # Live request. Rate limits get up to `max_retries` attempts with a
-        # bounded Retry-After sleep between them; a transient failure (5xx or a
-        # dropped connection) gets one immediate retry on top of that budget.
-        rate_limited_attempts = 0
-        retried_transient = False
-        while True:
-            try:
-                resp = await self._client.request(method, url, **kwargs)
-            except httpx.TransportError:
-                if retried_transient:
-                    raise
-                retried_transient = True
-                continue
-            # v1.0.5 SI-06: also honor a plain 429; cap the sleep; parse an
-            # HTTP-date Retry-After safely instead of crashing on float().
-            if is_rate_limited(resp):
-                rate_limited_attempts += 1
-                if rate_limited_attempts < self._max_retries:
-                    ceiling = settings.github_retry_after_ceiling_seconds
-                    await asyncio.sleep(_retry_after_seconds(resp, ceiling=ceiling))
-                    continue
-                break
-            if resp.status_code in _TRANSIENT_STATUSES and not retried_transient:
-                retried_transient = True
-                continue
-            break
+        # Live request, bounded per analysis: the cap covers every caller,
+        # depth enrichment included, so none can burst past GitHub's
+        # secondary rate limits.
+        async with self._in_flight:
+            resp = await self._send_live(method, url, **kwargs)
 
         # v1.0.6: record the shared token's remaining quota when it dips low, so
         # the breaker can shed new anon analyses before exhaustion. Only writes
@@ -252,7 +267,7 @@ class GitHubClient:
             and cache_key is not None
             and resp.status_code in _CACHEABLE_STATUSES
         ):
-            ttl = ttl_for_gh_endpoint(url) or settings.cache_default_ttl_seconds
+            ttl = ttl_for_gh_endpoint(url) or settings_module.settings.cache_default_ttl_seconds
             try:
                 try:
                     body_json: Any = resp.json()

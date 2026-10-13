@@ -5,7 +5,6 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
-from app import settings as settings_module
 from app.github.queries import (
     EXTERNAL_PRS,
     EXTERNAL_REVIEW_COUNT,
@@ -22,10 +21,21 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-async def _gated[T](sem: asyncio.Semaphore, coro: Awaitable[T]) -> T:
-    """Run `coro` while holding `sem`. Releases on exit, even on exception."""
-    async with sem:
-        return await coro
+async def gather_all[T](*aws: Awaitable[T]) -> list[T]:
+    """`asyncio.gather` that cancels the rest as soon as one awaitable fails.
+
+    Plain gather leaves the siblings running after a failure: they keep calling
+    GitHub for an analysis that has already failed, then hit the closed client
+    and log "Task exception was never retrieved".
+    """
+    tasks = [asyncio.ensure_future(aw) for aw in aws]
+    try:
+        return await asyncio.gather(*tasks)
+    except BaseException:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        raise
 
 
 class NotAnIndividualError(Exception):
@@ -121,6 +131,58 @@ async def _enrich_repo_signals(repo: Repo, gh: GitHubClient) -> None:
             repo.deployment_hints.append(hint)
 
 
+async def _external_pr_signals(username: str, gh: GitHubClient) -> dict[str, Any]:
+    """Merged PRs into other people's repositories, account badges and external
+    orgs — the cheaper half; GitHub can usually compute this even for very
+    active accounts."""
+    try:
+        external = await gh.graphql(
+            EXTERNAL_PRS,
+            {"login": username, "externalMerged": external_merged_prs_query(username)},
+        )
+    except Exception:
+        logger.warning(
+            "External PR/badge signals unavailable for %s; degrading to defaults",
+            username,
+            exc_info=True,
+        )
+        return {}
+    external_user = external.get("user") or {}
+    external_prs = external.get("search") or {}
+
+    external_orgs: set[str] = set()
+    for node in external_prs.get("nodes") or []:
+        owner_login = ((node or {}).get("repository") or {}).get("owner", {}).get("login")
+        if owner_login and owner_login.lower() != username.lower():
+            external_orgs.add(owner_login)
+
+    return {
+        "has_sponsors_listing": external_user.get("hasSponsorsListing", False),
+        "is_github_star": external_user.get("isGitHubStar", False),
+        "is_developer_program_member": external_user.get("isDeveloperProgramMember", False),
+        "external_prs_merged": external_prs.get("issueCount", 0),
+        "external_orgs": external_orgs,
+    }
+
+
+async def _external_review_count(username: str, gh: GitHubClient) -> int:
+    """PR review count — isolated because it's the field GitHub most often rejects."""
+    try:
+        reviews = await gh.graphql(EXTERNAL_REVIEW_COUNT, {"login": username})
+    except Exception:
+        logger.warning(
+            "External review-count signal unavailable for %s; degrading to 0",
+            username,
+            exc_info=True,
+        )
+        return 0
+    review_user = reviews.get("user") or {}
+    review_contributions = (review_user.get("contributionsCollection") or {}).get(
+        "pullRequestReviewContributions"
+    ) or {}
+    return review_contributions.get("totalCount", 0)
+
+
 async def _ingest_external_signals(username: str, gh: GitHubClient) -> dict[str, Any]:
     """Fetch external-contribution signals: merged PRs, review count, badges, orgs.
 
@@ -131,62 +193,18 @@ async def _ingest_external_signals(username: str, gh: GitHubClient) -> dict[str,
     field here is a bonus signal, so any failure degrades to a conservative default
     rather than failing the whole analysis.
     """
-    signals: dict[str, Any] = {
+    pr_signals, external_reviews = await gather_all(
+        _external_pr_signals(username, gh), _external_review_count(username, gh)
+    )
+    return {
         "has_sponsors_listing": False,
         "is_github_star": False,
         "is_developer_program_member": False,
         "external_prs_merged": 0,
-        "external_reviews": 0,
         "external_orgs": set(),
+        **pr_signals,
+        "external_reviews": external_reviews,
     }
-
-    # Merged PRs into other people's repositories + account badges + external
-    # orgs — the cheaper half; GitHub can usually compute this even for very
-    # active accounts.
-    try:
-        external = await gh.graphql(
-            EXTERNAL_PRS,
-            {"login": username, "externalMerged": external_merged_prs_query(username)},
-        )
-        external_user = external.get("user") or {}
-        external_prs = external.get("search") or {}
-
-        external_orgs: set[str] = set()
-        for node in external_prs.get("nodes") or []:
-            owner_login = ((node or {}).get("repository") or {}).get("owner", {}).get("login")
-            if owner_login and owner_login.lower() != username.lower():
-                external_orgs.add(owner_login)
-
-        signals.update(
-            has_sponsors_listing=external_user.get("hasSponsorsListing", False),
-            is_github_star=external_user.get("isGitHubStar", False),
-            is_developer_program_member=external_user.get("isDeveloperProgramMember", False),
-            external_prs_merged=external_prs.get("issueCount", 0),
-            external_orgs=external_orgs,
-        )
-    except Exception:
-        logger.warning(
-            "External PR/badge signals unavailable for %s; degrading to defaults",
-            username,
-            exc_info=True,
-        )
-
-    # PR review count — isolated because it's the field GitHub most often rejects.
-    try:
-        reviews = await gh.graphql(EXTERNAL_REVIEW_COUNT, {"login": username})
-        review_user = reviews.get("user") or {}
-        review_contributions = (review_user.get("contributionsCollection") or {}).get(
-            "pullRequestReviewContributions"
-        ) or {}
-        signals["external_reviews"] = review_contributions.get("totalCount", 0)
-    except Exception:
-        logger.warning(
-            "External review-count signal unavailable for %s; degrading to 0",
-            username,
-            exc_info=True,
-        )
-
-    return signals
 
 
 async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
@@ -204,54 +222,47 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
             "Skill Issue scores individual developers — try a username instead."
         )
 
-    repos_raw = await gh.list_repos(username)
-    pinned = await gh.graphql(PINNED_REPOS, {"login": username})
-    external_signals = await _ingest_external_signals(username, gh)
-    profile_readme = await gh.get_profile_readme(username)
+    # Everything below needs only the login, so it is issued at once; the
+    # client bounds how many requests are actually in flight.
+    repos_raw, pinned, external_signals, profile_readme = await gather_all(
+        gh.list_repos(username),
+        gh.graphql(PINNED_REPOS, {"login": username}),
+        _ingest_external_signals(username, gh),
+        gh.get_profile_readme(username),
+    )
 
     repos = [_repo_from_rest(r) for r in repos_raw if not r.get("fork", False)]
-    pinned_names = {
-        n["name"] for n in (pinned.get("user", {}).get("pinnedItems", {}).get("nodes") or [])
-    }
+    pinned_nodes = ((pinned.get("user") or {}).get("pinnedItems") or {}).get("nodes") or []
+    pinned_names = {n["name"] for n in pinned_nodes if n}
 
     for r in repos:
         r.is_pinned = r.name in pinned_names
 
-    # Enrich README / tests / CI / deployment signals from each repo's root tree.
-    # Capped at ROOT_CONTENT_LIMIT to stay polite to GitHub on heavy profiles.
-    # v0.9.0: bound concurrent in-flight calls via settings.gh_ingest_concurrency
-    # so a single analysis can't burst past GitHub's secondary rate-limit threshold.
-    sem = asyncio.Semaphore(settings_module.settings.gh_ingest_concurrency)
-    await asyncio.gather(
-        *(_gated(sem, _enrich_repo_signals(r, gh)) for r in repos[:ROOT_CONTENT_LIMIT])
+    # Root contents (README / tests / CI / deployment) and languages for the
+    # first ROOT_CONTENT_LIMIT repos, plus two years of commit days from the
+    # ten most recently updated (Consistency reads the last year, Learning
+    # Trajectory compares it with the one before). All three run together.
+    inspected = repos[:ROOT_CONTENT_LIMIT]
+    top_repos = [r for r in repos_raw if not r.get("fork")][:10]
+    two_years_ago = (datetime.now(UTC) - timedelta(days=730)).isoformat()
+    _, language_maps, commit_lists = await gather_all(
+        gather_all(*(_enrich_repo_signals(r, gh) for r in inspected)),
+        gather_all(*(gh.list_languages(*r.full_name.split("/", 1)) for r in inspected)),
+        gather_all(
+            *(
+                gh.list_commits(r["owner"]["login"], r["name"], username, two_years_ago)
+                for r in top_repos
+            )
+        ),
     )
 
     languages: dict[str, int] = {}
-    for repo in repos[:ROOT_CONTENT_LIMIT]:
-        owner, name = repo.full_name.split("/", 1)
-        for language, bytes_count in (await gh.list_languages(owner, name)).items():
+    for repo_languages in language_maps:
+        for language, bytes_count in repo_languages.items():
             languages[language] = languages.get(language, 0) + bytes_count
 
-    has_sponsors_listing = external_signals["has_sponsors_listing"]
-    is_github_star = external_signals["is_github_star"]
-    is_developer_program_member = external_signals["is_developer_program_member"]
-    external_prs_merged = external_signals["external_prs_merged"]
-    external_reviews = external_signals["external_reviews"]
-    external_orgs = external_signals["external_orgs"]
-
-    # Task 10/12: Consistency and Learning Trajectory (commits over last 2 years)
-    two_years_ago = (datetime.now(UTC) - timedelta(days=730)).isoformat()
-    # Top 10 non-fork repos by update date
-    top_repos = [r for r in repos_raw if not r.get("fork")][:10]
-
     commit_dates_set: set[datetime] = set()
-    commit_tasks = [
-        _gated(sem, gh.list_commits(r["owner"]["login"], r["name"], username, two_years_ago))
-        for r in top_repos
-    ]
-    all_repo_commits = await asyncio.gather(*commit_tasks)
-
-    for repo_commits in all_repo_commits:
+    for repo_commits in commit_lists:
         for c in repo_commits:
             date_str = c.get("commit", {}).get("author", {}).get("date")
             if date_str:
@@ -267,15 +278,15 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
         public_repos=user.get("public_repos", 0),
         languages=languages,
         repos=repos,
-        external_prs_merged=external_prs_merged,
-        external_reviews=external_reviews,
-        external_orgs=external_orgs,
+        external_prs_merged=external_signals["external_prs_merged"],
+        external_reviews=external_signals["external_reviews"],
+        external_orgs=external_signals["external_orgs"],
         commit_dates=sorted(commit_dates_set),
         account_created_at=_parse_dt(user["created_at"]) or datetime.now(UTC),
         company=user.get("company"),
         blog=user.get("blog"),
         hireable=bool(user.get("hireable")),
-        has_sponsors_listing=has_sponsors_listing,
-        is_github_star=is_github_star,
-        is_developer_program_member=is_developer_program_member,
+        has_sponsors_listing=external_signals["has_sponsors_listing"],
+        is_github_star=external_signals["is_github_star"],
+        is_developer_program_member=external_signals["is_developer_program_member"],
     )

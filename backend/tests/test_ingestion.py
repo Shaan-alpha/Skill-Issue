@@ -1,7 +1,9 @@
 import asyncio
 import base64
+import contextlib
 import copy
 import json
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 import httpx
@@ -575,37 +577,47 @@ async def test_ingest_profile_rejects_organizations() -> None:
     assert "username instead" in msg.lower() or "individual" in msg.lower()
 
 
-# ─── v0.9.0: bounded GH fan-out ──────────────────────────────────────
+# ─── Ingestion parallelism ───────────────────────────────────────────
+#
+# Ingestion issues every independent read at once and leaves the bound on
+# in-flight requests to GitHubClient (tests/github/test_client.py), so the
+# fake below is deliberately unbounded: it records what overlapped.
 
 
 class FakeGitHubClient:
-    """Minimal GitHubClient stand-in for the bounded-fanout tests.
+    """GitHubClient stand-in that records which reads were in flight together.
 
-    Instruments every GH-touching method with a current/max in-flight
-    counter. A tiny `asyncio.sleep` forces real concurrency — without
-    it, fast coros could resolve sequentially and the cap assertion
-    would pass vacuously.
+    A tiny `asyncio.sleep` inside every call forces genuine interleaving;
+    without it fast coroutines could finish one by one and every overlap
+    assertion would fail for the wrong reason.
     """
 
     def __init__(self, *, repo_count: int) -> None:
         self.repo_count = repo_count
-        self.current_in_flight = 0
-        self.max_in_flight = 0
-        self.total_calls = 0
+        self.in_flight: list[str] = []
+        self.overlapped: dict[str, set[str]] = {}
+        self.peak_by_method: dict[str, int] = {}
 
-    async def _enter(self) -> None:
-        self.total_calls += 1
-        self.current_in_flight += 1
-        self.max_in_flight = max(self.max_in_flight, self.current_in_flight)
-        # Force genuine concurrency by yielding to the event loop.
-        await asyncio.sleep(0.005)
+    @contextlib.asynccontextmanager
+    async def _call(self, method: str) -> AsyncIterator[None]:
+        for other in self.in_flight:
+            self.overlapped.setdefault(method, set()).add(other)
+            self.overlapped.setdefault(other, set()).add(method)
+        self.in_flight.append(method)
+        self.peak_by_method[method] = max(
+            self.peak_by_method.get(method, 0), self.in_flight.count(method)
+        )
+        try:
+            await asyncio.sleep(0.005)
+            yield
+        finally:
+            self.in_flight.remove(method)
 
-    def _exit(self) -> None:
-        self.current_in_flight -= 1
+    def ran_together(self, a: str, b: str) -> bool:
+        return b in self.overlapped.get(a, set())
 
     async def get_user(self, login: str) -> dict[str, object]:
-        await self._enter()
-        try:
+        async with self._call("get_user"):
             return {
                 "login": login,
                 "type": "User",
@@ -617,12 +629,9 @@ class FakeGitHubClient:
                 "blog": None,
                 "hireable": False,
             }
-        finally:
-            self._exit()
 
     async def list_repos(self, login: str) -> list[dict[str, object]]:
-        await self._enter()
-        try:
+        async with self._call("list_repos"):
             return [
                 {
                     "name": f"repo-{i}",
@@ -638,77 +647,98 @@ class FakeGitHubClient:
                 }
                 for i in range(self.repo_count)
             ]
-        finally:
-            self._exit()
 
     async def graphql(self, query: str, variables: dict[str, object]) -> dict[str, object]:
-        await self._enter()
-        try:
+        operation = query.split("(", 1)[0].split()[-1]
+        async with self._call(f"graphql:{operation}"):
             return {
                 "user": {
                     "pinnedItems": {"nodes": []},
                     "hasSponsorsListing": False,
                     "isGitHubStar": False,
                     "isDeveloperProgramMember": False,
-                    "pullRequests": {"totalCount": 0, "nodes": []},
                     "contributionsCollection": {
                         "pullRequestReviewContributions": {"totalCount": 0}
                     },
-                }
+                },
+                "search": {"issueCount": 0, "nodes": []},
             }
-        finally:
-            self._exit()
 
     async def get_profile_readme(self, login: str) -> str | None:
-        await self._enter()
-        try:
+        async with self._call("get_profile_readme"):
             return None
-        finally:
-            self._exit()
 
     async def get_repo_root_contents(self, owner: str, name: str) -> list[str]:
-        await self._enter()
-        try:
+        async with self._call("get_repo_root_contents"):
             return []
-        finally:
-            self._exit()
 
     async def list_languages(self, owner: str, name: str) -> dict[str, int]:
-        await self._enter()
-        try:
-            return {}
-        finally:
-            self._exit()
+        async with self._call("list_languages"):
+            return {"Python": 100}
 
     async def list_commits(
         self, owner: str, name: str, author: str, since: str
     ) -> list[dict[str, object]]:
-        await self._enter()
-        try:
+        async with self._call("list_commits"):
             return []
-        finally:
-            self._exit()
 
 
 @pytest.mark.asyncio
-async def test_bounded_fanout_default_cap() -> None:
-    """At default cap 8, a 50-repo profile must never burst >8 in-flight."""
-    fake = FakeGitHubClient(repo_count=50)
+async def test_independent_profile_reads_run_concurrently() -> None:
+    """Repos, pinned items, external signals and the profile README don't
+    depend on each other, so none of them should wait for another."""
+    fake = FakeGitHubClient(repo_count=3)
     await ingest_profile("octocat", fake)
-    assert fake.max_in_flight <= 8, f"expected ≤8 in-flight, observed {fake.max_in_flight}"
-    # Sanity: the test actually drove enough load to be meaningful.
-    assert fake.total_calls >= 50
+
+    assert fake.ran_together("list_repos", "get_profile_readme")
+    assert fake.ran_together("list_repos", "graphql:PinnedRepos")
+    assert fake.ran_together("graphql:ExternalPRs", "graphql:ExternalReviewCount")
 
 
 @pytest.mark.asyncio
-async def test_bounded_fanout_overridable_via_settings(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Overriding settings.gh_ingest_concurrency=2 must cap in-flight at 2."""
-    from app import settings as settings_module
-    from app.settings import Settings
-
-    monkeypatch.setattr(settings_module, "settings", Settings(gh_ingest_concurrency=2))
-    fake = FakeGitHubClient(repo_count=50)
+async def test_language_reads_run_concurrently() -> None:
+    """Twenty repos' languages used to be fetched one after another."""
+    fake = FakeGitHubClient(repo_count=20)
     await ingest_profile("octocat", fake)
-    assert fake.max_in_flight <= 2, (
-        f"expected ≤2 in-flight at override, observed {fake.max_in_flight}"
-    )
+
+    assert fake.peak_by_method["list_languages"] > 1
+
+
+@pytest.mark.asyncio
+async def test_per_repo_phases_overlap() -> None:
+    fake = FakeGitHubClient(repo_count=12)
+    await ingest_profile("octocat", fake)
+
+    assert fake.ran_together("get_repo_root_contents", "list_languages")
+    assert fake.ran_together("list_languages", "list_commits")
+
+
+@pytest.mark.asyncio
+async def test_gather_all_cancels_the_rest_when_one_fails() -> None:
+    """A failed analysis must not leave sibling GitHub calls running against a
+    client that is about to close."""
+    from app.ingestion.profile import gather_all
+
+    slow_was_cancelled = asyncio.Event()
+
+    async def fails_fast() -> None:
+        raise httpx.ConnectError("boom")
+
+    async def slow() -> None:
+        try:
+            await asyncio.sleep(10)
+        except asyncio.CancelledError:
+            slow_was_cancelled.set()
+            raise
+
+    with pytest.raises(httpx.ConnectError):
+        await gather_all(slow(), fails_fast())
+    assert slow_was_cancelled.is_set()
+
+
+@pytest.mark.asyncio
+async def test_languages_keep_repo_order_when_fetched_concurrently() -> None:
+    fake = FakeGitHubClient(repo_count=5)
+    profile = await ingest_profile("octocat", fake)
+
+    assert profile.languages == {"Python": 500}

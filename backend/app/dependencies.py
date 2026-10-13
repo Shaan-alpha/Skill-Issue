@@ -203,6 +203,7 @@ async def _live_ingest(
         token=access_token,
         cache=cache,
         max_calls=settings.gh_max_calls_per_analysis,
+        max_concurrency=settings.gh_ingest_concurrency,
         is_shared_token=is_shared,
         read_cache=not fresh,
     ) as gh:

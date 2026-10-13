@@ -308,6 +308,42 @@ async def test_call_cap_reached_during_depth_enrichment_is_a_503(
 
 @pytest.mark.asyncio
 @respx.mock
+async def test_whole_analysis_never_exceeds_the_concurrency_cap() -> None:
+    """Depth enrichment used to fan out outside the ingestion semaphore, up to
+    thirty requests at once. The cap lives in the client now, so ingestion and
+    scoring together stay under it."""
+    import asyncio
+
+    from app.github.client import GitHubClient
+    from app.ingestion.profile import ingest_profile
+    from app.scoring.engine import run_scoring_engine
+
+    _senior_tier_testuser()
+    current = peak = 0
+
+    async with GitHubClient(token="ghs_test", max_concurrency=4) as gh:
+        send = gh._client.request
+
+        async def tracked(*args: Any, **kwargs: Any) -> Any:
+            nonlocal current, peak
+            current += 1
+            peak = max(peak, current)
+            try:
+                await asyncio.sleep(0.005)
+                return await send(*args, **kwargs)
+            finally:
+                current -= 1
+
+        gh._client.request = tracked  # type: ignore[method-assign]
+        profile = await ingest_profile("testuser", gh)
+        report = await run_scoring_engine(profile, gh)
+
+    assert report.tier.name == "Senior Engineer"  # enrichment really ran
+    assert 1 < peak <= 4
+
+
+@pytest.mark.asyncio
+@respx.mock
 async def test_analyze_unknown_user_returns_404(
     _settings_with_token: None,
 ) -> None:
