@@ -37,7 +37,7 @@ _CACHEABLE_STATUSES = frozenset({200, 404, 409, 422})
 _TRANSIENT_STATUSES = frozenset({500, 502, 503, 504})
 
 
-def _is_rate_limited(resp: httpx.Response | _CachedResponse) -> bool:
+def is_rate_limited(resp: httpx.Response | _CachedResponse) -> bool:
     if resp.status_code == 429:
         return True
     if resp.status_code != 403:
@@ -52,7 +52,7 @@ def _repo_unavailable(resp: httpx.Response | _CachedResponse) -> bool:
     analysis's problem and must fail it, not quietly score the repo as bare."""
     if resp.status_code in (404, 409, 410, 451):
         return True
-    return resp.status_code == 403 and not _is_rate_limited(resp)
+    return resp.status_code == 403 and not is_rate_limited(resp)
 
 
 class _CachedResponse:
@@ -221,7 +221,7 @@ class GitHubClient:
                 continue
             # v1.0.5 SI-06: also honor a plain 429; cap the sleep; parse an
             # HTTP-date Retry-After safely instead of crashing on float().
-            if _is_rate_limited(resp):
+            if is_rate_limited(resp):
                 rate_limited_attempts += 1
                 if rate_limited_attempts < self._max_retries:
                     ceiling = settings.github_retry_after_ceiling_seconds

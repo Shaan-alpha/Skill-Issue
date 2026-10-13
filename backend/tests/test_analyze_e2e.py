@@ -227,6 +227,85 @@ async def test_analyze_returns_complete_report(
     assert breakdown["learning_trajectory"]["max_points"] == 10
 
 
+_RATE_LIMITED = Response(
+    403,
+    json={"message": "API rate limit exceeded for user ID 1."},
+    headers={"Retry-After": "0", "X-RateLimit-Remaining": "0"},
+)
+
+
+def _senior_tier_testuser() -> None:
+    """Mocks for a profile whose base score clears Senior Engineer, so the
+    tier-gated depth enrichment runs after ingestion."""
+    repos = [
+        _repo_payload("alpha", language="TypeScript"),
+        _repo_payload("beta", language="Python"),
+    ]
+    commits = [_commit_payload(days_ago=i * 2) for i in range(35)]
+    _mock_github_for_testuser(repos, {"alpha": commits, "beta": commits[:5]})
+
+
+async def _get_analyze(path: str = "/analyze/testuser") -> Any:
+    # A crash must come back as the 500 a real client sees, not raise here.
+    transport = ASGITransport(app=app_module.app, raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        return await client.get(path)
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_rate_limited_ingest_is_service_busy(_settings_with_token: None) -> None:
+    _senior_tier_testuser()
+    respx.get("https://api.github.com/repos/testuser/alpha/contents").mock(
+        return_value=_RATE_LIMITED
+    )
+
+    resp = await _get_analyze()
+
+    assert resp.status_code == 503
+    assert resp.json() == {"error": "service_busy"}
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_rate_limit_during_depth_enrichment_is_service_busy_not_a_crash(
+    _settings_with_token: None,
+) -> None:
+    _senior_tier_testuser()
+    respx.get("https://api.github.com/repos/testuser/alpha/license").mock(
+        return_value=_RATE_LIMITED
+    )
+
+    resp = await _get_analyze()
+
+    assert resp.status_code == 503
+    assert resp.json() == {"error": "service_busy"}
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_call_cap_reached_during_depth_enrichment_is_a_503(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.github.client import GitHubClient
+    from app.ingestion.profile import ingest_profile
+
+    _senior_tier_testuser()
+    # Measure what ingestion alone costs, then cap the analysis exactly there:
+    # ingestion completes and the first depth-enrichment call exceeds the cap.
+    async with GitHubClient(token="ghs_test") as gh:
+        await ingest_profile("testuser", gh)
+    ingest_calls = respx.calls.call_count
+    capped = Settings(github_token="ghs_test", gh_max_calls_per_analysis=ingest_calls)
+    monkeypatch.setattr(app_module, "settings", capped)
+    monkeypatch.setattr(dep_module, "settings", capped)
+
+    resp = await _get_analyze()
+
+    assert resp.status_code == 503
+    assert resp.json() == {"error": "analysis_too_large"}
+
+
 @pytest.mark.asyncio
 @respx.mock
 async def test_analyze_unknown_user_returns_404(

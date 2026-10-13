@@ -12,7 +12,12 @@ from app.auth.dependencies import optional_session
 from app.cache.client import RedisCache
 from app.cache.keys import NAMESPACE_REPORT, report_key
 from app.cache.locks import singleflight
-from app.github.client import GitHubCallCapExceeded, GitHubClient, shared_token_quota_ok
+from app.github.client import (
+    GitHubCallCapExceeded,
+    GitHubClient,
+    is_rate_limited,
+    shared_token_quota_ok,
+)
 from app.ingestion.profile import NotAnIndividualError, ingest_profile
 from app.models import Report
 from app.narrative.budget import DailyBudget
@@ -201,8 +206,11 @@ async def _live_ingest(
         is_shared_token=is_shared,
         read_cache=not fresh,
     ) as gh:
+        # Scoring is inside the mapping too: its tier-gated depth enrichment
+        # calls GitHub, so it can hit the call cap or a rate limit like ingestion.
         try:
             profile = await ingest_profile(username, gh)
+            return await run_scoring_engine(profile, gh)
         except NotAnIndividualError as e:
             raise HTTPException(status_code=422, detail=str(e)) from e
         except GitHubCallCapExceeded:
@@ -213,14 +221,18 @@ async def _live_ingest(
                 raise HTTPException(
                     status_code=404, detail=f"GitHub user '{username}' not found"
                 ) from e
+            if is_rate_limited(e.response):
+                logger.warning("analyze.github_rate_limited")
+                raise HTTPException(status_code=503, detail={"error": "service_busy"}) from e
             logger.exception("GitHub HTTP error analyzing %s", username)
             raise HTTPException(
                 status_code=502, detail=f"GitHub API error: {e.response.status_code}"
             ) from e
+        except httpx.TransportError as e:
+            logger.warning("analyze.github_unreachable", exc_info=True)
+            raise HTTPException(status_code=502, detail="GitHub API unreachable") from e
         except Exception:
             logger.exception("Unexpected error analyzing %s", username)
             raise HTTPException(
                 status_code=500, detail=f"Failed to analyze user '{username}'"
             ) from None
-
-        return await run_scoring_engine(profile, gh)
