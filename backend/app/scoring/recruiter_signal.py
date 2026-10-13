@@ -1,3 +1,6 @@
+import re
+from urllib.parse import urlsplit
+
 from app.models import Evidence, Profile, ScoreResult
 from app.scoring.base import make_result
 
@@ -20,29 +23,50 @@ def score(profile: Profile) -> ScoreResult:
         )
         points += 5
 
-    # 2. GitHub Sponsors enabled OR verified organization member -> 5 pts
-    has_pro_signal = (
-        profile.has_sponsors_listing
-        or profile.is_github_star
-        or profile.is_developer_program_member
-        or (profile.company and profile.company.startswith("@"))
-    )
-    if has_pro_signal:
-        detail = "Verified organization or developer program membership"
-        if profile.has_sponsors_listing:
-            detail = "GitHub Sponsors enabled"
-        if profile.is_github_star:
-            detail = "GitHub Star recipient"
-
-        evidence.append(Evidence(signal="pro_verification", detail=detail, weight=5))
+    # 2. A GitHub recognition, or an organization named on the profile -> 5 pts.
+    # The strongest true reason is the one stated. The company field is free
+    # text GitHub never checks, so it is described, not called "verified".
+    if profile.is_github_star:
+        pro_detail = "GitHub Star recipient"
+    elif profile.has_sponsors_listing:
+        pro_detail = "GitHub Sponsors enabled"
+    elif profile.is_developer_program_member:
+        pro_detail = "GitHub Developer Program member"
+    elif profile.company and profile.company.startswith("@"):
+        pro_detail = "Names an @organization in the profile's company field"
+    else:
+        pro_detail = None
+    if pro_detail:
+        evidence.append(Evidence(signal="pro_verification", detail=pro_detail, weight=5))
         points += 5
 
     # 3. Profile has a website URL linked or marked as hireable -> 5 pts
     if profile.blog or profile.hireable:
-        detail = (
-            f"Portfolio/Website linked: {profile.blog}" if profile.blog else "Marked as hireable"
-        )
+        if profile.blog:
+            host = _website_host(profile.blog)
+            detail = f"Portfolio/website linked: {host}" if host else "Portfolio/website linked"
+        else:
+            detail = "Marked as hireable"
         evidence.append(Evidence(signal="professional_presence", detail=detail, weight=5))
         points += 5
 
     return make_result(points=points, max_points=MAX_POINTS, evidence=evidence)
+
+
+_HOSTNAME = re.compile(r"^(?=.{1,253}$)[a-z0-9-]+(\.[a-z0-9-]+)+$")
+
+
+def _website_host(website: str) -> str | None:
+    """The hostname of the profile's website, or None when it isn't one.
+
+    The field is free text and evidence goes into the narrator's prompt, so
+    only a well-formed hostname ever leaves this function.
+    """
+    candidate = website.strip()
+    if "://" not in candidate:
+        candidate = f"https://{candidate}"
+    try:
+        host = (urlsplit(candidate).hostname or "").lower()
+    except ValueError:
+        return None
+    return host if _HOSTNAME.match(host) else None
