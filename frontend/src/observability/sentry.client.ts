@@ -2,7 +2,7 @@
 
 import * as Sentry from "@sentry/nextjs";
 import { APP_VERSION } from "@/lib/site";
-import { scrubHeaders, scrubObject } from "./scrub";
+import { scrubEvent } from "./scrub";
 
 const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
 
@@ -38,18 +38,6 @@ if (dsn) {
       process.env.NEXT_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE || 1.0,
     ),
     sendDefaultPii: false,
-    beforeSend(event) {
-      if (event.request) {
-        event.request.headers = scrubHeaders(
-          event.request.headers as Record<string, string> | undefined,
-        );
-      }
-      if (event.user && "email" in event.user) {
-        delete (event.user as { email?: string }).email;
-      }
-      if (event.extra) event.extra = scrubObject(event.extra);
-      if (event.contexts) event.contexts = scrubObject(event.contexts);
-      return event;
-    },
+    beforeSend: scrubEvent,
   });
 }
