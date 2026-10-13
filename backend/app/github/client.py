@@ -503,15 +503,17 @@ class GitHubClient:
         body = resp.json()
         payload = body.get("data")
         errors = body.get("errors")
-        if errors and _graphql_rate_limited(resp, errors):
-            raise GitHubRateLimited(f"GitHub GraphQL rate limit: {errors}")
+        # A REST-style {"message": ...} body can stand in for both.
+        message = str(body.get("message") or "")
+        if (errors and _graphql_rate_limited(resp, errors)) or "rate limit" in message.lower():
+            raise GitHubRateLimited(f"GitHub GraphQL rate limit: {errors or message}")
         # GitHub's GraphQL returns partial `data` alongside `errors` when it can
         # resolve some fields but not others — e.g. RESOURCE_LIMITS_EXCEEDED on an
         # expensive field for a hyper-active account. Downstream ingestion reads
         # every field defensively, so partial data is still useful. Only treat the
         # response as fatal when nothing came back at all.
+        if payload is None:
+            raise RuntimeError(f"GraphQL error: {errors or message or 'no data returned'}")
         if errors:
-            if payload is None:
-                raise RuntimeError(f"GraphQL error: {errors}")
             logger.warning("Partial GraphQL response; continuing with partial data: %s", errors)
         return payload

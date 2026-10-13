@@ -431,6 +431,10 @@ _SECONDARY_LIMIT_200 = Response(
         ]
     },
 )
+# A REST-style body on a 200, with no `data` or `errors` at all.
+_SECONDARY_LIMIT_200_MESSAGE = Response(
+    200, json={"message": "You have exceeded a secondary rate limit. Please wait a few minutes."}
+)
 _SECONDARY_LIMIT_403 = Response(
     403,
     json={"message": "You have exceeded a secondary rate limit. Please wait a few minutes."},
@@ -442,14 +446,26 @@ _SECONDARY_LIMIT_403 = Response(
 @respx.mock
 @pytest.mark.parametrize(
     "response",
-    [_PRIMARY_LIMIT_200, _SECONDARY_LIMIT_200, _SECONDARY_LIMIT_403],
-    ids=["primary-200", "secondary-200", "secondary-403"],
+    [_PRIMARY_LIMIT_200, _SECONDARY_LIMIT_200, _SECONDARY_LIMIT_200_MESSAGE, _SECONDARY_LIMIT_403],
+    ids=["primary-200", "secondary-200", "secondary-200-message", "secondary-403"],
 )
 async def test_a_graphql_rate_limit_raises_rate_limited(response: Response) -> None:
     respx.post("https://api.github.com/graphql").mock(return_value=response)
 
     async with GitHubClient(token="ghs_test", max_retries=1) as gh:
         with pytest.raises(GitHubRateLimited):
+            await gh.graphql("query Probe { viewer { login } }", {})
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_a_graphql_body_without_data_is_an_error_not_an_empty_answer() -> None:
+    """Returned as None, it crashed callers outside their fail-soft blocks
+    and quietly emptied the workflow probe."""
+    respx.post("https://api.github.com/graphql").mock(return_value=Response(200, json={}))
+
+    async with GitHubClient(token="ghs_test") as gh:
+        with pytest.raises(RuntimeError, match="GraphQL"):
             await gh.graphql("query Probe { viewer { login } }", {})
 
 
