@@ -114,12 +114,10 @@ class NarrativeService:
                 acc.append(chunk)
                 yield chunk
         except Exception as e:
-            logger.error(
-                f"LLM streaming failed for {report.username} ({mode}): {e}. Activating fallback narrative.",
-                exc_info=True,
-            )
+            # Reported once, as the fingerprinted Sentry event below; an ERROR
+            # log here would file a second issue through the logging integration.
             record_narrative_fallback(
-                reason="error", mode=mode, username=report.username, detail=repr(e)
+                reason="error", mode=mode, username=report.username, detail=repr(e), exc=e
             )
             if meta is not None:
                 meta.is_fallback = True

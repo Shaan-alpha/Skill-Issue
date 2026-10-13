@@ -36,12 +36,15 @@ def record_narrative_fallback(
     mode: str,
     username: str,
     detail: str | None = None,
+    exc: BaseException | None = None,
 ) -> None:
     """Record that a narrative fell back to stand-in text.
 
     `reason="budget"` logs a warning and stops: the daily cap is a designed
-    limit, not an incident. `reason="error"` additionally captures a Sentry
-    event so the degradation is alertable on its own.
+    limit, not an incident. `reason="error"` additionally captures one Sentry
+    event, with `exc` when there is one, so the degradation is alertable on its
+    own. The log line stays at WARNING: Sentry's logging integration files
+    every ERROR record as a separate event, which duplicated this one.
 
     Telemetry fails open. A failure to report must never take down the request
     it is reporting on.
@@ -50,7 +53,7 @@ def record_narrative_fallback(
         logger.warning("narrative.fallback reason=budget mode=%s user=%s", mode, username)
         return
 
-    logger.error(
+    logger.warning(
         "narrative.fallback reason=error mode=%s user=%s detail=%s", mode, username, detail
     )
 
@@ -64,10 +67,13 @@ def record_narrative_fallback(
                 "narrative",
                 {"username": username, "mode": mode, "detail": detail},
             )
-            sentry_sdk.capture_message(
-                "Narrative degraded to fallback text (upstream failure)",
-                level="error",
-                fingerprint=_ERROR_FINGERPRINT,
-            )
+            if exc is not None:
+                sentry_sdk.capture_exception(exc, level="error", fingerprint=_ERROR_FINGERPRINT)
+            else:
+                sentry_sdk.capture_message(
+                    "Narrative degraded to fallback text (upstream failure)",
+                    level="error",
+                    fingerprint=_ERROR_FINGERPRINT,
+                )
     except Exception:  # pragma: no cover - defensive; telemetry never breaks a request
         logger.exception("narrative.fallback: failed to report to Sentry")
