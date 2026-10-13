@@ -134,6 +134,58 @@ def test_a_one_day_gap_reads_as_one_day() -> None:
     assert details == ["Longest gap between commits was 1 day (< 60)"]
 
 
+def _dry_spell(profile: Profile) -> list[str]:
+    return [e.detail for e in score(profile).evidence if e.signal == "low_dry_spell"]
+
+
+def _midnight() -> datetime:
+    return datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def test_a_burst_too_short_to_hold_a_dry_spell_earns_nothing() -> None:
+    """A full page of commits from the last five days says nothing about the
+    rest of the year. A stretch shorter than 60 days can't show a 60-day gap,
+    so judging it alone would hand out the points to any burst."""
+    profile = _load("profile_senior.json")
+    profile.account_created_at = datetime(2015, 1, 1, tzinfo=UTC)
+    today = _midnight()
+    burst = [today - timedelta(days=i) for i in range(5)]
+    profile.commit_dates = [today - timedelta(days=300), today - timedelta(days=290), *burst]
+    profile.commit_history_complete_since = min(burst)
+
+    assert _dry_spell(profile) == []
+
+
+def test_evidence_names_where_a_cut_off_history_was_judged_from() -> None:
+    """Judged only from the day the history is complete, the evidence says so
+    rather than claiming the whole year."""
+    profile = _load("profile_senior.json")
+    profile.account_created_at = datetime(2015, 1, 1, tzinfo=UTC)
+    today = _midnight()
+    profile.commit_dates = [today - timedelta(days=3 * i) for i in range(100)]
+    start = min(profile.commit_dates)
+    profile.commit_history_complete_since = start
+
+    assert _dry_spell(profile) == [
+        f"Longest gap between commits since {start.day} {start:%b %Y} was 3 days (< 60); "
+        "earlier commits were only partly read"
+    ]
+
+
+def test_visible_gaps_bound_the_hidden_ones() -> None:
+    """Commits a cut-off page hid could only shorten the gaps, so when the
+    commits that were read already show no 60-day gap, the year is judged."""
+    profile = _load("profile_senior.json")
+    profile.account_created_at = datetime(2015, 1, 1, tzinfo=UTC)
+    today = _midnight()
+    busy = [today - timedelta(days=i) for i in range(30)]
+    steady = [today - timedelta(days=20 * i) for i in range(19)]
+    profile.commit_dates = sorted(set(busy + steady))
+    profile.commit_history_complete_since = min(busy)
+
+    assert _dry_spell(profile) == ["Longest gap between commits was at most 20 days (< 60)"]
+
+
 def test_consistency_appends_cross_repo_evidence_when_available() -> None:
     profile = _load("profile_senior.json")
     now = datetime.now(UTC)
