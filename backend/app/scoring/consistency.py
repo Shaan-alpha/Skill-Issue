@@ -1,22 +1,31 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from itertools import pairwise
 
 from app.models import Evidence, Profile, ScoreResult
 from app.scoring.base import make_result
 
 MAX_POINTS = 10
+ONE_YEAR = timedelta(days=365)
+
+
+def _aware(d: datetime) -> datetime:
+    # Defensive: ingestion stores tz-aware UTC datetimes, but tests may
+    # construct profiles with naive datetimes — coerce so date math stays safe.
+    return d if d.tzinfo else d.replace(tzinfo=UTC)
 
 
 def score(profile: Profile) -> ScoreResult:
     evidence: list[Evidence] = []
     points = 0
 
-    # Defensive: ingestion stores tz-aware UTC datetimes, but tests may
-    # construct profiles with naive datetimes — coerce so date math stays safe.
-    dates = sorted(d if d.tzinfo else d.replace(tzinfo=UTC) for d in profile.commit_dates)
+    now = datetime.now(UTC)
+    # Ingestion collects two years of commit days because Learning Trajectory
+    # compares the last year with the one before it. Every rule here is about
+    # the last year only.
+    year_ago = now - ONE_YEAR
+    dates = sorted(d for d in map(_aware, profile.commit_dates) if d > year_ago)
     if not dates:
         return make_result(points=0, max_points=MAX_POINTS, evidence=[])
-
-    now = datetime.now(UTC)
 
     # 1. At least one commit in each of last 3 calendar months -> 4 pts
     last_3_months: list[tuple[int, int]] = []
@@ -39,13 +48,13 @@ def score(profile: Profile) -> ScoreResult:
         )
         points += 4
 
-    # 2. Longest dry spell over the last year < 60 days -> 3 pts
-    max_gap = 0
-    for i in range(len(dates) - 1):
-        gap = (dates[i + 1] - dates[i]).days
-        max_gap = max(max_gap, gap)
-    gap_to_now = (now - dates[-1]).days
-    max_gap = max(max_gap, gap_to_now)
+    # 2. Longest dry spell over the last year < 60 days -> 3 pts. The silence
+    # before the first commit counts too, measured from the start of the window
+    # or from account creation, whichever is later: a dry spell cannot predate
+    # the account.
+    window_start = max(year_ago, _aware(profile.account_created_at))
+    boundaries = [window_start, *dates, now]
+    max_gap = max(max((later - earlier).days, 0) for earlier, later in pairwise(boundaries))
 
     if max_gap < 60:
         evidence.append(
@@ -57,12 +66,12 @@ def score(profile: Profile) -> ScoreResult:
         )
         points += 3
 
-    # 3. >= 30 commits over the last 12 months -> 3 pts
+    # 3. >= 30 commit days over the last 12 months -> 3 pts
     if len(dates) >= 30:
         evidence.append(
             Evidence(
                 signal="high_volume",
-                detail=f"Total of {len(dates)} commit days in the last year",
+                detail=f"Committed on {len(dates)} days in the last year",
                 weight=3,
             )
         )
