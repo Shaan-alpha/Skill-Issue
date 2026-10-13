@@ -310,6 +310,14 @@ def _visible_chars(markdown: str | None) -> int:
     return len(_HTML_COMMENT.sub("", markdown or "").strip())
 
 
+def _commit_day(commit: dict[str, Any]) -> datetime | None:
+    """The commit's author date as a UTC-aware day, so date math stays safe."""
+    date_str = (commit.get("author") or {}).get("date")
+    if not date_str:
+        return None
+    return datetime.strptime(date_str[:10], "%Y-%m-%d").replace(tzinfo=UTC)
+
+
 def _parse_dt(value: str | None) -> datetime | None:
     if not value:
         return None
@@ -522,7 +530,9 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
     # Trajectory compares it with the one before). All three run together.
     inspected = repos[:ROOT_CONTENT_LIMIT]
     top_repos = [r for r in repos_raw if not r.get("fork")][:10]
-    two_years_ago = (datetime.now(UTC) - timedelta(days=730)).isoformat()
+    now = datetime.now(UTC)
+    one_year_ago = now - timedelta(days=365)
+    two_years_ago = now - timedelta(days=730)
     workflow_counts, language_maps, commit_lists = await gather_all(
         _inspect_repo_roots(inspected, gh),
         gather_all(*(gh.list_languages(*r.full_name.split("/", 1)) for r in inspected)),
@@ -532,7 +542,7 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
                     r["owner"]["login"],
                     r["name"],
                     username,
-                    two_years_ago,
+                    two_years_ago.isoformat(),
                     per_page=_COMMITS_PER_REPO,
                 )
                 for r in top_repos
@@ -548,14 +558,14 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
     commit_dates_set: set[datetime] = set()
     commit_subjects: list[str] = []
     complete_since: datetime | None = None
-    for repo_commits in commit_lists:
+    # Repos whose full page fits inside the last year: the year before is unseen.
+    cut_within_year: list[dict[str, Any]] = []
+    for raw, repo_commits in zip(top_repos, commit_lists, strict=True):
         repo_days: list[datetime] = []
         for c in repo_commits:
             commit = c.get("commit") or {}
-            date_str = (commit.get("author") or {}).get("date")
-            if date_str:
-                # Normalize to a UTC-aware day so downstream date math is safe.
-                day = datetime.strptime(date_str[:10], "%Y-%m-%d").replace(tzinfo=UTC)
+            day = _commit_day(commit)
+            if day is not None:
                 commit_dates_set.add(day)
                 repo_days.append(day)
             # Commit messages are untrusted text: keep a bounded first line.
@@ -565,6 +575,30 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
         if len(repo_commits) >= _COMMITS_PER_REPO and repo_days:
             oldest = min(repo_days)
             complete_since = oldest if complete_since is None else max(complete_since, oldest)
+            if oldest > one_year_ago:
+                cut_within_year.append(raw)
+
+    # Learning Trajectory credits commits in each of the last two years. When
+    # the year before is invisible only because pages were cut off inside the
+    # last year, ask those repos for one commit from it.
+    if cut_within_year and not any(two_years_ago < d <= one_year_ago for d in commit_dates_set):
+        older_pages = await gather_all(
+            *(
+                gh.list_commits(
+                    raw["owner"]["login"],
+                    raw["name"],
+                    username,
+                    two_years_ago.isoformat(),
+                    per_page=1,
+                    until=one_year_ago.isoformat(),
+                )
+                for raw in cut_within_year
+            )
+        )
+        for page in older_pages:
+            for c in page:
+                if (day := _commit_day(c.get("commit") or {})) is not None:
+                    commit_dates_set.add(day)
 
     return Profile(
         username=user["login"],

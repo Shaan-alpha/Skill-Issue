@@ -352,7 +352,13 @@ class GitHubClient:
         return resp.json()
 
     async def list_commits(
-        self, owner: str, repo: str, author: str, since: str, per_page: int = 100
+        self,
+        owner: str,
+        repo: str,
+        author: str,
+        since: str,
+        per_page: int = 100,
+        until: str | None = None,
     ) -> list[dict[str, Any]]:
         """List commits on a repo filtered by author + since-date.
 
@@ -360,11 +366,10 @@ class GitHubClient:
         Both surface as []. (The 409 path bit a real user analysis in v0.8.2:
         empty repos in mohit-sharma2's account broke the ingestion fan-out.)
         """
-        resp = await self._request(
-            "GET",
-            f"{API_BASE}/repos/{owner}/{repo}/commits",
-            params={"author": author, "since": since, "per_page": per_page},
-        )
+        params: dict[str, Any] = {"author": author, "since": since, "per_page": per_page}
+        if until is not None:
+            params["until"] = until
+        resp = await self._request("GET", f"{API_BASE}/repos/{owner}/{repo}/commits", params=params)
         if _repo_unavailable(resp):
             return []
         resp.raise_for_status()

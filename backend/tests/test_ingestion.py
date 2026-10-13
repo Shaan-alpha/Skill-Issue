@@ -3,7 +3,7 @@ import base64
 import contextlib
 import copy
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -849,6 +849,69 @@ async def test_a_full_commit_page_marks_where_the_history_is_complete() -> None:
     assert profile.commit_history_complete_since == today - timedelta(days=99)
 
 
+def _busy_repo_commits(prior_year_day: datetime | None) -> Callable[[httpx.Request], Response]:
+    """A repo whose page of 100 commits falls inside the last year. Asked for
+    the year before (`until`), it answers with `prior_year_day` if given."""
+    today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    def _answer(request: httpx.Request) -> Response:
+        if "until" in request.url.params:
+            return Response(200, json=[_commit(prior_year_day)] if prior_year_day else [])
+        return Response(200, json=[_commit(today - timedelta(days=i)) for i in range(100)])
+
+    return _answer
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_a_full_page_inside_the_last_year_is_checked_for_older_commits() -> None:
+    """Learning Trajectory credits commits in each of the last two years. When
+    a repo's 100 commits all fall inside the last year, its older ones went
+    unseen, so ingestion asks GitHub for one commit from the year before."""
+    repos_payload = [_fake_repo("busy", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql()
+    prior_year_day = datetime.now(UTC).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ) - timedelta(days=500)
+    respx.get(url__startswith="https://api.github.com/repos/octocat/busy/commits").mock(
+        side_effect=_busy_repo_commits(prior_year_day)
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert prior_year_day in profile.commit_dates
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_no_older_commit_check_when_the_year_before_is_already_visible() -> None:
+    repos_payload = [_fake_repo("busy", language="Python"), _fake_repo("quiet", language="Go")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql()
+    busy = respx.get(url__startswith="https://api.github.com/repos/octocat/busy/commits").mock(
+        side_effect=_busy_repo_commits(None)
+    )
+    today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    respx.get(url__startswith="https://api.github.com/repos/octocat/quiet/commits").mock(
+        return_value=Response(200, json=[_commit(today - timedelta(days=400))])
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        await ingest_profile("octocat", gh)
+
+    assert [call.request.url.params.get("until") for call in busy.calls] == [None]
+
+
 @pytest.mark.asyncio
 @respx.mock
 async def test_short_commit_pages_mean_the_history_is_complete() -> None:
@@ -1029,7 +1092,13 @@ class FakeGitHubClient:
             return {"Python": 100}
 
     async def list_commits(
-        self, owner: str, name: str, author: str, since: str, per_page: int = 100
+        self,
+        owner: str,
+        name: str,
+        author: str,
+        since: str,
+        per_page: int = 100,
+        until: str | None = None,
     ) -> list[dict[str, object]]:
         async with self._call("list_commits"):
             return []
