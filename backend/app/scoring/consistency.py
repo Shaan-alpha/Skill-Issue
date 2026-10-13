@@ -63,7 +63,10 @@ def score(profile: Profile) -> ScoreResult:
         evidence.append(
             Evidence(
                 signal="low_dry_spell",
-                detail=f"Longest gap between commits was {max_gap} days (< 60)",
+                detail=(
+                    f"Longest gap between commits was {max_gap} "
+                    f"{'day' if max_gap == 1 else 'days'} (< 60)"
+                ),
                 weight=3,
             )
         )

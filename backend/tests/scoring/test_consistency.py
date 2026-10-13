@@ -124,6 +124,16 @@ def test_gaps_before_the_history_is_complete_are_not_judged() -> None:
     assert "low_dry_spell" in _signals(profile)
 
 
+def test_a_one_day_gap_reads_as_one_day() -> None:
+    profile = _load("profile_senior.json")
+    profile.account_created_at = datetime(2015, 1, 1, tzinfo=UTC)
+    today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    profile.commit_dates = [today - timedelta(days=i) for i in range(366)]
+
+    details = [e.detail for e in score(profile).evidence if e.signal == "low_dry_spell"]
+    assert details == ["Longest gap between commits was 1 day (< 60)"]
+
+
 def test_consistency_appends_cross_repo_evidence_when_available() -> None:
     profile = _load("profile_senior.json")
     now = datetime.now(UTC)
