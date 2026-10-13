@@ -1,5 +1,7 @@
 import pathlib
 
+import pytest
+
 from app.models import Profile
 from app.scoring.engineering_maturity import MAX_POINTS, score
 
@@ -40,3 +42,68 @@ def test_engineering_maturity_uses_workflow_count_when_available() -> None:
     result = score(profile)
     ci_evidence = next(e for e in result.evidence if e.signal == "ci_culture")
     assert "workflows" in ci_evidence.detail.lower()
+
+
+def _signals_for_primary_language(language: str) -> set[str]:
+    profile = _load("profile_student.json")
+    for repo in profile.repos:
+        repo.primary_language = language
+    return {e.signal for e in score(profile).evidence}
+
+
+# Exact GitHub Linguist names (2026-10-13 research). Compile-time type checking
+# is mandatory or the ecosystem default for each of these.
+@pytest.mark.parametrize(
+    "language",
+    [
+        "TypeScript",
+        "Rust",
+        "Go",
+        "Dart",
+        "Scala",
+        "Haskell",
+        "Zig",
+        "OCaml",
+        "F#",
+        "Elm",
+        "Gleam",
+        "Crystal",
+        "Nim",
+        "D",
+        "Fortran",
+        "Ada",
+        "Solidity",
+        "Apex",
+        "Visual Basic .NET",
+        "Pascal",
+        "PureScript",
+        "ReScript",
+        "Reason",
+        "Haxe",
+        "Vala",
+        "V",
+        "Odin",
+        "Mojo",
+        "Idris",
+        "Lean",
+        "Move",
+        "Cairo",
+        "Standard ML",
+        "Agda",
+        "Chapel",
+        "Ballerina",
+        "Objective-C",
+        "Objective-C++",
+        "Hack",
+    ],
+)
+def test_statically_typed_primary_language_earns_the_typed_signal(language: str) -> None:
+    assert "typed_language" in _signals_for_primary_language(language)
+
+
+# Dynamic, or typing that is opt-in rather than the default.
+@pytest.mark.parametrize(
+    "language", ["JavaScript", "Ruby", "PHP", "Elixir", "Julia", "Groovy", "Luau", "Shell"]
+)
+def test_dynamic_primary_language_does_not_earn_the_typed_signal(language: str) -> None:
+    assert "typed_language" not in _signals_for_primary_language(language)

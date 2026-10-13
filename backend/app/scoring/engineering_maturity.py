@@ -3,6 +3,10 @@ from app.scoring.base import make_result
 
 MAX_POINTS = 20
 
+# Exact GitHub Linguist names. A language counts when compile-time type checking
+# is mandatory or the ecosystem default (2026-10-13 research). Python is a
+# deliberate exception, for its type-hint ecosystem; languages whose typing is
+# opt-in (Elixir, Julia, Groovy, Luau) stay out.
 TYPED_LANGUAGES = {
     "TypeScript",
     "Python",
@@ -14,6 +18,42 @@ TYPED_LANGUAGES = {
     "C#",
     "C++",
     "C",
+    "Objective-C",
+    "Objective-C++",
+    "Dart",
+    "Scala",
+    "Haskell",
+    "Zig",
+    "OCaml",
+    "F#",
+    "Elm",
+    "Gleam",
+    "Crystal",
+    "Nim",
+    "D",
+    "Fortran",
+    "Ada",
+    "Solidity",
+    "Apex",
+    "Visual Basic .NET",
+    "Pascal",
+    "Hack",
+    "PureScript",
+    "ReScript",
+    "Reason",
+    "Haxe",
+    "Vala",
+    "V",
+    "Odin",
+    "Mojo",
+    "Idris",
+    "Lean",
+    "Move",
+    "Cairo",
+    "Standard ML",
+    "Agda",
+    "Chapel",
+    "Ballerina",
 }
 
 
