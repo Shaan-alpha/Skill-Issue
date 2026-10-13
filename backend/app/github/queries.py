@@ -20,15 +20,21 @@ query PinnedRepos($login: String!) {
 }
 """
 
+# `user.pullRequests(states: MERGED)` counts every merged PR the user authored,
+# their own repositories included, so it cannot answer "how much do you ship
+# into other people's code?". The search below excludes repositories the user
+# owns (`-user:`); `$externalMerged` is built by external_merged_prs_query().
 EXTERNAL_PRS = """
-query ExternalPRs($login: String!) {
+query ExternalPRs($login: String!, $externalMerged: String!) {
   user(login: $login) {
     hasSponsorsListing
     isGitHubStar
     isDeveloperProgramMember
-    pullRequests(states: MERGED, first: 100) {
-      totalCount
-      nodes {
+  }
+  search(query: $externalMerged, type: ISSUE, first: 100) {
+    issueCount
+    nodes {
+      ... on PullRequest {
         repository {
           owner {
             login
@@ -39,6 +45,13 @@ query ExternalPRs($login: String!) {
   }
 }
 """
+
+
+def external_merged_prs_query(login: str) -> str:
+    """Search string for merged PRs `login` authored in repositories it doesn't
+    own, newest first (the nodes feed the org-diversity signal)."""
+    return f"author:{login} is:pr is:merged -user:{login} sort:updated-desc"
+
 
 # Isolated from EXTERNAL_PRS on purpose: pullRequestReviewContributions.totalCount
 # is the field GitHub most often rejects with RESOURCE_LIMITS_EXCEEDED for
@@ -57,7 +70,7 @@ query ExternalReviewCount($login: String!) {
 """
 
 REVIEW_DEPTH = """
-query($login: String!) {
+query ReviewDepth($login: String!) {
   user(login: $login) {
     contributionsCollection {
       pullRequestReviewContributions(first: 25) {
@@ -69,7 +82,7 @@ query($login: String!) {
 """
 
 CONTRIBUTION_REPOS = """
-query($login: String!, $from: DateTime!, $to: DateTime!) {
+query ContributionRepos($login: String!, $from: DateTime!, $to: DateTime!) {
   user(login: $login) {
     contributionsCollection(from: $from, to: $to) {
       commitContributionsByRepository(maxRepositories: 100) {

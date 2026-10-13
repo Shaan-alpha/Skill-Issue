@@ -11,6 +11,7 @@ from httpx import Response
 from app.github.client import GitHubClient
 from app.ingestion.profile import ingest_profile
 from app.scoring import engineering_maturity
+from tests.graphql_router import graphql_router
 
 FIXTURES = Path(__file__).parent / "fixtures" / "github_responses"
 
@@ -92,54 +93,61 @@ def _mock_contents(
             )
 
 
+def _pinned_payload(nodes: list[dict[str, object]] | None = None) -> dict[str, object]:
+    return {"data": {"user": {"pinnedItems": {"nodes": nodes or []}}}}
+
+
+def _external_prs_payload(
+    *,
+    external_prs: int = 0,
+    own_repo_prs: int = 0,
+    external_owners: tuple[str, ...] = (),
+    sponsors: bool = True,
+    star: bool = False,
+    dev_program: bool = True,
+) -> dict[str, object]:
+    return {
+        "data": {
+            "user": {
+                "hasSponsorsListing": sponsors,
+                "isGitHubStar": star,
+                "isDeveloperProgramMember": dev_program,
+                # Every merged PR the user authored, their own repositories included.
+                "pullRequests": {"totalCount": external_prs + own_repo_prs, "nodes": []},
+            },
+            # Merged PRs into repositories the user does not own.
+            "search": {
+                "issueCount": external_prs,
+                "nodes": [{"repository": {"owner": {"login": o}}} for o in external_owners],
+            },
+        }
+    }
+
+
+def _review_count_payload(total: int = 0) -> dict[str, object]:
+    return {
+        "data": {
+            "user": {
+                "contributionsCollection": {"pullRequestReviewContributions": {"totalCount": total}}
+            }
+        }
+    }
+
+
 def _mock_graphql(
     *,
     pinned_nodes: list[dict[str, object]] | None = None,
     external_prs: int = 0,
     external_reviews: int = 0,
-) -> None:
-    # ingest_profile issues three GraphQL POSTs in order: PINNED_REPOS, EXTERNAL_PRS,
-    # then EXTERNAL_REVIEW_COUNT (the review count is a separate isolated query).
-    respx.post("https://api.github.com/graphql").mock(
-        side_effect=[
-            Response(
-                200,
-                json={
-                    "data": {
-                        "user": {
-                            "pinnedItems": {
-                                "nodes": pinned_nodes or [],
-                            }
-                        }
-                    }
-                },
-            ),
-            Response(
-                200,
-                json={
-                    "data": {
-                        "user": {
-                            "hasSponsorsListing": True,
-                            "isGitHubStar": False,
-                            "isDeveloperProgramMember": True,
-                            "pullRequests": {"totalCount": external_prs, "nodes": []},
-                        }
-                    }
-                },
-            ),
-            Response(
-                200,
-                json={
-                    "data": {
-                        "user": {
-                            "contributionsCollection": {
-                                "pullRequestReviewContributions": {"totalCount": external_reviews}
-                            }
-                        }
-                    }
-                },
-            ),
-        ]
+) -> respx.Route:
+    return respx.post("https://api.github.com/graphql").mock(
+        side_effect=graphql_router(
+            {
+                "PinnedRepos": _pinned_payload(pinned_nodes),
+                "ExternalPRs": _external_prs_payload(external_prs=external_prs),
+                "ExternalReviewCount": _review_count_payload(external_reviews),
+            }
+        )
     )
 
 
@@ -253,6 +261,45 @@ async def test_ingest_profile_populates_languages_readme_and_external_counts() -
     assert profile.is_developer_program_member is True
 
 
+@pytest.mark.asyncio
+@respx.mock
+async def test_merged_prs_into_own_repositories_are_not_external() -> None:
+    """`user.pullRequests(states: MERGED)` counts every merged PR the user
+    authored, including into their own repositories, so a solo developer merging
+    their own PRs looked like a prolific open-source contributor. Only PRs into
+    repositories the user does not own are external. Live on 2026-10-13:
+    Shaan-alpha had 141 merged PRs, 8 of them into other people's repositories."""
+    repos_payload = [_fake_repo("alpha-api", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_commits(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    route = respx.post("https://api.github.com/graphql").mock(
+        side_effect=graphql_router(
+            {
+                "PinnedRepos": _pinned_payload(),
+                "ExternalPRs": _external_prs_payload(
+                    external_prs=8,
+                    own_repo_prs=133,
+                    external_owners=("home-assistant", "narwhals-dev", "home-assistant"),
+                ),
+                "ExternalReviewCount": _review_count_payload(),
+            }
+        )
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.external_prs_merged == 8
+    assert profile.external_orgs == {"home-assistant", "narwhals-dev"}
+    sent = [json.loads(call.request.content) for call in route.calls]
+    external_query = next(body for body in sent if "ExternalPRs" in body["query"])
+    assert "-user:octocat" in json.dumps(external_query["variables"])
+
+
 _RESOURCE_LIMIT_ERROR = {
     "data": None,
     "errors": [
@@ -279,26 +326,18 @@ async def test_ingest_profile_keeps_pr_count_when_review_query_hits_resource_lim
     _mock_commits(repos_payload)
     _mock_contents(repos_payload)
     _mock_profile_readme()
-    # POSTs in order: PINNED_REPOS (ok), EXTERNAL_PRS (ok, 137 merged PRs),
-    # EXTERNAL_REVIEW_COUNT (rejected with RESOURCE_LIMITS_EXCEEDED).
+    # EXTERNAL_PRS succeeds (137 merged PRs); EXTERNAL_REVIEW_COUNT is rejected
+    # with RESOURCE_LIMITS_EXCEEDED.
     respx.post("https://api.github.com/graphql").mock(
-        side_effect=[
-            Response(200, json={"data": {"user": {"pinnedItems": {"nodes": []}}}}),
-            Response(
-                200,
-                json={
-                    "data": {
-                        "user": {
-                            "hasSponsorsListing": True,
-                            "isGitHubStar": True,
-                            "isDeveloperProgramMember": False,
-                            "pullRequests": {"totalCount": 137, "nodes": []},
-                        }
-                    }
-                },
-            ),
-            Response(200, json=_RESOURCE_LIMIT_ERROR),
-        ]
+        side_effect=graphql_router(
+            {
+                "PinnedRepos": _pinned_payload(),
+                "ExternalPRs": _external_prs_payload(
+                    external_prs=137, sponsors=True, star=True, dev_program=False
+                ),
+                "ExternalReviewCount": _RESOURCE_LIMIT_ERROR,
+            }
+        )
     )
 
     async with GitHubClient(token="ghs_test") as gh:
@@ -326,22 +365,13 @@ async def test_ingest_profile_keeps_review_count_when_pr_query_fails() -> None:
     _mock_contents(repos_payload)
     _mock_profile_readme()
     respx.post("https://api.github.com/graphql").mock(
-        side_effect=[
-            Response(200, json={"data": {"user": {"pinnedItems": {"nodes": []}}}}),
-            Response(200, json=_RESOURCE_LIMIT_ERROR),
-            Response(
-                200,
-                json={
-                    "data": {
-                        "user": {
-                            "contributionsCollection": {
-                                "pullRequestReviewContributions": {"totalCount": 9}
-                            }
-                        }
-                    }
-                },
-            ),
-        ]
+        side_effect=graphql_router(
+            {
+                "PinnedRepos": _pinned_payload(),
+                "ExternalPRs": _RESOURCE_LIMIT_ERROR,
+                "ExternalReviewCount": _review_count_payload(9),
+            }
+        )
     )
 
     async with GitHubClient(token="ghs_test") as gh:

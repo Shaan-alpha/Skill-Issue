@@ -8,7 +8,12 @@ from typing import TYPE_CHECKING, Any
 import httpx
 
 from app import settings as settings_module
-from app.github.queries import EXTERNAL_PRS, EXTERNAL_REVIEW_COUNT, PINNED_REPOS
+from app.github.queries import (
+    EXTERNAL_PRS,
+    EXTERNAL_REVIEW_COUNT,
+    PINNED_REPOS,
+    external_merged_prs_query,
+)
 from app.models import Profile, Repo
 
 if TYPE_CHECKING:
@@ -140,16 +145,20 @@ async def _ingest_external_signals(username: str, gh: GitHubClient) -> dict[str,
         "external_orgs": set(),
     }
 
-    # Merged PRs + account badges + external orgs — the cheaper half; GitHub can
-    # usually compute this even for very active accounts.
+    # Merged PRs into other people's repositories + account badges + external
+    # orgs — the cheaper half; GitHub can usually compute this even for very
+    # active accounts.
     try:
-        external = await gh.graphql(EXTERNAL_PRS, {"login": username})
+        external = await gh.graphql(
+            EXTERNAL_PRS,
+            {"login": username, "externalMerged": external_merged_prs_query(username)},
+        )
         external_user = external.get("user") or {}
-        external_prs = external_user.get("pullRequests") or {}
+        external_prs = external.get("search") or {}
 
         external_orgs: set[str] = set()
         for node in external_prs.get("nodes") or []:
-            owner_login = (node.get("repository") or {}).get("owner", {}).get("login")
+            owner_login = ((node or {}).get("repository") or {}).get("owner", {}).get("login")
             if owner_login and owner_login.lower() != username.lower():
                 external_orgs.add(owner_login)
 
@@ -157,7 +166,7 @@ async def _ingest_external_signals(username: str, gh: GitHubClient) -> dict[str,
             has_sponsors_listing=external_user.get("hasSponsorsListing", False),
             is_github_star=external_user.get("isGitHubStar", False),
             is_developer_program_member=external_user.get("isDeveloperProgramMember", False),
-            external_prs_merged=external_prs.get("totalCount", 0),
+            external_prs_merged=external_prs.get("issueCount", 0),
             external_orgs=external_orgs,
         )
     except Exception:

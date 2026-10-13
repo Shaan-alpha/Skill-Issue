@@ -14,6 +14,7 @@ from httpx import ASGITransport, AsyncClient, Response
 from app import dependencies as dep_module
 from app import main as app_module
 from app.settings import Settings
+from tests.graphql_router import graphql_router
 
 if TYPE_CHECKING:
     from app.cache.client import RedisCache
@@ -108,27 +109,29 @@ def _mock_github_for_testuser() -> None:
         )
 
     respx.post("https://api.github.com/graphql").mock(
-        side_effect=[
-            Response(200, json={"data": {"user": {"pinnedItems": {"nodes": []}}}}),
-            Response(
-                200,
-                json={
+        side_effect=graphql_router(
+            {
+                "PinnedRepos": {"data": {"user": {"pinnedItems": {"nodes": []}}}},
+                "ExternalPRs": {
                     "data": {
                         "user": {
                             "hasSponsorsListing": False,
                             "isGitHubStar": False,
                             "isDeveloperProgramMember": False,
                             "pullRequests": {"totalCount": 0, "nodes": []},
-                            "contributionsCollection": {
-                                "pullRequestReviewContributions": {"totalCount": 0}
-                            },
                         }
                     }
                 },
-            ),
-            Response(
-                200,
-                json={
+                "ExternalReviewCount": {
+                    "data": {
+                        "user": {
+                            "contributionsCollection": {
+                                "pullRequestReviewContributions": {"totalCount": 0}
+                            }
+                        }
+                    }
+                },
+                "ReviewDepth": {
                     "data": {
                         "user": {
                             "contributionsCollection": {
@@ -137,16 +140,13 @@ def _mock_github_for_testuser() -> None:
                         }
                     }
                 },
-            ),
-            Response(
-                200,
-                json={
+                "ContributionRepos": {
                     "data": {
                         "user": {"contributionsCollection": {"commitContributionsByRepository": []}}
                     }
                 },
-            ),
-        ]
+            }
+        )
     )
 
 
