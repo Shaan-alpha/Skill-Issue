@@ -8,7 +8,7 @@ import re
 from typing import TYPE_CHECKING
 
 from app.ingestion.profile import gather_all
-from app.models import Profile, TierName
+from app.models import Profile, Repo, TierName
 
 if TYPE_CHECKING:
     from app.github.client import GitHubClient
@@ -81,38 +81,56 @@ def _commit_message_quality(messages: list[str]) -> int:
     return round(good / len(messages) * 100)
 
 
+async def _enrich_professional(profile: Profile, repos: list[Repo], gh: "GitHubClient") -> None:
+    results = await gather_all(*(_enrich_repo_professional(r.full_name, gh) for r in repos))
+    profile.licensed_repos = [str(r["full_name"]) for r in results if r["license_id"] is not None]
+    profile.readme_lengths = {
+        str(r["full_name"]): int(r["readme_length"])  # type: ignore[arg-type]
+        for r in results
+        if int(r["readme_length"])  # type: ignore[arg-type]
+    }
+
+
+async def _enrich_senior(profile: Profile, repos: list[Repo], gh: "GitHubClient") -> None:
+    review_depth, dep_results = await gather_all(
+        gh.get_review_depth(profile.username),
+        gather_all(*(_enrich_repo_senior(r.full_name, gh) for r in repos)),
+    )
+    profile.review_avg_comments = review_depth  # type: ignore[assignment]
+    profile.dep_files = {
+        str(r["full_name"]): list(r["dep_files"])  # type: ignore[arg-type]
+        for r in dep_results  # type: ignore[union-attr]
+        if r["dep_files"]  # type: ignore[index]
+    }
+
+
+async def _enrich_staff(profile: Profile, repos: list[Repo], gh: "GitHubClient") -> None:
+    commit_samples, cross_repo_count = await gather_all(
+        gather_all(
+            *(gh.list_recent_commits_sample(*r.full_name.split("/", 1), limit=20) for r in repos)
+        ),
+        gh.get_contribution_repo_count(profile.username, min_commits=10),
+    )
+    all_messages = [m for batch in commit_samples for m in batch]  # type: ignore[union-attr]
+    profile.commit_message_quality = _commit_message_quality(all_messages)
+    profile.cross_repo_contribution_count = cross_repo_count  # type: ignore[assignment]
+
+
 async def enrich_for_tier(profile: Profile, base_tier: TierName, gh: "GitHubClient") -> None:
-    """Populate Profile depth-signal fields appropriate to the user's base tier."""
+    """Populate Profile depth-signal fields appropriate to the user's base tier.
+
+    Every unlocked tier's reads are independent, so they all run at once; the
+    client bounds how many requests are in flight.
+    """
     non_fork = [r for r in profile.repos if not r.is_fork]
     top10 = non_fork[:10]
     top5 = non_fork[:5]
 
+    steps = []
     if _at_least(base_tier, "Professional Developer"):
-        results = await gather_all(*(_enrich_repo_professional(r.full_name, gh) for r in top10))
-        profile.licensed_repos = [
-            str(r["full_name"]) for r in results if r["license_id"] is not None
-        ]
-        profile.readme_lengths = {
-            str(r["full_name"]): int(r["readme_length"])  # type: ignore[arg-type]
-            for r in results
-            if int(r["readme_length"])  # type: ignore[arg-type]
-        }
-
+        steps.append(_enrich_professional(profile, top10, gh))
     if _at_least(base_tier, "Senior Engineer"):
-        profile.review_avg_comments = await gh.get_review_depth(profile.username)
-        dep_results = await gather_all(*(_enrich_repo_senior(r.full_name, gh) for r in top5))
-        profile.dep_files = {
-            str(r["full_name"]): list(r["dep_files"])  # type: ignore[arg-type]
-            for r in dep_results
-            if r["dep_files"]
-        }
-
+        steps.append(_enrich_senior(profile, top5, gh))
     if _at_least(base_tier, "Staff Engineer"):
-        commit_samples = await gather_all(
-            *(gh.list_recent_commits_sample(*r.full_name.split("/", 1), limit=20) for r in top5)
-        )
-        all_messages = [m for batch in commit_samples for m in batch]
-        profile.commit_message_quality = _commit_message_quality(all_messages)
-        profile.cross_repo_contribution_count = await gh.get_contribution_repo_count(
-            profile.username, min_commits=10
-        )
+        steps.append(_enrich_staff(profile, top5, gh))
+    await gather_all(*steps)

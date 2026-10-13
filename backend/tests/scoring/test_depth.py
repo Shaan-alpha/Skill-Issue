@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
@@ -130,3 +131,56 @@ def test_commit_message_quality_bounds_and_edge_cases() -> None:
     # Pathological long/scope message: no crash, bounded processing.
     huge = "feat(" + "a" * 10_000 + "): " + "z" * 100_000
     assert isinstance(_commit_message_quality([huge]), int)
+
+
+class _OverlapFake:
+    """Depth-enrichment GitHub double recording which reads were in flight together."""
+
+    def __init__(self) -> None:
+        self.in_flight: list[str] = []
+        self.pairs: set[frozenset[str]] = set()
+
+    async def _call(self, name: str, result: object) -> object:
+        self.pairs.update(frozenset((name, other)) for other in self.in_flight if other != name)
+        self.in_flight.append(name)
+        try:
+            await asyncio.sleep(0.005)
+            return result
+        finally:
+            self.in_flight.remove(name)
+
+    def ran_together(self, a: str, b: str) -> bool:
+        return frozenset((a, b)) in self.pairs
+
+    async def get_license(self, owner: str, name: str) -> object:
+        return await self._call("license", None)
+
+    async def get_repo_readme_text(self, owner: str, name: str) -> object:
+        return await self._call("readme", "")
+
+    async def get_review_depth(self, username: str) -> object:
+        return await self._call("review_depth", None)
+
+    async def get_repo_root_contents(self, owner: str, name: str) -> object:
+        return await self._call("root_contents", [])
+
+    async def list_recent_commits_sample(self, owner: str, name: str, *, limit: int) -> object:
+        return await self._call("commit_sample", [])
+
+    async def get_contribution_repo_count(self, username: str, *, min_commits: int) -> object:
+        return await self._call("contribution_repos", 0)
+
+
+@pytest.mark.asyncio
+async def test_unlocked_tiers_enrich_concurrently() -> None:
+    """Each tier's reads are independent of the others', so a Staff-tier
+    profile shouldn't wait for the Professional reads before starting the
+    Senior and Staff ones."""
+    profile = _bare_profile()
+    gh = _OverlapFake()
+
+    await enrich_for_tier(profile, "Staff Engineer", gh)
+
+    assert gh.ran_together("license", "review_depth")
+    assert gh.ran_together("review_depth", "contribution_repos")
+    assert gh.ran_together("license", "commit_sample")
