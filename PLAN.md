@@ -61,7 +61,8 @@
 | **v1.0.11** | Cache Components navigation-state sweep — roast duplication, `/me` staleness, analytics double-count, badge a11y, session snapshot; + fixture time-bomb and backend version-drift guards | ✅ shipped |
 | **v1.0.12** | Narrative output sweep — truncated/empty/markdown narratives, alertable fallback signal; + alembic logging bug, 72 DB tests enabled in CI (12 repaired), Next 16.3.2 | ✅ shipped |
 | **v1.0.13** | Audit remediation + dependency refresh — two critical Next.js advisories, commit-before-response, singleflight coalescing, fresh force refresh, cron classification, honest share/delete UI, structured logs; `requirements.txt` generated in CI | ✅ shipped |
-| **v1.0.14** | Toolchain majors — TypeScript 6, Vitest 5, jest-dom 7, Sentry SDK 11, framer-motion 13, openai 3, SQLAlchemy 2.1, each proven alone | 📋 proposed |
+| **v1.0.14** | Deep audit — external-PR and consistency scoring corrected, CI/test/deploy/language detection brought up to date, Recruiter Signal rebalanced, evidence on every score card, parallel ingestion (cold analyses ~2x faster), rate limits fail loudly | 🔄 in PR |
+| **v1.0.15** | Toolchain majors — TypeScript 6, Vitest 5, jest-dom 7, Sentry SDK 11, framer-motion 13, openai 3, SQLAlchemy 2.1, each proven alone | 📋 proposed |
 
 ---
 
@@ -1056,16 +1057,44 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 ---
 
-## v1.0.14 — Toolchain majors (proposed)
+## v1.0.14 — Deep audit: scoring currency, parallel ingestion, evidence on every card
+
+**Goal:** A whole-project audit (2026-10-13) with the deterministic scoring functions checked against current ecosystem research, every finding proven by a failing test before it was fixed, and the cold-analysis bottlenecks removed.
+
+**Delivered:**
+- **Scoring corrections (live-verified):** external merged PRs exclude the user's own repositories and private ones (`search … -user:X is:public`; Shaan-alpha 141 → 8, sindresorhus 2,242 → 1,072); Consistency judged on the last year with the gap from the window start counted; a pin no longer counts as a deployment artifact.
+- **Detection currency (2026-10-13 research, official docs per tool):** CI requires real workflow files (one batched GraphQL probe of `.github`/`.forgejo`/`.gitea` `workflows/`, 1 point) plus 13 more CI systems; modern test and deployment markers; 36 more statically typed languages; dependency manifests across ecosystems.
+- **Recruiter Signal rebalanced (approved by Shaan, option A):** profile README with ≥200 visible chars 3 · ≥3 pins 3 · bio 2 · website/hireable 2 · repo >50 stars 3 · GitHub recognition 2.
+- **Dead depth signals wired in at zero cost:** README depth, dependency hygiene and commit-subject quality are evidence rows built from ingestion's own reads; depth enrichment keeps only licences, review depth and cross-repo breadth (89 → 69 calls for a Staff-tier analysis).
+- **Evidence on every score card:** "Why N of M" disclosure (Base UI Collapsible), verified in Chrome at 1440/1024/768/390/360.
+- **Bottlenecks:** login-level, per-repo and depth reads run concurrently; the in-flight bound moved into `GitHubClient` so depth enrichment is capped too; `gather_all` cancels siblings on failure. Measured live: 20.0 s → 8.8 s (Senior), Staff 16.9 s → 10.9 s for the depth step alone.
+- **Robustness:** a repo GitHub won't serve reads as absent; rate limits fail the analysis (503 `service_busy`) instead of caching a low score; one immediate retry for 5xx/dropped connections; depth enrichment inside the error mapping; empty profile-README repo tolerated; failed OAuth callbacks land on `/?auth=failed`.
+- **Ops:** narrator timeout 30 s / 1 retry and `max_completion_tokens`; one Sentry event per narrative outage; server/edge Sentry `release`; session lookup releases its DB connection before the ingest; `last_used_at` written at most every 10 min; `/analyze` dedups runs and records real latency; report cache schema → v2.
+
+**Rulings (recorded in the PR):** this audit is v1.0.14 and the toolchain majors move to v1.0.15; scoring weights change only where Shaan approved them (Recruiter Signal); the new evidence rows carry no points; licence points stay Professional+-gated.
+
+**Deliberately not done:** licence data for all tiers (free via GraphQL, but awarding licence points below Professional is a product decision); a process-wide per-token GitHub concurrency limit (GitHub's best-practice note; per-analysis cap kept); the REST `2026-03-10` API version (2022-11-28 is supported until 2028-03-10); `recent_activity`'s use of `pushed_at` (a Dependabot push could refresh it, but no instance was found); `<a>`-wrapped buttons on history cards (needs a signed-in visual check); a shared `httpx` client across analyses; batching `/share/{slug}`'s three queries.
+
+**Exit criteria:**
+- [x] Every correctness fix test-first, watched failing with the described signature; live checks against GitHub/Groq where the fix depends on them.
+- [x] Backend: ruff clean; full suite green against a real Postgres (792).
+- [x] Frontend: lint, tsc, vitest (123) and a production build pass; UI verified in Chrome at five widths.
+- [x] All version constants at `1.0.14`; report cache schema bumped so pre-fix reports are not served.
+- [ ] PR checks green and merged; prod smoke: `/health` 1.0.14, a live analysis shows the new evidence, the narrator streams.
+- [ ] `CHANGELOG.md` `[1.0.14]`; tag `v1.0.14`; GitHub Release published.
+
+---
+
+## v1.0.15 — Toolchain majors (proposed)
 
 **Goal:** Take the major upgrades v1.0.13 deferred, one package per commit, each proven locally before it lands.
 
-**Candidates:** TypeScript 6.0 (typescript-eslint supports < 6.1), Vitest 5 + `@vitest/ui` 5, `@testing-library/jest-dom` 7, `@sentry/nextjs` 11 (read the migration guide against `src/observability`), framer-motion 13 (visual check at 360/768/1024), openai-python 3 (the narrator's client), SQLAlchemy 2.1 (asyncpg + PgBouncer). Still blocked upstream: ESLint 10 (eslint-plugin-react) and TypeScript 7 (typescript-eslint).
+**Candidates:** TypeScript 6.0 (typescript-eslint supports < 6.1), Vitest 5 + `@vitest/ui` 5, `@testing-library/jest-dom` 7, `@sentry/nextjs` 11 (read the migration guide against `src/observability`), framer-motion 13 (visual check at 360/768/1024), openai-python 3 (the narrator's client), SQLAlchemy 2.1 (asyncpg + PgBouncer). Still blocked upstream: ESLint 10 (eslint-plugin-react) and TypeScript 7 (typescript-eslint). Open Dependabot PRs #116–#119 cover four of them.
 
 **Exit criteria:**
 - [ ] Each major lands in its own commit with the full suite green.
 - [ ] Dependabot ignore rules removed for each major taken.
-- [ ] `CHANGELOG.md` `[1.0.14]`; tag `v1.0.14`.
+- [ ] `CHANGELOG.md` `[1.0.15]`; tag `v1.0.15`.
 
 ---
 

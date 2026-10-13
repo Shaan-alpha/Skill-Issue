@@ -26,7 +26,7 @@ flowchart TD
         direction TB
         ING["<b>Ingestion</b> · httpx + GraphQL<br/>profile · pinned · repos · commits<br/>PRs · issues · languages · contributions"]
         P1["<b>Scoring pass 1 — deterministic</b><br/>repo_quality 30 · maturity 20 · oss_collab 15<br/>recruiter_signal 15 · consistency 10 · trajectory 10<br/>→ base total → tier"]
-        P2["<b>Scoring pass 2 — tier-gated depth</b><br/>licence · workflows · README · review depth<br/>dep files · commit quality · cross-repo<br/>→ re-score"]
+        P2["<b>Scoring pass 2 — tier-gated depth</b><br/>licence · review depth · cross-repo breadth<br/>→ re-score"]
         TB["<b>Tier ladder + badges</b> · deterministic<br/>7 tiers Hobbyist → Principal, intra-tier sub-rank<br/>8 stackable, signal-driven badges"]
         NAR["<b>Narrative formatter</b> · Groq, mode-aware<br/>receives the score JSON, never raw data<br/>streams SSE back to the frontend"]
         CACHE["<b>app/cache/</b> — Upstash layer (v0.7.0)<br/>A · report cache, 6 h TTL<br/>B · singleflight SET-NX lock<br/>C · GH API cache, per endpoint<br/>D · narrative cache + daily budget<br/><i>every layer fail-open</i>"]
@@ -82,11 +82,12 @@ Green nodes are guiding principle 1 in the diagram: pure functions of GitHub dat
 
 - **Layers:** `app/ingestion/`, `app/scoring/` (which contains `tiers.py`, `badges.py`, `depth.py`, `engine.py` + per-bucket scorers), `app/github/`, `app/narrative/` (v0.4.0), `app/db/` + `app/auth/` + `app/persistence/` (v0.5.0), `app/cache/` (v0.7.0), `app/cron/` (v0.8.1), `app/share/` (v0.8.6 — `webhook.py` POSTs to the frontend `/api/revalidate` on every share toggle).
 - **Concurrency:** `asyncio` end to end; `httpx.AsyncClient` for outbound; no blocking I/O in the request path.
-- **GitHub access:** REST + GraphQL via a single typed client that handles rate-limit headers, retries with jitter, and conditional requests (`If-None-Match`).
-- **Scoring contract:** every scorer is `def score(profile: Profile) -> ScoreResult` where `ScoreResult` carries `points: int`, `max_points: int`, and `evidence: list[Evidence]`. Evidence is what the UI displays under "Why this score" — never hand-waved.
+- **GitHub access:** REST + GraphQL via one `GitHubClient` per analysis. It honours `Retry-After` on rate limits (bounded sleep), retries a 5xx or dropped connection once, caps live calls per analysis, and bounds how many requests are in flight (`GH_INGEST_CONCURRENCY`, enforced for ingestion and depth enrichment alike). Responses are cached in Upstash per endpoint.
+- **Ingestion (v1.0.14):** reads that don't depend on each other run concurrently: the login-level reads, then root listings, languages and two years of the user's own commits for the top repos. Root listings yield README/tests/CI/deployment flags, README size and dependency manifests; one batched GraphQL probe counts `.github`/`.forgejo`/`.gitea` workflow files, so a bare `.github` folder no longer reads as CI. A repository GitHub won't serve (404/409/410/451, blocked 403) reads as absent; a rate limit or server error fails the analysis rather than caching a degraded report.
+- **Scoring contract:** every scorer is `def score(profile: Profile) -> ScoreResult` where `ScoreResult` carries `points: int`, `max_points: int`, and `evidence: list[Evidence]`. Evidence is what each score card shows under "Why N of M"; rows with weight 0 are context and carry no points. Never hand-waved.
 - **Tier contract:** `assign_tier(total: int) -> TierInfo` returns `(name, sub_rank, band, prev_tier, next_tier, pts_to_next, pts_above_prev)`. Pure function of the integer total; no I/O.
 - **Badge contract:** each detector is `(profile, breakdown) -> Badge | None`. Detectors compose via `compute_badges(profile, breakdown) -> list[Badge]`. Badges stack — no priority ordering.
-- **Depth contract:** `enrich_for_tier(profile, base_tier, gh) -> None` mutates the profile with deeper signals appropriate to the base tier. All extra HTTP calls funnel through here and fan out via `asyncio.gather`. Per-call failures are swallowed; the base report is still valid.
+- **Depth contract:** `enrich_for_tier(profile, base_tier, gh) -> None` mutates the profile with the signals that need a request of their own: licences (Professional+), review depth (Senior+), cross-repo breadth (Staff+). Unlocked tiers run concurrently; the review and contribution queries degrade to no signal when GitHub rejects them.
 - **Narrative contract:** narrative functions receive *only* the `Report` (scores + tier + badges + headline signals). They cannot see raw repos or commits. This prevents the LLM from inventing technical claims.
 
 ### Data — Neon Postgres
@@ -120,6 +121,7 @@ A layered defense against a single caller (or a Redis outage) exhausting the sha
 - **LLM budget (`app/narrative/budget.py`, v1.0.4).** A global daily ceiling **plus** per-IP and per-user daily caps, so one caller can't drain the day's AI generation. A budget slot is refunded when a client aborts the SSE stream mid-generation (v1.0.5 SI-07).
 - **Fail-closed cost controls (v1.0.4 SI-01).** When Redis is unreachable, the rate limiter and LLM budget degrade to a conservative **in-process** limiter instead of failing open.
 - **Ingest amplification containment (v1.0.5).** A per-analysis hard cap on live GitHub calls (`GitHubClient` counts them; ~150 vs. a ~98 legit worst case) → 503; a capped `Retry-After` sleep + HTTP-date-safe parse + `429` handling; and a wall-clock ingest deadline (`_live_ingest_bounded`) → 503.
+- **Rate limits fail loudly (v1.0.14).** A GitHub rate limit anywhere in an analysis, depth enrichment included, returns 503 `service_busy` instead of a report scored from missing data, which the report cache would otherwise keep for six hours.
 - **Shared-token quota breaker (v1.0.6).** `GitHubClient` observes `X-RateLimit-Remaining` on live shared-token responses (only when it dips below a watch threshold) and writes a low-water mark to Redis; `_live_ingest` sheds **new anonymous** analyses (503 `service_busy`) before the shared token is exhausted. Signed-in users bypass.
 - **CORS boot guard (v1.0.7 SI-14).** A credentialed wildcard origin (`CORS_ALLOW_ORIGINS=*`) is refused at startup.
 - **Hashed session ids at rest (v1.0.8 SI-21).** Session ids are stored `sha256`-hashed, so a database-only compromise can't be replayed to hijack a live session. No migration was needed — the `id` column stays `Text`; pre-existing raw-id rows simply miss the hashed lookup, yielding a clean re-login, and are reaped by the expiry cron.

@@ -7,7 +7,7 @@
 [![Version](https://img.shields.io/github/v/release/Shaan-alpha/Skill-Issue?style=for-the-badge&label=release&color=10b981)](https://github.com/Shaan-alpha/Skill-Issue/releases)
 [![License](https://img.shields.io/github/license/Shaan-alpha/Skill-Issue?style=for-the-badge&color=475569)](./LICENSE)
 [![Live](https://img.shields.io/badge/live-skillissue.tech-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://skillissue.tech)
-[![Status](https://img.shields.io/badge/status-v1.0.13%20·%20live-10b981?style=for-the-badge)](https://skillissue.tech)
+[![Status](https://img.shields.io/badge/status-v1.0.14%20·%20live-10b981?style=for-the-badge)](https://skillissue.tech)
 
 [![Next.js](https://img.shields.io/badge/Next.js%2016-000000?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React%2019-149eca?style=for-the-badge&logo=react&logoColor=white)](https://react.dev/)
@@ -38,10 +38,10 @@ Drop in a username. Skill Issue analyzes repositories, engineering maturity, OSS
 | | |
 | --- | --- |
 | 🔍 **Profile analysis** | Pinned repos, contribution rhythm, README quality, CI/CD, deployment maturity, testing culture, licence detection |
-| 💯 **Engineering score** | 100 points across six weighted signals: every point traceable to evidence |
+| 💯 **Engineering score** | 100 points across six weighted signals: every point traceable to evidence, shown on each score card |
 | 🪜 **7-tier ladder** | Hobbyist → Student Builder → Entry-Level → Professional → Senior → Staff → Principal, with intra-tier sub-rank |
 | 🏅 **Stackable badges** | OSS Contributor, PR Master, Maintainer, Star Magnet, Polyglot, Long-haul, Indie Hacker, Toolmaker: deterministic and multi-earnable |
-| 🔓 **Tier-gated depth** | Higher tiers unlock richer signals: SPDX licence detection, CI workflows, PR review depth, commit-message quality, cross-repo refactor |
+| 🔓 **Tier-gated depth** | Higher tiers unlock licence credit (Professional+), PR review depth (Senior+) and cross-repo breadth (Staff+). CI workflows, README depth, dependency manifests and commit-message quality are read for every profile at no extra cost |
 | 🔥 **Two voices** | **Roast Mode** for what a blunt senior would say · **Mentor Mode** for how to fix it |
 | 🧾 **GitHub Receipts™** | Shareable 1200×630 scorecards for LinkedIn, X, Discord, portfolios |
 | ⚡ **Fast on repeat** | Warm `/analyze/{user}` is served from an Upstash Redis report cache, designed for a p95 of at most 200 ms; the live measurement is still pending |
@@ -53,9 +53,9 @@ Drop in a username. Skill Issue analyzes repositories, engineering maturity, OSS
 | Repo Quality | 30 | Do your repos look maintained: READMEs, tests, deploys, licences? |
 | Engineering Maturity | 20 | Typed languages, CI pipelines, real architecture: not just scripts? |
 | OSS & Collaboration | 15 | Do you ship into other people's codebases, or only your own? |
-| Recruiter Signal | 15 | What a hiring manager sees in eight seconds: bio, pins, stars, links |
+| Recruiter Signal | 15 | What a hiring manager sees first: profile README, pins, bio, links, stars |
 | Consistency | 10 | Commit rhythm over months: momentum, not a single sprint |
-| Learning Trajectory | 10 | Are you levelling up? New stacks, bigger projects, year over year |
+| Learning Trajectory | 10 | Staying power: account age, new projects this year, activity year over year |
 
 ---
 
@@ -70,9 +70,9 @@ flowchart TD
 
     subgraph BE ["FastAPI backend — Python 3.12, async end to end"]
         direction TB
-        ING["<b>Ingestion</b> · httpx + GraphQL<br/>profile · pinned · repos · commits<br/>PRs · issues · languages · contributions<br/><i>rate-limit aware, bounded fan-out</i>"]
+        ING["<b>Ingestion</b> · httpx + GraphQL<br/>profile · pinned · repos · commits<br/>PRs · issues · languages · contributions<br/><i>parallel, rate-limit aware, bounded fan-out</i>"]
         P1["<b>Pass 1 — deterministic scoring</b><br/>repo quality 30 · maturity 20 · OSS 15<br/>recruiter signal 15 · consistency 10 · trajectory 10<br/>→ base total → tier"]
-        P2["<b>Pass 2 — tier-gated depth</b><br/>SPDX licence · CI workflows · README quality<br/>PR review depth · commit-message quality<br/>cross-repo refactor → re-score"]
+        P2["<b>Pass 2 — tier-gated depth</b><br/>SPDX licence · PR review depth<br/>cross-repo breadth → re-score"]
         LADDER["<b>Ladder &amp; badges</b><br/>7 tiers, Hobbyist → Principal, with sub-rank<br/>8 stackable badges, no priority ordering"]
         NARR["<b>Narrative</b> · Groq, mode-aware<br/>Roast or Mentor · streams over SSE<br/><i>sees the Report only</i>"]
         ING --> P1 --> P2 --> LADDER --> NARR
@@ -111,7 +111,7 @@ Green is the part that must be right, and is pure: same GitHub data in, same sco
 
 ## Status
 
-**v1.0.13: live** at [skillissue.tech](https://skillissue.tech), with GitHub OAuth sign-in, Neon Postgres persistence, `/me` history, and opt-in `/share/[slug]` public links.
+**v1.0.14: live** at [skillissue.tech](https://skillissue.tech), with GitHub OAuth sign-in, Neon Postgres persistence, `/me` history, and opt-in `/share/[slug]` public links.
 
 Following the v1.0.0 stable launch, a security-hardening line ran from a full internal audit through v1.0.8, and CI-integrity work through v1.0.10. v1.0.11 closed a navigation-state bug sweep that traced four separate reports back to one root cause.
 
@@ -195,7 +195,7 @@ Verify:
 
 ```bash
 curl http://localhost:8000/health
-# {"status":"ok","version":"1.0.13","db":"up","cache":"unconfigured"}
+# {"status":"ok","version":"1.0.14","db":"up","cache":"unconfigured"}
 
 curl http://localhost:8000/analyze/octocat
 ```

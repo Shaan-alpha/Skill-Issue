@@ -19,6 +19,81 @@ Format:
 
 ---
 
+## 2026-10-13 — Claude (Opus 5.5) with Shaan — v1.0.14: deep audit, scoring currency, parallel ingestion
+
+**Slice:** v1.0.14 (PLAN section of the same name). Working notes for the whole audit live in the gitignored `.audit/2026-10-13-deep-audit.md`, kept resumable in case the session hit the plan's usage limit.
+
+**Done:**
+- **Read the whole codebase inline** (backend, frontend, CI), then ran **one 3-agent research workflow** on the scoring heuristics and API currency (official docs per tool). Raw research and a digest are in `.audit/`.
+- **Every finding was proven by a failing test first.** DB-backed tests ran locally against a throwaway Postgres 18 cluster in the scratchpad, on port 54329 (see Learned for the port).
+- **Scoring corrections, live-verified:**
+  - external merged PRs now exclude the user's own repositories (Shaan-alpha 141 → 8, sindresorhus 2,242 → 1,072) and private ones (`is:public`, since the report cache is keyed by username alone);
+  - Consistency reads the last year only, with the gap from the window start counted; a single recent commit had been earning "low dry spell";
+  - a pinned repo with tests no longer earns "production ready".
+- **Detection currency:**
+  - CI requires real workflow files, via a batched GraphQL probe of `.github`/`.forgejo`/`.gitea` `workflows/` (verified live: 7 of Shaan-alpha's 20 inspected repos, 18 files); 13 more CI systems count;
+  - modern test and deployment markers;
+  - 36 more typed languages;
+  - a dependency-manifest list across ecosystems.
+- **Bottlenecks removed, measured live and uncached from this machine, identical scores:**
+  - ingestion now runs its independent reads concurrently: 20.0 s → 8.8 s for Shaan-alpha, 24.1 s → 14.3 s for sindresorhus, 21.7 s → 9.5 s for gaearon;
+  - depth tiers run concurrently: 16.9 s → 10.9 s for a Staff-tier analysis;
+  - the dead depth signals were rewired from ingestion's own data: 89 → 69 GitHub calls.
+- **Robustness:**
+  - rate limits fail with 503 `service_busy` instead of caching a low score for 6 h;
+  - an unavailable repo (DMCA'd or blocked) reads as absent instead of failing the analysis;
+  - 5xx errors get one retry;
+  - depth enrichment sits inside the error mapping;
+  - the in-flight bound moved into `GitHubClient`, so depth enrichment is capped too.
+- **Ops:**
+  - narrator timeout of 30 s with one retry, and `max_completion_tokens` (verified live on Groq);
+  - one Sentry event per narrative outage;
+  - server and edge Sentry events carry `release`;
+  - the session lookup commits before the ingest, freeing its pooled connection;
+  - `last_used_at` is written at most every 10 minutes;
+  - `/analyze` deduplicates runs and records real latency;
+  - report cache schema → v2.
+- **UI:**
+  - "Why N of M" evidence disclosure on every score card, verified in Chrome at 1440/1024/768/390/360 (no overflow, 44 px targets, rows inside cards, one baseline console entry);
+  - `?auth=failed`/`cancelled` notice;
+  - a history-card refresh now shows the new score.
+- **Merged PR #120** (Next 16.3.8, README fixes) and rebased the branch onto it.
+
+**Decisions (Shaan, via questions):**
+1. Wire the dead depth signals in at zero cost (evidence rows, no points).
+2. Rebalance Recruiter Signal, then approve option A from a live impact table: README 3 · pins 3 · bio 2 · website/hireable 2 · >50 stars 3 · recognition 2. Live results: Shaan-alpha 10 → 12, octocat 15 → 7, ThePrimeagen 15 → 10.
+3. Show evidence on every card.
+4. Merge #120 first.
+
+**Decisions (mine, recorded as rulings):**
+- This audit is v1.0.14 and the toolchain majors move to v1.0.15.
+- Weights change only where Shaan approved them; the other fixes correct detection or arithmetic.
+- Licence points stay Professional+-gated: licence data is now free via GraphQL, but awarding the points lower down is a product call.
+- No change to `recent_activity`'s use of `pushed_at`. A Dependabot push could refresh it, but no instance turned up in the sampled profiles, so there is no evidence to act on.
+
+**Learned / surprises:**
+- **`user.pullRequests(states: MERGED).totalCount` counts PRs into your own repositories.** The external count had been inflated since v0.1.0. The search qualifier `-user:X` fixes it at the same cost, and `is:public` makes it token-independent.
+- **v0.3.0's depth signals were half-built.** README depth, dependency files and commit-message quality were fetched on every Professional+/Senior+/Staff+ analysis (up to 20 calls) and read by nothing. Ingestion's own reads already held all three.
+- **The commit-quality heuristic inverted git's guidance**, counting 50+ characters as "good". It now uses git-commit(1)'s short, specific subject.
+- **Windows reserves dynamic TCP port ranges** (55378–55477 here; check `netsh interface ipv4 show excludedportrange protocol=tcp`). Binding 55432 failed with "Permission denied", which looks like a sandbox error and isn't one.
+- **Positional `side_effect=[...]` GraphQL mocks encode call order.** The e2e mock's labels had already drifted, with "REVIEW_DEPTH" being consumed by ExternalReviewCount, and parallelising would have broken them silently. `tests/graphql_router.py` routes by operation name now.
+- **`next dev` 16.3.8 regenerates the managed block in `frontend/AGENTS.md`** on every start, so it was committed to keep the tree clean.
+- **Pre-existing test-order dependence:** reloading `app.auth.oauth` in one test broke `pytest.raises` in another whenever the files ran in that order. Fixed by patching module-held settings instead of reloading.
+
+**Blocked / open:**
+- PR to merge, then a prod smoke: `/health` 1.0.14, a live analysis showing the new evidence, the narrator streaming. The tag `v1.0.14` is an operator checkpoint.
+- Deferred, with reasons in PLAN:
+  - a per-token process-wide GitHub concurrency limit;
+  - the REST API 2026-03-10 migration (2022-11-28 is supported until 2028-03-10);
+  - nested buttons in history-card links (needs a signed-in visual check);
+  - a shared httpx client;
+  - batching `/share/{slug}`'s queries.
+- Still operator-side from v1.0.13: the Sentry alert rule and source-map upload.
+
+**Next:** v1.0.15 toolchain majors (Dependabot #116–#119 already open), then a Python 3.13/3.14 slice and v1.1.0 Progress Pulse.
+
+---
+
 ## 2026-10-01 — Claude (Opus 5.5) with Shaan — v1.0.13 released
 
 **Slice:** v1.0.13 closeout.
