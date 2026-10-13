@@ -97,8 +97,8 @@ def _mock_contents(
             )
 
 
-def _pinned_payload(nodes: list[dict[str, object]] | None = None) -> dict[str, object]:
-    return {"data": {"user": {"pinnedItems": {"nodes": nodes or []}}}}
+def _pinned_payload(count: int = 0) -> dict[str, object]:
+    return {"data": {"user": {"pinnedItems": {"totalCount": count}}}}
 
 
 def _external_prs_payload(
@@ -155,13 +155,13 @@ def _workflow_files_payload(
 
 def _mock_graphql(
     *,
-    pinned_nodes: list[dict[str, object]] | None = None,
+    pinned_count: int = 0,
     external_prs: int = 0,
     external_reviews: int = 0,
     workflow_files: dict[str, object] | Response | None = None,
 ) -> respx.Route:
     responses: dict[str, object] = {
-        "PinnedRepos": _pinned_payload(pinned_nodes),
+        "PinnedRepos": _pinned_payload(pinned_count),
         "ExternalPRs": _external_prs_payload(external_prs=external_prs),
         "ExternalReviewCount": _review_count_payload(external_reviews),
     }
@@ -314,29 +314,6 @@ async def test_ingest_profile_maps_to_domain() -> None:
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_pinned_repos_get_tagged() -> None:
-    _mock_user()
-    repos_payload = _mock_repos()
-    _mock_languages(repos_payload)
-    _mock_commits(repos_payload)
-    _mock_contents(repos_payload)
-    _mock_profile_readme()
-    # Pin the first non-fork repo from the fixture
-    first_non_fork_name = next(r["name"] for r in repos_payload if not r.get("fork", False))
-    _mock_graphql(pinned_nodes=[{"name": first_non_fork_name}])
-
-    async with GitHubClient(token="ghs_test") as gh:
-        profile = await ingest_profile("octocat", gh)
-
-    pinned = [r for r in profile.repos if r.is_pinned]
-    assert len(pinned) == 1
-    assert pinned[0].name == first_non_fork_name
-    # A pin is not a deployment artifact, so it never lands in deployment_hints.
-    assert all("pinned" not in r.deployment_hints for r in profile.repos)
-
-
-@pytest.mark.asyncio
-@respx.mock
 async def test_pinned_repo_with_tests_is_not_production_ready() -> None:
     """A pin is a curation choice, not a deployment artifact. Pinning a repo that
     has tests but no deployment config must not earn Engineering Maturity's
@@ -351,7 +328,7 @@ async def test_pinned_repo_with_tests_is_not_production_ready() -> None:
         repos_payload,
         {"tested-lib": [{"name": "README.md", "type": "file"}, {"name": "tests", "type": "dir"}]},
     )
-    _mock_graphql(pinned_nodes=[{"name": "tested-lib"}])
+    _mock_graphql(pinned_count=1)
 
     async with GitHubClient(token="ghs_test") as gh:
         profile = await ingest_profile("octocat", gh)
@@ -573,7 +550,7 @@ async def test_pinned_repositories_are_counted() -> None:
     _mock_commits(repos_payload)
     _mock_contents(repos_payload)
     _mock_profile_readme()
-    _mock_graphql(pinned_nodes=[{"name": n} for n in ("alpha-api", "a", "b", "c")])
+    _mock_graphql(pinned_count=4)
 
     async with GitHubClient(token="ghs_test") as gh:
         profile = await ingest_profile("octocat", gh)

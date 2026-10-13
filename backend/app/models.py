@@ -63,7 +63,6 @@ class Repo(BaseModel):
     has_tests: bool
     has_ci: bool
     deployment_hints: list[str]  # e.g. ["dockerfile", "vercel"]; deployment artifacts only
-    is_pinned: bool = False
     size_kb: int = 0
     readme_bytes: int = 0  # size of the root README file, 0 when there is none
     manifests: list[str] = Field(default_factory=list)  # root dependency manifests

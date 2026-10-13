@@ -531,11 +531,7 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
     )
 
     repos = [_repo_from_rest(r) for r in repos_raw if not r.get("fork", False)]
-    pinned_nodes = ((pinned.get("user") or {}).get("pinnedItems") or {}).get("nodes") or []
-    pinned_names = {n["name"] for n in pinned_nodes if n}
-
-    for r in repos:
-        r.is_pinned = r.name in pinned_names
+    pinned_count = ((pinned.get("user") or {}).get("pinnedItems") or {}).get("totalCount") or 0
 
     # Root contents (README / tests / CI / deployment) and languages for the
     # first ROOT_CONTENT_LIMIT repos, plus two years of commit days from the
@@ -591,7 +587,7 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
         username=user["login"],
         bio=user.get("bio"),
         profile_readme_chars=_visible_chars(profile_readme),
-        pinned_count=len(pinned_nodes),
+        pinned_count=pinned_count,
         followers=user.get("followers", 0),
         public_repos=user.get("public_repos", 0),
         languages=languages,
