@@ -548,3 +548,109 @@ async def test_anonymous_analyze_does_not_persist(db, monkeypatch):
     assert r.status_code == 200
     count = await db.scalar(select(func.count()).select_from(Analysis))
     assert count == 0
+
+
+def _fixed_report(generated_at: datetime) -> Any:
+    from app.models import Report, ScoreBreakdown, ScoreResult, TierInfo
+
+    return Report(
+        username="octocat",
+        tier=TierInfo(name="Senior Engineer", sub_rank=50, band=(65, 80)),
+        badges=[],
+        breakdown=ScoreBreakdown(
+            repo_quality=ScoreResult(points=20, max_points=30),
+            engineering_maturity=ScoreResult(points=10, max_points=20),
+            oss_collab=ScoreResult(points=10, max_points=15),
+            consistency=ScoreResult(points=5, max_points=10),
+            recruiter_signal=ScoreResult(points=15, max_points=15),
+            learning_trajectory=ScoreResult(points=10, max_points=10),
+        ),
+        total=70,
+        generated_at=generated_at,
+    )
+
+
+async def _signed_in_analyze(db, monkeypatch, reports: list[Any], *, delay: float = 0.0) -> Any:
+    """GET /analyze/octocat once per report as a signed-in user; return the user."""
+    import asyncio
+    import base64
+    import secrets
+
+    from app.auth.sessions import create_session
+    from app.db.models import User
+    from app.db.session import get_db
+
+    monkeypatch.setenv(
+        "SESSION_TOKEN_ENC_KEY", base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()
+    )
+    user = User(github_id=5, github_login="me")
+    db.add(user)
+    await db.flush()
+    sid = await create_session(db, user_id=user.id, github_access_token="t", ttl_days=30)
+    await db.commit()
+
+    queue = list(reports)
+
+    async def _report() -> Any:
+        await asyncio.sleep(delay)
+        return queue.pop(0)
+
+    async def _db() -> Any:
+        yield db
+
+    app_module.app.dependency_overrides[dep_module.get_report_for_user] = _report
+    app_module.app.dependency_overrides[get_db] = _db
+    try:
+        transport = ASGITransport(app=app_module.app)
+        async with AsyncClient(transport=transport, base_url="http://t") as client:
+            client.cookies.set("si_session", sid)
+            for _ in reports:
+                assert (await client.get("/analyze/octocat")).status_code == 200
+    finally:
+        app_module.app.dependency_overrides.clear()
+    return user
+
+
+async def _runs(db) -> list[Any]:
+    from sqlalchemy import select
+
+    from app.db.models import AnalysisRun
+
+    db.expunge_all()
+    return list((await db.scalars(select(AnalysisRun))).all())
+
+
+@pytest.mark.asyncio
+async def test_viewing_the_same_report_again_records_no_new_run(db, monkeypatch) -> None:
+    """A cached report re-served on every page view is the same run. Each view
+    used to store another copy of the full report JSON."""
+    report = _fixed_report(datetime(2026, 10, 1, tzinfo=UTC))
+    await _signed_in_analyze(db, monkeypatch, [report, report, report])
+
+    assert len(await _runs(db)) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_newly_scored_report_records_a_new_run(db, monkeypatch) -> None:
+    await _signed_in_analyze(
+        db,
+        monkeypatch,
+        [
+            _fixed_report(datetime(2026, 10, 1, tzinfo=UTC)),
+            _fixed_report(datetime(2026, 10, 2, tzinfo=UTC)),
+        ],
+    )
+
+    assert len(await _runs(db)) == 2
+
+
+@pytest.mark.asyncio
+async def test_recorded_latency_covers_producing_the_report(db, monkeypatch) -> None:
+    """The clock started after the report dependency had already run, so every
+    recorded latency was about 0ms."""
+    await _signed_in_analyze(
+        db, monkeypatch, [_fixed_report(datetime(2026, 10, 1, tzinfo=UTC))], delay=0.15
+    )
+
+    (run,) = await _runs(db)
+    assert run.ingestion_latency_ms >= 150

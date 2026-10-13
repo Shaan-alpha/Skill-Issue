@@ -13,6 +13,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.auth.dependencies import is_cross_site_write, optional_session
 from app.db.engine import engine
+from app.db.models import AnalysisRun
 from app.db.session import DbSession
 from app.dependencies import get_cache, get_report_for_user
 from app.models import Report
@@ -121,23 +122,32 @@ async def analyze_user(
     would otherwise let an attacker write an analysis into the victim's account.
     The read (returning the report) is unaffected.
     """
-    started_at = datetime.now(UTC)
     if session is not None and not is_cross_site_write(request):
+        # The report dependency has already run, so time it from the request's
+        # arrival (stamped by RequestIDMiddleware), not from here.
         completed_at = datetime.now(UTC)
+        started_at = getattr(request.state, "started_at", completed_at)
         analysis = await upsert_analysis(
             db,
             user_id=session.user.id,
             target_login=report.username,
         )
-        await record_run(
-            db,
-            analysis_id=analysis.id,
-            report_json=report.model_dump(mode="json"),
-            total_score=report.total,
-            tier_name=report.tier.name,
-            scores_hash=_scores_hash(report),
-            started_at=started_at,
-            completed_at=completed_at,
-            latency_ms=int((completed_at - started_at).total_seconds() * 1000),
+        shash = _scores_hash(report)
+        latest = (
+            await db.get(AnalysisRun, analysis.latest_run_id) if analysis.latest_run_id else None
         )
+        # A cached report re-served on another page view is the run already
+        # recorded; storing it again only duplicated the report JSON.
+        if latest is None or latest.scores_hash != shash:
+            await record_run(
+                db,
+                analysis_id=analysis.id,
+                report_json=report.model_dump(mode="json"),
+                total_score=report.total,
+                tier_name=report.tier.name,
+                scores_hash=shash,
+                started_at=started_at,
+                completed_at=completed_at,
+                latency_ms=int((completed_at - started_at).total_seconds() * 1000),
+            )
     return report
