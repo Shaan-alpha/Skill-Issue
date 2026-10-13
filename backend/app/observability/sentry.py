@@ -15,6 +15,7 @@ from sentry_sdk.integrations.asyncpg import AsyncPGIntegration
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.httpx import HttpxIntegration
 from sentry_sdk.integrations.logging import LoggingIntegration
+from sentry_sdk.integrations.openai import OpenAIIntegration
 
 _SCRUB_HEADER_NAMES = {
     "cookie",
@@ -114,4 +115,9 @@ def init_sentry(
             HttpxIntegration(),
             LoggingIntegration(level=logging.INFO, event_level=logging.ERROR),
         ],
+        # Auto-enabled because openai is installed, it reports every provider
+        # failure as unhandled, though the narrator falls back, and the dedupe
+        # integration then drops the fingerprinted event the narrative-outage
+        # alert matches. Provider calls still show up as httpx spans.
+        disabled_integrations=[OpenAIIntegration()],
     )

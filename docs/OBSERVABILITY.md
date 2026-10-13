@@ -37,7 +37,7 @@ To trace a failed request:
 ### Acceptable (note, don't page)
 - HTTP 404 from `/u/{user}` where the user doesn't exist.
 - HTTP 422 from the org-detection branch (v0.7.3).
-- Narrative LLM failure that successfully hits the fallback narrative. Since v1.0.14 it raises exactly one Sentry event, fingerprinted `narrative-fallback` and carrying the provider's exception; the log line is a WARNING so the logging integration doesn't file a second issue.
+- Narrative LLM failure that successfully hits the fallback narrative. Since v1.0.14 it raises exactly one Sentry event, fingerprinted `narrative-fallback` and carrying the provider's exception; the log line is a WARNING so the logging integration doesn't file a second issue. Sentry's auto-enabled OpenAI integration is switched off in `init_sentry`: it reported every provider failure as unhandled, and the dedupe integration then dropped the fingerprinted event that the alert rule matches. Provider calls still appear in traces as httpx spans; the OpenAI integration's AI spans are gone.
 - GitHub API 403/429 that gets retried with backoff.
 - Client-side network errors (most are user-side wifi blips).
 
