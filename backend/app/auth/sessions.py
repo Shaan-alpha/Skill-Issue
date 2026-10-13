@@ -82,11 +82,21 @@ async def get_session_with_token(db: AsyncSession, session_id: str) -> tuple[Use
     return user, token
 
 
+# last_used_at only orders a user's sessions for the cron (freshest token
+# first), so minute-level precision buys nothing; writing it on every request
+# was an UPDATE per authenticated call.
+_TOUCH_INTERVAL = timedelta(minutes=10)
+
+
 async def touch_session(db: AsyncSession, session_id: str) -> None:
+    now = datetime.now(UTC)
     await db.execute(
         update(Session)
-        .where(Session.id == _hash_session_id(session_id))
-        .values(last_used_at=datetime.now(UTC))
+        .where(
+            Session.id == _hash_session_id(session_id),
+            Session.last_used_at < now - _TOUCH_INTERVAL,
+        )
+        .values(last_used_at=now)
     )
 
 

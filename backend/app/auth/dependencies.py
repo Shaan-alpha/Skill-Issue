@@ -70,6 +70,10 @@ async def optional_session(
         return None
     user, token = resolved
     await touch_session(db, si_session)
+    # End the transaction the lookup opened. The analysis that follows spends
+    # seconds on GitHub; an open transaction would hold its pooled connection
+    # idle all that time. Loaded objects stay usable (expire_on_commit=False).
+    await db.commit()
     return _ResolvedSession(user=user, access_token=token, session_id=si_session)
 
 

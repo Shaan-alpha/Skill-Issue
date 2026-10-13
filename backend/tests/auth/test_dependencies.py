@@ -1,14 +1,16 @@
 import base64
 import secrets
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 import pytest
 from fastapi import Depends, FastAPI
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select, update
 
-from app.auth.dependencies import current_user_or_none, require_user
-from app.auth.sessions import create_session
-from app.db.models import User
+from app.auth.dependencies import current_user_or_none, optional_session, require_user
+from app.auth.sessions import _hash_session_id, create_session
+from app.db.models import Session, User
 
 
 @pytest.fixture
@@ -117,3 +119,59 @@ def test_require_trusted_origin(monkeypatch):
         require_trusted_origin(_req_with_origin("https://evil.example.com"))
     assert exc.value.status_code == 403
     assert exc.value.detail["error"] == "bad_origin"
+
+
+async def _signed_in(db, monkeypatch, *, last_used_ago: timedelta | None = None) -> str:
+    monkeypatch.setenv(
+        "SESSION_TOKEN_ENC_KEY",
+        base64.urlsafe_b64encode(secrets.token_bytes(32)).decode(),
+    )
+    u = User(github_id=77, github_login="y")
+    db.add(u)
+    await db.flush()
+    sid = await create_session(db, user_id=u.id, github_access_token="t", ttl_days=30)
+    if last_used_ago is not None:
+        await db.execute(
+            update(Session)
+            .where(Session.id == _hash_session_id(sid))
+            .values(last_used_at=datetime.now(UTC) - last_used_ago)
+        )
+    await db.commit()
+    return sid
+
+
+async def _last_used_at(db, sid: str) -> datetime:
+    db.expunge_all()
+    value = await db.scalar(select(Session.last_used_at).where(Session.id == _hash_session_id(sid)))
+    await db.commit()
+    return value
+
+
+async def test_resolving_a_session_leaves_no_transaction_open(db, monkeypatch):
+    """An analysis runs the whole GitHub ingest after this dependency. A
+    transaction left open here held a pooled connection idle the whole time."""
+    sid = await _signed_in(db, monkeypatch, last_used_ago=timedelta(hours=1))
+
+    resolved = await optional_session(db, si_session=sid)
+
+    assert resolved is not None
+    assert resolved.user.github_login == "y"
+    assert not db.in_transaction()
+
+
+async def test_a_recently_used_session_is_not_rewritten_on_every_request(db, monkeypatch):
+    sid = await _signed_in(db, monkeypatch, last_used_ago=timedelta(minutes=2))
+    before = await _last_used_at(db, sid)
+
+    await optional_session(db, si_session=sid)
+
+    assert await _last_used_at(db, sid) == before
+
+
+async def test_a_session_idle_for_a_while_is_touched(db, monkeypatch):
+    sid = await _signed_in(db, monkeypatch, last_used_ago=timedelta(hours=1))
+    before = await _last_used_at(db, sid)
+
+    await optional_session(db, si_session=sid)
+
+    assert await _last_used_at(db, sid) > before
