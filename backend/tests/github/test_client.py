@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import httpx
 import pytest
 import respx
 from httpx import Response
@@ -120,6 +121,92 @@ async def test_client_retries_on_secondary_rate_limit() -> None:
         user = await gh.get_user("octocat")
 
     assert user["login"] == "octocat"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_transient_server_error_is_retried_once() -> None:
+    route = respx.get("https://api.github.com/users/octocat").mock(
+        side_effect=[Response(502), Response(200, json={"login": "octocat"})]
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        user = await gh.get_user("octocat")
+
+    assert user["login"] == "octocat"
+    assert route.call_count == 2
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_persistent_server_error_fails_after_one_retry() -> None:
+    route = respx.get("https://api.github.com/users/octocat").mock(return_value=Response(503))
+
+    async with GitHubClient(token="ghs_test") as gh:
+        with pytest.raises(httpx.HTTPStatusError):
+            await gh.get_user("octocat")
+
+    assert route.call_count == 2
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_dropped_connection_is_retried_once() -> None:
+    route = respx.get("https://api.github.com/users/octocat").mock(
+        side_effect=[httpx.RemoteProtocolError("stream reset"), Response(200, json={"login": "x"})]
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        await gh.get_user("octocat")
+
+    assert route.call_count == 2
+
+
+_UNAVAILABLE = [
+    pytest.param(
+        451, {"message": "Repository access blocked", "block": {"reason": "dmca"}}, id="dmca-451"
+    ),
+    pytest.param(
+        403, {"message": "Repository access blocked", "block": {"reason": "tos"}}, id="tos-403"
+    ),
+    pytest.param(410, {"message": "Gone"}, id="gone-410"),
+]
+
+
+@pytest.mark.asyncio
+@respx.mock
+@pytest.mark.parametrize(("status", "body"), _UNAVAILABLE)
+async def test_unavailable_repository_reads_as_absent(status: int, body: dict[str, object]) -> None:
+    """A repository GitHub won't serve (DMCA'd, blocked, gone) is one repo's
+    problem, not the analysis's: every per-repo read treats it as absent."""
+    respx.route(url__startswith="https://api.github.com/repos/owner/blocked").mock(
+        return_value=Response(status, json=body)
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        assert await gh.list_languages("owner", "blocked") == {}
+        assert await gh.get_repo_root_contents("owner", "blocked") == []
+        assert await gh.list_commits("owner", "blocked", "owner", "2024-01-01") == []
+        assert await gh.get_license("owner", "blocked") is None
+        assert await gh.list_workflow_files("owner", "blocked") == []
+        assert await gh.get_repo_readme_text("owner", "blocked") == ""
+        assert await gh.list_recent_commits_sample("owner", "blocked") == []
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_rate_limited_repository_read_is_not_mistaken_for_absent() -> None:
+    respx.get("https://api.github.com/repos/owner/repo/languages").mock(
+        return_value=Response(
+            403,
+            json={"message": "API rate limit exceeded for user ID 1."},
+            headers={"Retry-After": "0", "X-RateLimit-Remaining": "0"},
+        )
+    )
+
+    async with GitHubClient(token="ghs_test", max_retries=1) as gh:
+        with pytest.raises(httpx.HTTPStatusError):
+            await gh.list_languages("owner", "repo")
 
 
 @pytest.mark.asyncio

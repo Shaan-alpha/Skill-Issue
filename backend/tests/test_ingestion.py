@@ -4,6 +4,7 @@ import copy
 import json
 from pathlib import Path
 
+import httpx
 import pytest
 import respx
 from httpx import Response
@@ -434,6 +435,106 @@ async def test_ingest_profile_detects_readme_tests_ci_and_deployment_hints() -> 
     assert bare.has_tests is False
     assert bare.has_ci is False
     assert bare.deployment_hints == []
+
+
+_DMCA_BLOCKED = Response(
+    451, json={"message": "Repository access blocked", "block": {"reason": "dmca"}}
+)
+
+
+def _two_repo_profile() -> list[dict[str, object]]:
+    repos_payload = [
+        _fake_repo("healthy", language="Python"),
+        _fake_repo("taken-down", language="Go"),
+    ]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_profile_readme()
+    _mock_contents(repos_payload)
+    _mock_graphql()
+    return repos_payload
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_one_unavailable_repo_does_not_sink_the_languages() -> None:
+    repos_payload = _two_repo_profile()
+    _mock_commits(repos_payload)
+    respx.get("https://api.github.com/repos/octocat/healthy/languages").mock(
+        return_value=Response(200, json={"Python": 1000})
+    )
+    respx.get("https://api.github.com/repos/octocat/taken-down/languages").mock(
+        return_value=_DMCA_BLOCKED
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.languages == {"Python": 1000}
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_one_unavailable_repo_does_not_sink_the_commit_history() -> None:
+    repos_payload = _two_repo_profile()
+    _mock_languages(repos_payload)
+    respx.get(url__startswith="https://api.github.com/repos/octocat/healthy/commits").mock(
+        return_value=Response(200, json=[{"commit": {"author": {"date": "2026-10-01T10:00:00Z"}}}])
+    )
+    respx.get(url__startswith="https://api.github.com/repos/octocat/taken-down/commits").mock(
+        return_value=_DMCA_BLOCKED
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert [d.date().isoformat() for d in profile.commit_dates] == ["2026-10-01"]
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_a_rate_limited_repo_read_fails_the_ingest_instead_of_scoring_it_low() -> None:
+    """Treating a rate-limited read as "no README, no tests, no CI" produced a
+    silently low score that the report cache then kept for six hours."""
+    repos_payload = [_fake_repo("alpha-api", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_commits(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql()
+    respx.get("https://api.github.com/repos/octocat/alpha-api/contents").mock(
+        return_value=Response(
+            403,
+            json={"message": "API rate limit exceeded for user ID 1."},
+            headers={"Retry-After": "0", "X-RateLimit-Remaining": "0"},
+        )
+    )
+
+    async with GitHubClient(token="ghs_test", max_retries=1) as gh:
+        with pytest.raises(httpx.HTTPStatusError):
+            await ingest_profile("octocat", gh)
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_an_empty_profile_readme_repo_reads_as_no_readme() -> None:
+    """`<user>/<user>` created but never pushed answers 409, like any empty repo."""
+    repos_payload = [_fake_repo("alpha-api", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_commits(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_graphql()
+    respx.get("https://api.github.com/repos/octocat/octocat/readme").mock(
+        return_value=Response(409, json={"message": "Git Repository is empty."})
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.profile_readme_chars == 0
 
 
 @pytest.mark.asyncio

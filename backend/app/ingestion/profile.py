@@ -5,8 +5,6 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
-import httpx
-
 from app import settings as settings_module
 from app.github.queries import (
     EXTERNAL_PRS,
@@ -107,15 +105,12 @@ def _repo_from_rest(raw: dict[str, Any]) -> Repo:
 async def _enrich_repo_signals(repo: Repo, gh: GitHubClient) -> None:
     """Inspect a repo's root contents and populate README/tests/CI/deployment flags.
 
-    Silently tolerates per-repo HTTP failures: a single broken request must not
-    take down the entire ingestion. Untouched repos keep their default `False`
-    flags, which is the correct conservative reading.
+    A repository GitHub won't serve (empty, DMCA'd, blocked) reads as an empty
+    listing and keeps its conservative `False` flags. A rate limit or a server
+    error propagates: scoring the repo as bare would cache a wrong, low report.
     """
     owner, name = repo.full_name.split("/", 1)
-    try:
-        entries = await gh.get_repo_root_contents(owner, name)
-    except httpx.HTTPError:
-        return
+    entries = await gh.get_repo_root_contents(owner, name)
 
     has_readme, has_tests, has_ci, hints = _classify_root_entries(entries)
     repo.has_readme = has_readme

@@ -52,6 +52,8 @@ async def test_5xx_responses_are_NOT_cached(fake_cache: RedisCache) -> None:
     with respx.mock:
         route = respx.get("https://api.github.com/users/octocat").mock(
             side_effect=[
+                # Two 502s: the client's one immediate retry is used up.
+                Response(502, json={"message": "Bad Gateway"}),
                 Response(502, json={"message": "Bad Gateway"}),
                 Response(200, json={"login": "octocat"}),
             ]
@@ -59,9 +61,9 @@ async def test_5xx_responses_are_NOT_cached(fake_cache: RedisCache) -> None:
         async with GitHubClient(token="t", cache=fake_cache) as gh:
             with pytest.raises(HTTPStatusError):
                 await gh.get_user("octocat")
-            # Second call should retry GitHub, not return a cached 502.
+            # The next call should reach GitHub again, not return a cached 502.
             got = await gh.get_user("octocat")
-        assert route.call_count == 2
+        assert route.call_count == 3
         assert got["login"] == "octocat"
 
 

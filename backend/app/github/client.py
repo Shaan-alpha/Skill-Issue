@@ -32,6 +32,28 @@ _CACHEABLE_STATUSES = frozenset({200, 404, 409, 422})
 # 409 covers the "Git Repository is empty." case GitHub returns on
 # /contents and /commits endpoints when a repo has no commits yet.
 
+# Worth one immediate retry: a bad load-balancer node or a dropped HTTP/2
+# stream usually answers on the second try. A real outage fails both.
+_TRANSIENT_STATUSES = frozenset({500, 502, 503, 504})
+
+
+def _is_rate_limited(resp: httpx.Response | _CachedResponse) -> bool:
+    if resp.status_code == 429:
+        return True
+    if resp.status_code != 403:
+        return False
+    return resp.headers.get("X-RateLimit-Remaining") == "0" or "rate limit" in resp.text.lower()
+
+
+def _repo_unavailable(resp: httpx.Response | _CachedResponse) -> bool:
+    """True when one repository can't be read: missing, empty (409), gone,
+    DMCA'd (451) or blocked (a 403 that isn't a rate limit). That is the
+    repo's problem, read as absent data. A rate limit or a server error is the
+    analysis's problem and must fail it, not quietly score the repo as bare."""
+    if resp.status_code in (404, 409, 410, 451):
+        return True
+    return resp.status_code == 403 and not _is_rate_limited(resp)
+
 
 class _CachedResponse:
     """Mimics the subset of httpx.Response used downstream of `_request`."""
@@ -184,19 +206,32 @@ class GitHubClient:
             if self._live_calls > self._max_calls:
                 raise GitHubCallCapExceeded(self._live_calls, self._max_calls)
 
-        # Live request with existing retry/rate-limit logic.
-        resp: httpx.Response | None = None
-        for _attempt in range(self._max_retries):
-            resp = await self._client.request(method, url, **kwargs)
-            is_rl_403 = resp.status_code == 403 and "rate limit" in resp.text.lower()
+        # Live request. Rate limits get up to `max_retries` attempts with a
+        # bounded Retry-After sleep between them; a transient failure (5xx or a
+        # dropped connection) gets one immediate retry on top of that budget.
+        rate_limited_attempts = 0
+        retried_transient = False
+        while True:
+            try:
+                resp = await self._client.request(method, url, **kwargs)
+            except httpx.TransportError:
+                if retried_transient:
+                    raise
+                retried_transient = True
+                continue
             # v1.0.5 SI-06: also honor a plain 429; cap the sleep; parse an
             # HTTP-date Retry-After safely instead of crashing on float().
-            if is_rl_403 or resp.status_code == 429:
-                ceiling = settings.github_retry_after_ceiling_seconds
-                await asyncio.sleep(_retry_after_seconds(resp, ceiling=ceiling))
+            if _is_rate_limited(resp):
+                rate_limited_attempts += 1
+                if rate_limited_attempts < self._max_retries:
+                    ceiling = settings.github_retry_after_ceiling_seconds
+                    await asyncio.sleep(_retry_after_seconds(resp, ceiling=ceiling))
+                    continue
+                break
+            if resp.status_code in _TRANSIENT_STATUSES and not retried_transient:
+                retried_transient = True
                 continue
             break
-        assert resp is not None  # max_retries >= 1, so the loop body ran at least once
 
         # v1.0.6: record the shared token's remaining quota when it dips low, so
         # the breaker can shed new anon analyses before exhaustion. Only writes
@@ -250,6 +285,8 @@ class GitHubClient:
 
     async def list_languages(self, owner: str, repo: str) -> dict[str, int]:
         resp = await self._request("GET", f"{API_BASE}/repos/{owner}/{repo}/languages")
+        if _repo_unavailable(resp):
+            return {}
         resp.raise_for_status()
         return resp.json()
 
@@ -267,7 +304,7 @@ class GitHubClient:
             f"{API_BASE}/repos/{owner}/{repo}/commits",
             params={"author": author, "since": since, "per_page": per_page},
         )
-        if resp.status_code in (404, 409):
+        if _repo_unavailable(resp):
             return []
         resp.raise_for_status()
         return resp.json()
@@ -282,7 +319,7 @@ class GitHubClient:
         directory listing.
         """
         resp = await self._request("GET", f"{API_BASE}/repos/{owner}/{repo}/contents")
-        if resp.status_code in (404, 409):
+        if _repo_unavailable(resp):
             return []
         resp.raise_for_status()
         data = resp.json()
@@ -297,7 +334,7 @@ class GitHubClient:
         license). Both map to None.
         """
         resp = await self._request("GET", f"{API_BASE}/repos/{owner}/{repo}/license")
-        if resp.status_code in (404, 409):
+        if _repo_unavailable(resp):
             return None
         resp.raise_for_status()
         spdx = (resp.json().get("license") or {}).get("spdx_id")
@@ -314,7 +351,7 @@ class GitHubClient:
         resp = await self._request(
             "GET", f"{API_BASE}/repos/{owner}/{repo}/contents/.github/workflows"
         )
-        if resp.status_code in (404, 409):
+        if _repo_unavailable(resp):
             return []
         resp.raise_for_status()
         data = resp.json()
@@ -329,7 +366,7 @@ class GitHubClient:
         as no README.
         """
         resp = await self._request("GET", f"{API_BASE}/repos/{owner}/{repo}/readme")
-        if resp.status_code in (404, 409):
+        if _repo_unavailable(resp):
             return ""
         resp.raise_for_status()
         content = resp.json().get("content", "")
@@ -348,7 +385,7 @@ class GitHubClient:
             f"{API_BASE}/repos/{owner}/{repo}/commits",
             params={"per_page": limit},
         )
-        if resp.status_code in (404, 409):
+        if _repo_unavailable(resp):
             return []
         resp.raise_for_status()
         return [str(c.get("commit", {}).get("message", "")) for c in resp.json()]
@@ -418,7 +455,7 @@ class GitHubClient:
 
     async def get_profile_readme(self, username: str) -> str | None:
         resp = await self._request("GET", f"{API_BASE}/repos/{username}/{username}/readme")
-        if resp.status_code == 404:
+        if _repo_unavailable(resp):
             return None
         resp.raise_for_status()
 
