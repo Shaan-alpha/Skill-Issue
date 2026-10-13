@@ -4,6 +4,7 @@ import contextlib
 import copy
 import json
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -819,6 +820,58 @@ async def test_a_rate_limited_graphql_query_fails_the_ingest(
             await ingest_profile("octocat", gh)
 
 
+def _commit(day: datetime) -> dict[str, object]:
+    return {"commit": {"author": {"date": day.strftime("%Y-%m-%dT12:00:00Z")}, "message": "Fix"}}
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_a_full_commit_page_marks_where_the_history_is_complete() -> None:
+    """Each repo contributes at most one page of 100 commits. When a page comes
+    back full, older commits exist that ingestion never saw, so the scorer
+    must not read the stretch before them as silence."""
+    repos_payload = [_fake_repo("busy", language="Python"), _fake_repo("quiet", language="Go")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql()
+    today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    respx.get(url__startswith="https://api.github.com/repos/octocat/busy/commits").mock(
+        return_value=Response(200, json=[_commit(today - timedelta(days=i)) for i in range(100)])
+    )
+    respx.get(url__startswith="https://api.github.com/repos/octocat/quiet/commits").mock(
+        return_value=Response(200, json=[_commit(today - timedelta(days=300))])
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.commit_history_complete_since == today - timedelta(days=99)
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_short_commit_pages_mean_the_history_is_complete() -> None:
+    repos_payload = [_fake_repo("quiet", language="Go")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql()
+    today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    respx.get(url__startswith="https://api.github.com/repos/octocat/quiet/commits").mock(
+        return_value=Response(200, json=[_commit(today - timedelta(days=i)) for i in range(99)])
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.commit_history_complete_since is None
+
+
 @pytest.mark.asyncio
 @respx.mock
 async def test_an_empty_profile_readme_repo_reads_as_no_readme() -> None:
@@ -978,7 +1031,7 @@ class FakeGitHubClient:
             return {"Python": 100}
 
     async def list_commits(
-        self, owner: str, name: str, author: str, since: str
+        self, owner: str, name: str, author: str, since: str, per_page: int = 100
     ) -> list[dict[str, object]]:
         async with self._call("list_commits"):
             return []

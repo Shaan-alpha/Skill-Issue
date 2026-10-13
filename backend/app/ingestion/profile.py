@@ -52,6 +52,9 @@ class NotAnIndividualError(Exception):
 
 # Commit messages are attacker-influenced; only a bounded prefix is examined.
 _COMMIT_SUBJECT_MAX = 500
+# One page of the user's commits per repo. A full page means older ones
+# exist that ingestion never saw.
+_COMMITS_PER_REPO = 100
 
 # How many repos to inspect for README / tests / CI / deployment signals.
 # Matches the cap used for language aggregation. Beyond this, signals are
@@ -539,7 +542,13 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
         gather_all(*(gh.list_languages(*r.full_name.split("/", 1)) for r in inspected)),
         gather_all(
             *(
-                gh.list_commits(r["owner"]["login"], r["name"], username, two_years_ago)
+                gh.list_commits(
+                    r["owner"]["login"],
+                    r["name"],
+                    username,
+                    two_years_ago,
+                    per_page=_COMMITS_PER_REPO,
+                )
                 for r in top_repos
             )
         ),
@@ -552,7 +561,9 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
 
     commit_dates_set: set[datetime] = set()
     commit_subjects: list[str] = []
+    complete_since: datetime | None = None
     for repo_commits in commit_lists:
+        repo_days: list[datetime] = []
         for c in repo_commits:
             commit = c.get("commit") or {}
             date_str = (commit.get("author") or {}).get("date")
@@ -560,10 +571,14 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
                 # Normalize to a UTC-aware day so downstream date math is safe.
                 day = datetime.strptime(date_str[:10], "%Y-%m-%d").replace(tzinfo=UTC)
                 commit_dates_set.add(day)
+                repo_days.append(day)
             # Commit messages are untrusted text: keep a bounded first line.
             subject = str(commit.get("message") or "")[:_COMMIT_SUBJECT_MAX].splitlines()
             if subject and subject[0].strip():
                 commit_subjects.append(subject[0].strip())
+        if len(repo_commits) >= _COMMITS_PER_REPO and repo_days:
+            oldest = min(repo_days)
+            complete_since = oldest if complete_since is None else max(complete_since, oldest)
 
     return Profile(
         username=user["login"],
@@ -579,6 +594,7 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
         external_orgs=external_signals["external_orgs"],
         commit_dates=sorted(commit_dates_set),
         commit_subjects=commit_subjects,
+        commit_history_complete_since=complete_since,
         workflow_counts=workflow_counts,
         account_created_at=_parse_dt(user["created_at"]) or datetime.now(UTC),
         company=user.get("company"),

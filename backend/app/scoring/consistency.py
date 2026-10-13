@@ -51,9 +51,12 @@ def score(profile: Profile) -> ScoreResult:
     # 2. Longest dry spell over the last year < 60 days -> 3 pts. The silence
     # before the first commit counts too, measured from the start of the window
     # or from account creation, whichever is later: a dry spell cannot predate
-    # the account.
+    # the account. Where a repo's commit page came back full, its older commits
+    # went unseen, so only the stretch from that point on is judged.
     window_start = max(year_ago, _aware(profile.account_created_at))
-    boundaries = [window_start, *dates, now]
+    if profile.commit_history_complete_since is not None:
+        window_start = max(window_start, _aware(profile.commit_history_complete_since))
+    boundaries = [window_start, *(d for d in dates if d >= window_start), now]
     max_gap = max(max((later - earlier).days, 0) for earlier, later in pairwise(boundaries))
 
     if max_gap < 60:

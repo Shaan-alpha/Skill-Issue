@@ -98,6 +98,32 @@ def test_an_account_younger_than_a_year_is_judged_from_its_creation() -> None:
     assert "low_dry_spell" in _signals(profile)
 
 
+def test_a_cut_off_commit_history_is_not_read_as_a_dry_spell() -> None:
+    """Ingestion reads each repo's 100 most recent commits. A developer who
+    commits every three days arrives with ~300 days of history and nothing
+    before it; that missing stretch is the page limit, not silence."""
+    profile = _load("profile_senior.json")
+    profile.account_created_at = datetime(2015, 1, 1, tzinfo=UTC)
+    today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    profile.commit_dates = [today - timedelta(days=3 * i) for i in range(100)]
+    profile.commit_history_complete_since = min(profile.commit_dates)
+
+    assert "low_dry_spell" in _signals(profile)
+
+
+def test_gaps_before_the_history_is_complete_are_not_judged() -> None:
+    """A sparse repo's old commits can't show a dry spell in the months where
+    a busier repo's commits were cut off."""
+    profile = _load("profile_senior.json")
+    profile.account_created_at = datetime(2015, 1, 1, tzinfo=UTC)
+    today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    busy = [today - timedelta(days=i) for i in range(100)]
+    profile.commit_dates = [today - timedelta(days=250), *busy]
+    profile.commit_history_complete_since = min(busy)
+
+    assert "low_dry_spell" in _signals(profile)
+
+
 def test_consistency_appends_cross_repo_evidence_when_available() -> None:
     profile = _load("profile_senior.json")
     now = datetime.now(UTC)

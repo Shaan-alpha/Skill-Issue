@@ -85,6 +85,9 @@ class Profile(BaseModel):
     commit_dates: list[datetime]
     # First lines of the user's own commits (the same fetch as commit_dates).
     commit_subjects: list[str] = Field(default_factory=list)
+    # Set when a repo's commit page came back full: its older commits went
+    # unseen, so the history is complete only from this day on.
+    commit_history_complete_since: datetime | None = None
     account_created_at: datetime
     # Recruiter Signal fields
     pinned_count: int = 0
