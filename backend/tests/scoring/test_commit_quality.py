@@ -51,6 +51,10 @@ def test_a_vague_or_rambling_subject_is_not(subject: str) -> None:
         'Revert "Add retry budget"',
         "fixup! Add retry budget",
         "Initial commit",
+        # The same subjects typed by hand say no more about the author.
+        "initial commit",
+        "merge branch 'main' into feature",
+        'revert "Add retry budget"',
     ],
 )
 def test_tool_generated_subjects_are_not_judged(subject: str) -> None:

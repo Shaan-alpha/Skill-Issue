@@ -252,6 +252,27 @@ async def test_a_failed_workflow_probe_falls_back_to_the_dot_github_dir() -> Non
 
 @pytest.mark.asyncio
 @respx.mock
+async def test_a_dotnet_test_project_directory_counts_as_tests() -> None:
+    repos_payload = [_fake_repo("lib", language="C#")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_commits(repos_payload)
+    _mock_profile_readme()
+    _mock_contents(
+        repos_payload,
+        {"lib": [{"name": "Lib.Tests", "type": "dir"}, {"name": ".env.test", "type": "file"}]},
+    )
+    _mock_graphql()
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.repos[0].has_tests is True
+
+
+@pytest.mark.asyncio
+@respx.mock
 async def test_no_workflow_probe_without_a_workflow_directory() -> None:
     _one_repo_with_root("README.md", "tests")
     route = _mock_graphql()

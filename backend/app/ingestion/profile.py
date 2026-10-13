@@ -20,7 +20,7 @@ from app.github.queries import (
 from app.models import Profile, Repo
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable
+    from collections.abc import Awaitable, Collection
 
     from app.github.client import GitHubClient
 
@@ -97,8 +97,10 @@ _TEST_FILE_PREFIXES = (
     ".mocharc.",
 )
 _VITEST_PROJECT_CONFIG = re.compile(r"^vitest\.[\w-]+\.config\.")
-# Go test files sit beside the code; .NET test projects are `<Name>.Tests`.
-_TEST_NAME_SUFFIXES = ("_test.go", ".tests", ".test")
+# Go test files sit beside the code. .NET test projects are `<Name>.Tests`
+# directories; as a file name the suffix is something else (`.env.test`).
+_TEST_FILE_SUFFIXES = ("_test.go",)
+_TEST_DIR_SUFFIXES = (".tests", ".test")
 
 _CI_MARKERS = frozenset(
     {
@@ -285,19 +287,22 @@ class RootSignals(NamedTuple):
     workflow_dirs: tuple[str, ...]
 
 
-def _is_test_entry(name: str) -> bool:
+def _is_test_entry(name: str, *, is_dir: bool) -> bool:
     return (
         name in _TEST_DIRS
         or name in _TEST_FILES
         or name.startswith(_TEST_FILE_PREFIXES)
         or _VITEST_PROJECT_CONFIG.match(name) is not None
-        or name.endswith(_TEST_NAME_SUFFIXES)
+        or name.endswith(_TEST_FILE_SUFFIXES)
+        or (is_dir and name.endswith(_TEST_DIR_SUFFIXES))
     )
 
 
-def _classify_root_entries(entries: list[str]) -> RootSignals:
-    """Derive README / tests / CI / deployment signals from root entry names."""
+def _classify_root_entries(entries: list[str], *, dir_names: Collection[str] = ()) -> RootSignals:
+    """Derive README / tests / CI / deployment signals from root entry names.
+    `dir_names` are the entries that are directories."""
     lowered = {entry.lower() for entry in entries}
+    lowered_dirs = {name.lower() for name in dir_names}
     hints = [hint for marker, hint in _DEPLOYMENT_MARKERS.items() if marker in lowered]
     if any(name.endswith(".tf") for name in lowered):
         hints.append("terraform")
@@ -306,7 +311,7 @@ def _classify_root_entries(entries: list[str]) -> RootSignals:
     unique_hints = [h for h in hints if not (h in seen or seen.add(h))]
     return RootSignals(
         has_readme=any(entry.startswith("readme") for entry in lowered),
-        has_tests=any(_is_test_entry(name) for name in lowered),
+        has_tests=any(_is_test_entry(name, is_dir=name in lowered_dirs) for name in lowered),
         has_ci=bool(lowered & _CI_MARKERS),
         deployment_hints=unique_hints,
         workflow_dirs=tuple(d for d in _WORKFLOW_DIRS if d in lowered),
@@ -357,7 +362,9 @@ async def _enrich_repo_signals(repo: Repo, gh: GitHubClient) -> tuple[str, ...]:
     owner, name = repo.full_name.split("/", 1)
     entries = await gh.get_repo_root_contents(owner, name)
     names = [entry.name for entry in entries]
-    signals = _classify_root_entries(names)
+    signals = _classify_root_entries(
+        names, dir_names=[entry.name for entry in entries if entry.type == "dir"]
+    )
     repo.readme_bytes = max(
         (e.size for e in entries if e.type == "file" and e.name.lower().startswith("readme")),
         default=0,

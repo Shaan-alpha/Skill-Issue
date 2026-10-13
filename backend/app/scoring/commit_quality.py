@@ -17,9 +17,11 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
+# Case-insensitive: typed by hand, these subjects say no more about the author.
 _TOOL_GENERATED = re.compile(
     r"^(?:Merge (?:pull request|branch|remote-tracking branch|tag)\b"
-    r'|Revert "|Reapply "|(?:fixup|squash|amend)! |Initial commit$)'
+    r'|Revert "|Reapply "|(?:fixup|squash|amend)! |Initial commit$)',
+    re.IGNORECASE,
 )
 # A Conventional Commits header or a git/kernel "area: " prefix. The
 # description is what gets judged.

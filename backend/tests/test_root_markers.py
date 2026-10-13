@@ -32,8 +32,6 @@ def _deploy(*entries: str) -> list[str]:
         "integration_test",
         "t",
         "testdata",
-        "MyApp.Tests",
-        "Core.Test",
         "vitest.config.ts",
         "vitest.config.mts",
         "vitest.unit.config.ts",
@@ -68,6 +66,18 @@ def test_recognises_a_test_suite(entry: str) -> None:
 )
 def test_does_not_mistake_these_for_a_test_suite(entry: str) -> None:
     assert not _has_tests(entry)
+
+
+@pytest.mark.parametrize("name", ["MyApp.Tests", "Core.Test"])
+def test_a_dotnet_test_project_directory_is_a_test_suite(name: str) -> None:
+    assert _classify_root_entries([name], dir_names=[name]).has_tests
+
+
+# The .NET convention names a test project directory; as a file name the same
+# suffix is something else (.env.test holds a test run's environment).
+@pytest.mark.parametrize("name", [".env.test", "MyApp.Tests"])
+def test_a_file_named_like_a_test_project_is_not_a_test_suite(name: str) -> None:
+    assert not _has_tests(name)
 
 
 @pytest.mark.parametrize(
