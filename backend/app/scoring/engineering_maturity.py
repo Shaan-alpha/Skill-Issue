@@ -132,14 +132,16 @@ def score(profile: Profile) -> ScoreResult:
         # Context rows (no points), from data ingestion already has.
         repos_with_manifests = [r for r in non_fork if r.manifests]
         if repos_with_manifests:
-            kinds = sorted({m for r in repos_with_manifests for m in r.manifests})
+            kinds = sorted({m for r in repos_with_manifests for m in r.manifests}, key=str.lower)
             listed = ", ".join(kinds[:_MANIFESTS_LISTED])
             if len(kinds) > _MANIFESTS_LISTED:
                 listed += f" and {len(kinds) - _MANIFESTS_LISTED} more"
+            count = len(repos_with_manifests)
             evidence.append(
                 Evidence(
                     signal="dependency_hygiene",
-                    detail=f"Dependency manifests in {len(repos_with_manifests)} repos: {listed}",
+                    detail=f"Dependency manifests in {count} {'repo' if count == 1 else 'repos'}: "
+                    f"{listed}",
                     weight=0,
                 )
             )

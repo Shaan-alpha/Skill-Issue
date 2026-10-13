@@ -132,10 +132,19 @@ def test_too_few_commits_to_judge_shows_no_commit_quality() -> None:
 def test_dependency_manifests_are_shown_as_evidence() -> None:
     profile = _load("profile_senior.json")
     profile.repos[0].manifests = ["package.json", "pyproject.toml"]
-    profile.repos[1].manifests = ["cargo.toml"]
+    profile.repos[1].manifests = ["Cargo.toml"]
 
     assert _evidence(profile, "dependency_hygiene") == [
-        ("Dependency manifests in 2 repos: cargo.toml, package.json, pyproject.toml", 0)
+        ("Dependency manifests in 2 repos: Cargo.toml, package.json, pyproject.toml", 0)
+    ]
+
+
+def test_one_repo_with_manifests_reads_as_one_repo() -> None:
+    profile = _load("profile_senior.json")
+    profile.repos[0].manifests = ["package.json"]
+
+    assert _evidence(profile, "dependency_hygiene") == [
+        ("Dependency manifests in 1 repo: package.json", 0)
     ]
 
 

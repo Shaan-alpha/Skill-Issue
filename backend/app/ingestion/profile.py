@@ -201,37 +201,39 @@ _DEPLOYMENT_MARKERS: dict[str, str] = {
 
 # Root dependency manifests (2026-10-13 research). Lockfiles (manifest.toml is
 # Julia's and Gleam's) and build files whose dependencies live elsewhere
-# (stack.yaml, build.zig, settings.gradle) are not manifests.
-_MANIFEST_FILES = frozenset(
-    {
+# (stack.yaml, build.zig, settings.gradle) are not manifests. Each maps to the
+# label shown as evidence: exact names as their ecosystem spells them.
+_MANIFEST_FILES: dict[str, str] = {
+    name.lower(): name
+    for name in (
         "package.json",
         "pyproject.toml",
         "requirements.txt",
-        "pipfile",
+        "Pipfile",
         "setup.py",
         "setup.cfg",
         "environment.yml",
-        "cargo.toml",
+        "Cargo.toml",
         "go.mod",
-        "gemfile",
+        "Gemfile",
         "composer.json",
         "pom.xml",
         "build.gradle",
         "build.gradle.kts",
         "build.sbt",
-        "package.swift",
-        "podfile",
+        "Package.swift",
+        "Podfile",
         "pubspec.yaml",
         "mix.exs",
         "deno.json",
         "deno.jsonc",
-        "directory.packages.props",
+        "Directory.Packages.props",
         "packages.config",
         "build.zig.zon",
         "gleam.toml",
         "opam",
-        "project.toml",
-        "description",
+        "Project.toml",
+        "DESCRIPTION",
         "rebar.config",
         "vcpkg.json",
         "conanfile.txt",
@@ -244,21 +246,31 @@ _MANIFEST_FILES = frozenset(
         "dub.sdl",
         "fpm.toml",
         "alire.toml",
-        "scarb.toml",
-        "move.toml",
+        "Scarb.toml",
+        "Move.toml",
         "lakefile.lean",
         "lakefile.toml",
-        "module.bazel",
+        "MODULE.bazel",
         "flake.nix",
-    }
-)
+    )
+}
+# Manifests named after their project. The label is the kind alone: labels
+# reach the narrator's prompt, and the rest of the name is free text.
 _MANIFEST_SUFFIXES = (".csproj", ".fsproj", ".vbproj", ".cabal", ".opam", ".gemspec", ".nimble")
 
 
+def _manifest_label(name: str) -> str | None:
+    lowered = name.lower()
+    if lowered in _MANIFEST_FILES:
+        return _MANIFEST_FILES[lowered]
+    suffix = next((s for s in _MANIFEST_SUFFIXES if lowered.endswith(s)), None)
+    return f"*{suffix}" if suffix else None
+
+
 def _manifests(names: list[str]) -> list[str]:
-    """The dependency manifests among root entry names, lowercased and sorted."""
-    lowered = {name.lower() for name in names}
-    return sorted(n for n in lowered if n in _MANIFEST_FILES or n.endswith(_MANIFEST_SUFFIXES))
+    """Labels for the dependency manifests among root entry names, sorted."""
+    labels = {label for name in names if (label := _manifest_label(name))}
+    return sorted(labels, key=str.lower)
 
 
 class RootSignals(NamedTuple):

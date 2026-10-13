@@ -465,7 +465,7 @@ async def test_readme_size_and_manifests_come_from_the_root_listing() -> None:
 
     repo = profile.repos[0]
     assert repo.readme_bytes == 5120
-    assert repo.manifests == ["app.csproj", "package.json"]
+    assert repo.manifests == ["*.csproj", "package.json"]
 
 
 @pytest.mark.asyncio
