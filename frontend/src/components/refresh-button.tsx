@@ -1,6 +1,7 @@
 "use client";
 
 import { RefreshCw } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 type Status = "idle" | "pending" | "error" | "rate_limited";
@@ -11,6 +12,7 @@ export type RefreshButtonProps = {
 };
 
 export function RefreshButton({ target, onRefreshed }: RefreshButtonProps) {
+  const router = useRouter();
   const [status, setStatus] = useState<Status>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -60,6 +62,9 @@ export function RefreshButton({ target, onRefreshed }: RefreshButtonProps) {
 
       const report = await r.json();
       onRefreshed?.(report);
+      // The card shows the score from the server's list, so re-render the
+      // page to pick up the run this refresh just recorded.
+      router.refresh();
       setStatus("idle");
       const { trackForceRefreshClicked } = await import("@/observability/events");
       trackForceRefreshClicked({
