@@ -159,6 +159,15 @@ async def test_resolving_a_session_leaves_no_transaction_open(db, monkeypatch):
     assert not db.in_transaction()
 
 
+async def test_an_unknown_session_cookie_leaves_no_transaction_open(db):
+    """A stale cookie is the common case after a sign-out elsewhere, and the
+    anonymous analysis that follows runs the whole GitHub ingest."""
+    resolved = await optional_session(db, si_session="no-such-session")
+
+    assert resolved is None
+    assert not db.in_transaction()
+
+
 async def test_a_recently_used_session_is_not_rewritten_on_every_request(db, monkeypatch):
     sid = await _signed_in(db, monkeypatch, last_used_ago=timedelta(minutes=2))
     before = await _last_used_at(db, sid)
