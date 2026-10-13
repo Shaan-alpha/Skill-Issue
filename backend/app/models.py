@@ -72,7 +72,7 @@ class Repo(BaseModel):
 class Profile(BaseModel):
     username: str
     bio: str | None
-    profile_readme_chars: int
+    profile_readme_chars: int  # visible text, HTML comments excluded
     followers: int
     public_repos: int
     languages: dict[str, int]  # language -> bytes
@@ -83,6 +83,7 @@ class Profile(BaseModel):
     commit_dates: list[datetime]
     account_created_at: datetime
     # Recruiter Signal fields
+    pinned_count: int = 0
     company: str | None = None
     blog: str | None = None
     hireable: bool = False

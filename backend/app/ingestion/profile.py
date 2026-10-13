@@ -233,6 +233,15 @@ def _classify_root_entries(entries: list[str]) -> RootSignals:
     )
 
 
+_HTML_COMMENT = re.compile(r"<!--.*?-->", re.S)
+
+
+def _visible_chars(markdown: str | None) -> int:
+    """Length of the text a visitor sees. GitHub's starter profile README is
+    almost entirely an HTML comment, so a raw length credits untouched ones."""
+    return len(_HTML_COMMENT.sub("", markdown or "").strip())
+
+
 def _parse_dt(value: str | None) -> datetime | None:
     if not value:
         return None
@@ -469,7 +478,8 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
     return Profile(
         username=user["login"],
         bio=user.get("bio"),
-        profile_readme_chars=len(profile_readme or ""),
+        profile_readme_chars=_visible_chars(profile_readme),
+        pinned_count=len(pinned_nodes),
         followers=user.get("followers", 0),
         public_repos=user.get("public_repos", 0),
         languages=languages,

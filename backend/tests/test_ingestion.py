@@ -365,7 +365,7 @@ async def test_ingest_profile_populates_languages_readme_and_external_counts() -
         profile = await ingest_profile("octocat", gh)
 
     assert profile.languages == {"Python": 1000, "TypeScript": 200, "Rust": 300}
-    assert profile.profile_readme_chars == len(readme)
+    assert profile.profile_readme_chars == len(readme.strip())  # visible text
     assert profile.external_prs_merged == 12
     assert profile.external_reviews == 4
     assert profile.has_sponsors_listing is True
@@ -432,6 +432,63 @@ async def test_external_pr_search_counts_public_repositories_only() -> None:
     sent = [json.loads(call.request.content) for call in route.calls]
     external_query = next(body for body in sent if "ExternalPRs" in body["query"])
     assert "is:public" in external_query["variables"]["externalMerged"].split()
+
+
+_STARTER_PROFILE_README = """### Hi there 👋
+
+<!--
+**octocat/octocat** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
+
+Here are some ideas to get you started:
+
+- 🔭 I'm currently working on ...
+- 🌱 I'm currently learning ...
+- 👯 I'm looking to collaborate on ...
+- 🤔 I'm looking for help with ...
+- 💬 Ask me about ...
+- 📫 How to reach me: ...
+- 😄 Pronouns: ...
+- ⚡ Fun fact: ...
+-->
+"""
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_an_untouched_starter_profile_readme_counts_as_almost_empty() -> None:
+    """GitHub creates the profile README from a template that is nearly all
+    HTML comment. Only text a visitor can see counts toward its length."""
+    repos_payload = [_fake_repo("alpha-api", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_commits(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_graphql()
+    _mock_profile_readme(_STARTER_PROFILE_README)
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.profile_readme_chars == len("### Hi there 👋")
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_pinned_repositories_are_counted() -> None:
+    repos_payload = [_fake_repo("alpha-api", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_commits(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql(pinned_nodes=[{"name": n} for n in ("alpha-api", "a", "b", "c")])
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.pinned_count == 4
 
 
 _RESOURCE_LIMIT_ERROR = {
