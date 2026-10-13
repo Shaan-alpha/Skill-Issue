@@ -74,15 +74,12 @@ async def test_falls_back_to_project_token_when_no_session(monkeypatch):
         async def __aexit__(self, *_):
             return None
 
-    monkeypatch.setenv("GITHUB_TOKEN", "project-token")
-    # Reload settings so it sees the env var.
-    from importlib import reload
-
+    # Patch the settings object dependencies.py holds rather than reloading
+    # modules, which re-created their classes and functions for later tests.
     import app.dependencies as deps_mod
-    from app import settings as settings_mod
+    from app.settings import Settings
 
-    reload(settings_mod)
-    reload(deps_mod)
+    monkeypatch.setattr(deps_mod, "settings", Settings(github_token="project-token"))
 
     monkeypatch.setattr(deps_mod, "GitHubClient", FakeClient)
     monkeypatch.setattr(deps_mod, "ingest_profile", AsyncMock(return_value=MagicMock()))
