@@ -43,7 +43,7 @@ See [`docs/TECH_STACK.md`](../docs/TECH_STACK.md) for the canonical version pins
 
 - Next.js 16 (Turbopack), React 19, TypeScript 5
 - Tailwind 4 (config in `src/app/globals.css` via `@theme`, no `tailwind.config.*`)
-- shadcn/ui (style: `base-nova` — Base UI primitives; CLI-only dependency)
+- shadcn/ui (style: `base-nova` — Base UI primitives; add components with `npx shadcn@4.21.5 add <name>`, not a dependency)
 - framer-motion for animation, lucide-react for icons
 - `next/og` `ImageResponse` for OG card generation (v0.6.0), Inter Medium + Bold bundled under `public/fonts/` (OFL 1.1)
 - Vitest + happy-dom + Testing Library for unit tests (v0.6.0)
