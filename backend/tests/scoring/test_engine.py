@@ -31,7 +31,6 @@ async def test_engine_runs_depth_for_high_scorer() -> None:
     profile.repos[0].has_license = True
     gh = AsyncMock()
     gh.get_review_depth.return_value = 200
-    gh.get_contribution_repo_count.return_value = 10
 
     report = await run_scoring_engine(profile, gh)
 
@@ -58,7 +57,6 @@ async def test_a_prolific_licensed_portfolio_earns_licence_majority() -> None:
     ]
     gh = AsyncMock()
     gh.get_review_depth.return_value = None
-    gh.get_contribution_repo_count.return_value = 0
 
     report = await run_scoring_engine(profile, gh)
 

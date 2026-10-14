@@ -1,4 +1,3 @@
-import asyncio
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
@@ -102,57 +101,33 @@ async def test_senior_tier_adds_review_depth() -> None:
     await enrich_for_tier(profile, "Senior Engineer", gh)
 
     assert profile.review_avg_comments == 250
-    gh.get_contribution_repo_count.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_staff_tier_adds_cross_repo_breadth() -> None:
+async def test_staff_tier_takes_cross_repo_breadth_from_ingestion() -> None:
+    """Ingestion already counted the public repos with 10+ commits; unlocking
+    breadth costs no request, and private repos never count."""
     profile = _bare_profile()
+    profile.substantial_repo_count = 12
     gh = AsyncMock()
     gh.get_review_depth.return_value = None
-    gh.get_contribution_repo_count.return_value = 12
 
     await enrich_for_tier(profile, "Staff Engineer", gh)
 
     assert profile.cross_repo_contribution_count == 12
-
-
-class _OverlapFake:
-    """Depth-enrichment GitHub double recording which reads were in flight together."""
-
-    def __init__(self) -> None:
-        self.in_flight: list[str] = []
-        self.pairs: set[frozenset[str]] = set()
-
-    async def _call(self, name: str, result: object) -> object:
-        self.pairs.update(frozenset((name, other)) for other in self.in_flight if other != name)
-        self.in_flight.append(name)
-        try:
-            await asyncio.sleep(0.005)
-            return result
-        finally:
-            self.in_flight.remove(name)
-
-    def ran_together(self, a: str, b: str) -> bool:
-        return frozenset((a, b)) in self.pairs
-
-    async def get_review_depth(self, username: str) -> object:
-        return await self._call("review_depth", None)
-
-    async def get_contribution_repo_count(self, username: str, *, min_commits: int) -> object:
-        return await self._call("contribution_repos", 0)
+    assert [call[0] for call in gh.mock_calls] == ["get_review_depth"]
 
 
 @pytest.mark.asyncio
-async def test_unlocked_tiers_enrich_concurrently() -> None:
-    """Each tier's reads are independent of the others', so a Staff-tier
-    profile shouldn't wait for the Senior read before starting the Staff one."""
+async def test_breadth_stays_locked_below_staff() -> None:
     profile = _bare_profile()
-    gh = _OverlapFake()
+    profile.substantial_repo_count = 12
+    gh = AsyncMock()
+    gh.get_review_depth.return_value = None
 
-    await enrich_for_tier(profile, "Staff Engineer", gh)
+    await enrich_for_tier(profile, "Senior Engineer", gh)
 
-    assert gh.ran_together("review_depth", "contribution_repos")
+    assert profile.cross_repo_contribution_count is None
 
 
 @pytest.mark.asyncio
@@ -163,7 +138,6 @@ async def test_depth_spends_no_calls_on_data_ingestion_already_has() -> None:
     profile = _bare_profile()
     gh = AsyncMock()
     gh.get_review_depth.return_value = None
-    gh.get_contribution_repo_count.return_value = 0
 
     await enrich_for_tier(profile, "Staff Engineer", gh)
 

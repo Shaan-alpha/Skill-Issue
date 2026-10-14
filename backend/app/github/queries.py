@@ -92,19 +92,6 @@ query ReviewDepth($login: String!) {
 }
 """
 
-CONTRIBUTION_REPOS = """
-query ContributionRepos($login: String!, $from: DateTime!, $to: DateTime!) {
-  user(login: $login) {
-    contributionsCollection(from: $from, to: $to) {
-      commitContributionsByRepository(maxRepositories: 100) {
-        repository { nameWithOwner }
-        contributions { totalCount }
-      }
-    }
-  }
-}
-"""
-
 
 # Public commit days across every repository the user committed to: the last
 # year for Consistency, one day per repository from the year before for
