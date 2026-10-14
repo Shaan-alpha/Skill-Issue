@@ -541,8 +541,9 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
     two_years_ago = now - timedelta(days=730)
     # Requests ask for whole UTC days, so an analysis repeated the same day
     # asks the same questions and the cache can answer them; the scorers apply
-    # the exact windows. The day-aligned `until` stops short of one_year_ago,
-    # so the older-commit check below never returns a commit from the last year.
+    # the exact windows. Commit days count whole, so the day exactly a year ago
+    # belongs to the year before: the older-commit check below runs to the end
+    # of that day, and never returns a commit from the last year.
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
     commits_since = (today - timedelta(days=730)).isoformat()
     workflow_counts, language_maps, commit_lists = await gather_all(
@@ -606,7 +607,7 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
                     username,
                     commits_since,
                     per_page=1,
-                    until=(today - timedelta(days=365)).isoformat(),
+                    until=(today - timedelta(days=364, seconds=1)).isoformat(),
                 )
                 for raw in cut_within_year
             )

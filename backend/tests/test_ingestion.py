@@ -980,6 +980,44 @@ async def test_a_full_page_inside_the_last_year_is_checked_for_older_commits() -
 
 @pytest.mark.asyncio
 @respx.mock
+async def test_the_older_commit_check_covers_the_whole_day_a_year_ago(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Commit days count whole, so the day exactly a year ago belongs to the
+    year before. The check for an older commit must reach the end of that day,
+    not stop at its start."""
+    repos_payload = [_fake_repo("busy", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql()
+    now = datetime.now(UTC).replace(hour=13, minute=0, second=0, microsecond=0)
+    monkeypatch.setattr(profile_module, "datetime", frozen_at(now))
+    year_ago = (now - timedelta(days=365)).replace(hour=0)
+    committed = year_ago.replace(hour=12)  # _commit's time of day
+
+    def _answer(request: httpx.Request) -> Response:
+        until = request.url.params.get("until")
+        if until is None:
+            return Response(200, json=[_commit(now - timedelta(days=i)) for i in range(100)])
+        # GitHub lists the commits committed at or before `until`.
+        older = committed <= datetime.fromisoformat(until)
+        return Response(200, json=[_commit(year_ago)] if older else [])
+
+    respx.get(url__startswith="https://api.github.com/repos/octocat/busy/commits").mock(
+        side_effect=_answer
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert year_ago in profile.commit_dates
+
+
+@pytest.mark.asyncio
+@respx.mock
 async def test_no_older_commit_check_when_the_year_before_is_already_visible() -> None:
     repos_payload = [_fake_repo("busy", language="Python"), _fake_repo("quiet", language="Go")]
     _mock_user()
