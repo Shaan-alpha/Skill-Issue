@@ -106,3 +106,54 @@ async def contribution_activity(
     for entry in _public((user.get("priorYear") or {}).get("commitContributionsByRepository")):
         days.update(_days(entry.get("contributions") or {}))
     return CommitActivity(frozenset(days), complete_since, substantial, "all_public_repos")
+
+
+# Commit messages are attacker-influenced; only a bounded prefix is examined.
+_COMMIT_SUBJECT_MAX = 500
+# One page of the user's commits per sampled repo. A full page means older
+# ones exist that ingestion never saw.
+COMMITS_PER_REPO = 100
+
+
+def commit_day(commit: dict[str, Any], role: str = "author") -> datetime | None:
+    """The commit's author (or committer) date as a UTC-aware day."""
+    date_str = (commit.get(role) or {}).get("date")
+    if not date_str:
+        return None
+    return datetime.strptime(date_str[:10], "%Y-%m-%d").replace(tzinfo=UTC)
+
+
+def sample_activity(pages: list[list[dict[str, Any]]]) -> CommitActivity:
+    """Commit days from the REST sample of the user's own repos: the stand-in
+    when GitHub can't report contribution data."""
+    days: set[datetime] = set()
+    complete_since: datetime | None = None
+    for page in pages:
+        committed_days: list[datetime] = []
+        for c in page:
+            commit = c.get("commit") or {}
+            day = commit_day(commit)
+            if day is not None:
+                days.add(day)
+            if (committed := commit_day(commit, "committer") or day) is not None:
+                committed_days.append(committed)
+        # GitHub filters and orders the list by committer date, so a full
+        # page's coverage ends at its oldest committer date. A rebased commit
+        # keeps an older author date, which would claim coverage further back.
+        if len(page) >= COMMITS_PER_REPO and committed_days:
+            oldest = min(committed_days)
+            complete_since = oldest if complete_since is None else max(complete_since, oldest)
+    return CommitActivity(frozenset(days), complete_since, None, "own_recent_repos")
+
+
+def commit_subjects(pages: list[list[dict[str, Any]]]) -> list[str]:
+    """First lines of the sampled commits. Commit messages are untrusted text:
+    keep a bounded first line."""
+    subjects: list[str] = []
+    for page in pages:
+        for c in page:
+            message = str((c.get("commit") or {}).get("message") or "")
+            lines = message[:_COMMIT_SUBJECT_MAX].splitlines()
+            if lines and lines[0].strip():
+                subjects.append(lines[0].strip())
+    return subjects

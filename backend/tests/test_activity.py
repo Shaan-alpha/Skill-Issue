@@ -4,7 +4,12 @@ from typing import Any
 import pytest
 
 from app.github.client import GitHubCallCapExceeded, GitHubRateLimited
-from app.ingestion.activity import activity_windows, contribution_activity
+from app.ingestion.activity import (
+    activity_windows,
+    commit_subjects,
+    contribution_activity,
+    sample_activity,
+)
 
 WINDOWS = {
     "from": "2025-10-15T00:00:00+00:00",
@@ -225,3 +230,47 @@ def test_windows_are_whole_utc_days_ending_tonight() -> None:
     evening = datetime(2026, 10, 14, 19, 3, 7, 654321, tzinfo=UTC)
 
     assert activity_windows(morning) == activity_windows(evening) == WINDOWS
+
+
+def _commit(day: str, committed: str | None = None, message: str = "Fix") -> dict[str, object]:
+    return {
+        "commit": {
+            "author": {"date": f"{day}T12:00:00Z"},
+            "committer": {"date": f"{committed or day}T12:00:00Z"},
+            "message": message,
+        }
+    }
+
+
+def test_a_full_sample_page_is_complete_from_its_oldest_committer_day() -> None:
+    """GitHub filters and orders a commit list by committer date. A rebased
+    commit keeps an older author date, which must not stretch the coverage."""
+    page = [_commit(f"2026-{m:02d}-{d:02d}") for m in (5, 6, 7, 8) for d in range(1, 31)][:99]
+    page.append(_commit("2026-01-05", committed="2026-08-03"))
+
+    activity = sample_activity([page, [_commit("2026-02-01")]])
+
+    assert activity.complete_since == _day("2026-05-01")
+    assert _day("2026-01-05") in activity.days
+    assert _day("2026-02-01") in activity.days
+
+
+def test_short_sample_pages_mean_the_history_is_complete() -> None:
+    activity = sample_activity([[_commit("2026-09-01")], []])
+
+    assert activity.complete_since is None
+    assert activity.days == {_day("2026-09-01")}
+    assert (activity.scope, activity.substantial_repo_count) == ("own_recent_repos", None)
+
+
+def test_commit_subjects_are_bounded_first_lines() -> None:
+    """Commit messages are untrusted text: only a bounded first line is kept."""
+    pages = [
+        [
+            _commit("2026-09-01", message="Add retry budget\n\nLong body"),
+            _commit("2026-09-02", message="   "),
+            _commit("2026-09-03", message="x" * 600),
+        ]
+    ]
+
+    assert commit_subjects(pages) == ["Add retry budget", "x" * 500]
