@@ -19,7 +19,7 @@ A release that reads your commit activity across every public repository you com
 - **The repositories you work on get inspected first.** README, tests and CI are read from your 20 most recently pushed repositories, rather than the ones that most recently gained stars.
 
 ### Changed: reliability and operations
-- **Analyses make about 15 fewer GitHub requests.**
+- **Analyses make fewer GitHub requests:** a few fewer for most profiles, and up to 15 fewer for very active ones.
 - **Dependencies refreshed within their current major versions:** Next.js 16.4, FastAPI 0.143, Pydantic 2.14, Starlette 1.8, both Sentry SDKs and others. Link prefetching keeps its current behaviour.
 
 ## [1.0.14] — 2026-10-13
