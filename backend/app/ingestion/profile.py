@@ -590,6 +590,7 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
         commit_subjects=commit_subjects(commit_pages),
         commit_history_complete_since=activity.complete_since,
         commit_activity_scope=activity.scope,
+        commit_sample_repo_count=len(sampled),
         substantial_repo_count=activity.substantial_repo_count,
         repo_list_capped=len(repos_raw) >= REPO_LIST_PAGE_SIZE,
         workflow_counts=workflow_counts,

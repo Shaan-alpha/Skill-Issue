@@ -1,6 +1,8 @@
 import pathlib
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from app.models import Profile
 from app.scoring.consistency import MAX_POINTS, score
 
@@ -195,10 +197,8 @@ def test_consistency_appends_cross_repo_evidence_when_available() -> None:
     assert any(e.signal == "cross_repo_breadth" for e in result.evidence)
 
 
-_FALLBACK_NOTE = (
-    "Counted from the 5 most recently pushed own repositories only: "
-    "GitHub didn't return activity across all repositories"
-)
+_WHY = "GitHub didn't return activity across all repositories"
+_FALLBACK_NOTE = f"Counted from the 5 most recently pushed own repositories only: {_WHY}"
 
 
 def _every_fifth_day(profile: Profile) -> Profile:
@@ -242,8 +242,9 @@ def test_volume_is_exact_when_the_cut_off_predates_the_year() -> None:
 
 
 def test_a_fallback_sample_says_what_it_counted() -> None:
-    profile = _every_fifth_day(_load("profile_senior.json"))
+    profile = _every_fifth_day(_load("profile_senior.json"))  # 6 own repos
     profile.commit_activity_scope = "own_recent_repos"
+    profile.commit_sample_repo_count = 5
 
     result = score(profile)
     rows = {e.signal: (e.detail, e.weight) for e in result.evidence}
@@ -257,6 +258,7 @@ def test_the_fallback_note_shows_even_without_commit_days() -> None:
     profile = _load("profile_senior.json")
     profile.commit_dates = []
     profile.commit_activity_scope = "own_recent_repos"
+    profile.commit_sample_repo_count = 5
 
     result = score(profile)
 
@@ -264,3 +266,42 @@ def test_the_fallback_note_shows_even_without_commit_days() -> None:
     assert [(e.signal, e.detail) for e in result.evidence] == [
         ("commit_activity_scope", _FALLBACK_NOTE)
     ]
+
+
+def _sampled(profile: Profile, own: int, sampled: int, *, capped: bool = False) -> Profile:
+    """A fallback profile with `own` own repositories, `sampled` of them sampled."""
+    template = profile.repos[0]
+    profile.repos = [
+        template.model_copy(update={"name": f"r{i}", "full_name": f"x/r{i}", "is_fork": False})
+        for i in range(own)
+    ]
+    profile.repo_list_capped = capped
+    profile.commit_activity_scope = "own_recent_repos"
+    profile.commit_sample_repo_count = sampled
+    return profile
+
+
+@pytest.mark.parametrize(
+    ("own", "sampled", "capped", "note"),
+    [
+        (6, 5, False, _FALLBACK_NOTE),
+        (3, 3, False, f"Counted from all 3 own repositories only: {_WHY}"),
+        (1, 1, False, f"Counted from the one own repository only: {_WHY}"),
+        (0, 0, False, f"No own repositories to count commits from: {_WHY}"),
+        (
+            12,
+            5,
+            True,
+            "Counted from the 5 most recently pushed of the most recently updated own "
+            f"repositories only: {_WHY}",
+        ),
+    ],
+)
+def test_the_fallback_note_says_which_repositories_were_counted(
+    own: int, sampled: int, capped: bool, note: str
+) -> None:
+    profile = _sampled(_load("profile_senior.json"), own, sampled, capped=capped)
+
+    details = {e.signal: e.detail for e in score(profile).evidence}
+
+    assert details["commit_activity_scope"] == note

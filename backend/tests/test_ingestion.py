@@ -680,6 +680,7 @@ async def test_unavailable_contributions_fall_back_to_the_commit_sample() -> Non
     assert [d.date().isoformat() for d in profile.commit_dates] == ["2026-10-01"]
     assert profile.commit_activity_scope == "own_recent_repos"
     assert profile.substantial_repo_count is None
+    assert profile.commit_sample_repo_count == 1
 
 
 @pytest.mark.asyncio
@@ -764,6 +765,7 @@ async def test_inspection_and_the_commit_sample_follow_push_recency() -> None:
     assert {n for n, route in contents.items() if route.called} == {f"r{i}" for i in range(5, 25)}
     assert {n for n, route in commits.items() if route.called} == {f"r{i}" for i in range(20, 25)}
     assert [r.name for r in profile.repos if r.root_inspected] == [f"r{i}" for i in range(5, 25)]
+    assert profile.commit_sample_repo_count == 5
 
 
 @pytest.mark.asyncio

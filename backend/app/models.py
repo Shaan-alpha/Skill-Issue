@@ -97,6 +97,8 @@ class Profile(BaseModel):
     # unseen, so the history is complete only from this day on.
     commit_history_complete_since: datetime | None = None
     commit_activity_scope: CommitActivityScope = "all_public_repos"
+    # Own repos whose commits were sampled, the most recently pushed first.
+    commit_sample_repo_count: int = 0
     # Public repos with 10+ commits in the last year; None when unknown.
     substantial_repo_count: int | None = None
     # True when the repo list came back as a full page: `repos` is then the

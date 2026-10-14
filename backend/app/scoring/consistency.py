@@ -61,18 +61,31 @@ def _dry_spell_evidence(
     )
 
 
+def _fallback_note(profile: Profile) -> str:
+    """Where the commit days came from when GitHub's contribution data didn't
+    answer: the commit sample of the most recently pushed own repositories."""
+    reason = "GitHub didn't return activity across all repositories"
+    sampled = profile.commit_sample_repo_count
+    own = sum(1 for repo in profile.repos if not repo.is_fork)
+    if sampled == 0:
+        return f"No own repositories to count commits from: {reason}"
+    if profile.repo_list_capped:
+        # The repo list holds only the most recently updated repos.
+        which = f"the {sampled} most recently pushed of the most recently updated own repositories"
+    elif sampled < own:
+        which = f"the {sampled} most recently pushed own repositories"
+    elif sampled == 1:
+        which = "the one own repository"
+    else:
+        which = f"all {sampled} own repositories"
+    return f"Counted from {which} only: {reason}"
+
+
 def score(profile: Profile) -> ScoreResult:
     evidence: list[Evidence] = []
     if profile.commit_activity_scope == "own_recent_repos":
         evidence.append(
-            Evidence(
-                signal="commit_activity_scope",
-                detail=(
-                    "Counted from the 5 most recently pushed own repositories only: "
-                    "GitHub didn't return activity across all repositories"
-                ),
-                weight=0,
-            )
+            Evidence(signal="commit_activity_scope", detail=_fallback_note(profile), weight=0)
         )
     points = 0
 
