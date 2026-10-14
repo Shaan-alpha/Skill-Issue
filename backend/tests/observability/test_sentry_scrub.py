@@ -413,3 +413,20 @@ def test_an_event_without_request_details_is_unchanged():
         "request": {"method": "GET"},
     }
     assert scrub_event(copy.deepcopy(event), {}) == event
+
+
+def test_init_sentry_sends_no_locals_bodies_or_unscrubbed_transactions(monkeypatch):
+    captured: dict = {}
+    monkeypatch.setattr("sentry_sdk.init", lambda **kwargs: captured.update(kwargs))
+
+    init_sentry(
+        dsn="https://abc@o123.ingest.sentry.io/456",
+        environment="production",
+        traces_sample_rate=0.25,
+        release="0.8.0",
+    )
+
+    assert captured["include_local_variables"] is False
+    assert captured["max_request_body_size"] == "never"
+    assert captured["before_send_transaction"] is scrub_event
+    assert captured["before_send"] is scrub_event
