@@ -530,6 +530,27 @@ async def test_contribution_count_lets_a_rate_limit_fail_the_analysis() -> None:
 
 @pytest.mark.asyncio
 @respx.mock
+@pytest.mark.parametrize("read", ["review_depth", "contribution_count"])
+async def test_depth_reads_let_the_call_cap_stop_the_analysis(read: str) -> None:
+    """These reads degrade when GitHub can't resolve them, but an analysis past
+    its call cap must stop with a 503, not finish scored without them and keep
+    that report cached for six hours."""
+    from app.github.client import GitHubCallCapExceeded
+
+    respx.post("https://api.github.com/graphql").mock(
+        return_value=Response(200, json={"data": {"user": None}})
+    )
+
+    async with GitHubClient(token="ghs_test", max_calls=0) as gh:
+        with pytest.raises(GitHubCallCapExceeded):
+            if read == "review_depth":
+                await gh.get_review_depth("antfu")
+            else:
+                await gh.get_contribution_repo_count("antfu", min_commits=10)
+
+
+@pytest.mark.asyncio
+@respx.mock
 async def test_a_403_with_retry_after_is_a_rate_limit_not_a_blocked_repo() -> None:
     """GitHub's older secondary-limit wording never says "rate limit"; the
     Retry-After header is what marks it."""

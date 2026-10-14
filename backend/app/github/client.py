@@ -423,13 +423,13 @@ class GitHubClient:
         RESOURCE_LIMITS_EXCEEDED for hyper-active accounts (SKILL-ISSUE-BACKEND-4) —
         either fully (graphql() raises) or with partial data whose `nodes` field is
         null — so every access below is null-guarded and the call is wrapped.
-        A rate limit still fails the analysis.
+        A rate limit or the call cap still fails the analysis.
         """
         from app.github.queries import REVIEW_DEPTH
 
         try:
             data = await self.graphql(REVIEW_DEPTH, {"login": username})
-        except GitHubRateLimited:
+        except (GitHubRateLimited, GitHubCallCapExceeded):
             raise
         except Exception:
             logger.warning(
@@ -452,7 +452,7 @@ class GitHubClient:
         Bonus depth signal — degrades to 0 rather than failing the analysis when
         GitHub can't resolve this `contributionsCollection` query (the same
         RESOURCE_LIMITS_EXCEEDED rejection hyper-active accounts trigger). A rate
-        limit still fails the analysis.
+        limit or the call cap still fails the analysis.
 
         The year is the 365 UTC days up to tonight's midnight. Whole days keep
         the query, and so its cache key, the same all day.
@@ -470,7 +470,7 @@ class GitHubClient:
                     "to": midnight.isoformat(),
                 },
             )
-        except GitHubRateLimited:
+        except (GitHubRateLimited, GitHubCallCapExceeded):
             raise
         except Exception:
             logger.warning(

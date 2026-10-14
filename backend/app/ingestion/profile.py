@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 import httpx
 
 from app.concurrency import gather_all
-from app.github.client import GitHubRateLimited
+from app.github.client import GitHubCallCapExceeded, GitHubRateLimited
 from app.github.queries import (
     EXTERNAL_PRS,
     EXTERNAL_REVIEW_COUNT,
@@ -427,7 +427,7 @@ async def _external_pr_signals(username: str, gh: GitHubClient) -> dict[str, Any
             EXTERNAL_PRS,
             {"login": username, "externalMerged": external_merged_prs_query(username)},
         )
-    except GitHubRateLimited:
+    except (GitHubRateLimited, GitHubCallCapExceeded):
         raise
     except Exception:
         logger.warning(
@@ -458,7 +458,7 @@ async def _external_review_count(username: str, gh: GitHubClient) -> int:
     """PR review count — isolated because it's the field GitHub most often rejects."""
     try:
         reviews = await gh.graphql(EXTERNAL_REVIEW_COUNT, {"login": username})
-    except GitHubRateLimited:
+    except (GitHubRateLimited, GitHubCallCapExceeded):
         raise
     except Exception:
         logger.warning(

@@ -12,7 +12,7 @@ import pytest
 import respx
 from httpx import Response
 
-from app.github.client import GitHubClient, GitHubRateLimited
+from app.github.client import GitHubCallCapExceeded, GitHubClient, GitHubRateLimited
 from app.ingestion import profile as profile_module
 from app.ingestion.profile import ingest_profile
 from app.scoring import engineering_maturity
@@ -817,6 +817,39 @@ async def test_a_rate_limited_graphql_query_fails_the_ingest(
 
     async with GitHubClient(token="ghs_test", max_retries=1) as gh:
         with pytest.raises(GitHubRateLimited):
+            await ingest_profile("octocat", gh)
+
+
+@pytest.mark.asyncio
+@respx.mock
+@pytest.mark.parametrize("operation", ["ExternalPRs", "ExternalReviewCount"])
+async def test_the_call_cap_stops_an_ingest_inside_a_fail_soft_read(
+    operation: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The external reads degrade when GitHub can't answer, but reaching the
+    per-analysis call cap there must stop the analysis like anywhere else."""
+    _one_repo_with_root(".github")
+    respx.post("https://api.github.com/graphql").mock(
+        side_effect=graphql_router(
+            {
+                "PinnedRepos": _pinned_payload(),
+                "ExternalPRs": _external_prs_payload(external_prs=40),
+                "ExternalReviewCount": _review_count_payload(4),
+                "WorkflowFiles": _workflow_files_payload({"r0": {"github": [("ci.yml", "blob")]}}),
+            }
+        )
+    )
+    real_graphql = GitHubClient.graphql
+
+    async def graphql(self: GitHubClient, query: str, variables: dict[str, object]) -> object:
+        if f"query {operation}(" in query:
+            raise GitHubCallCapExceeded(151, 150)
+        return await real_graphql(self, query, variables)
+
+    monkeypatch.setattr(GitHubClient, "graphql", graphql)
+
+    async with GitHubClient(token="ghs_test") as gh:
+        with pytest.raises(GitHubCallCapExceeded):
             await ingest_profile("octocat", gh)
 
 
