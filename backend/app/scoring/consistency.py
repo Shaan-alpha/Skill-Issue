@@ -63,6 +63,17 @@ def _dry_spell_evidence(
 
 def score(profile: Profile) -> ScoreResult:
     evidence: list[Evidence] = []
+    if profile.commit_activity_scope == "own_recent_repos":
+        evidence.append(
+            Evidence(
+                signal="commit_activity_scope",
+                detail=(
+                    "Counted from the 5 most recently pushed own repositories only: "
+                    "GitHub didn't return activity across all repositories"
+                ),
+                weight=0,
+            )
+        )
     points = 0
 
     now = datetime.now(UTC)
@@ -72,7 +83,7 @@ def score(profile: Profile) -> ScoreResult:
     year_ago = now - ONE_YEAR
     dates = sorted(d for d in map(_aware, profile.commit_dates) if d > year_ago)
     if not dates:
-        return make_result(points=0, max_points=MAX_POINTS, evidence=[])
+        return make_result(points=0, max_points=MAX_POINTS, evidence=evidence)
 
     # 1. At least one commit in each of last 3 calendar months -> 4 pts
     last_3_months: list[tuple[int, int]] = []
@@ -103,10 +114,15 @@ def score(profile: Profile) -> ScoreResult:
 
     # 3. >= 30 commit days over the last 12 months -> 3 pts
     if len(dates) >= 30:
+        where = (
+            " across public repositories"
+            if profile.commit_activity_scope == "all_public_repos"
+            else ""
+        )
         evidence.append(
             Evidence(
                 signal="high_volume",
-                detail=f"Committed on {len(dates)} days in the last year",
+                detail=f"Committed on {len(dates)} days in the last year{where}",
                 weight=3,
             )
         )

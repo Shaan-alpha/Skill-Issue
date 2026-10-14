@@ -193,3 +193,50 @@ def test_consistency_appends_cross_repo_evidence_when_available() -> None:
     profile.cross_repo_contribution_count = 8
     result = score(profile)
     assert any(e.signal == "cross_repo_breadth" for e in result.evidence)
+
+
+_FALLBACK_NOTE = (
+    "Counted from the 5 most recently pushed own repositories only: "
+    "GitHub didn't return activity across all repositories"
+)
+
+
+def _every_fifth_day(profile: Profile) -> Profile:
+    now = datetime.now(UTC)
+    profile.commit_dates = [now - timedelta(days=i * 5) for i in range(73)]
+    return profile
+
+
+def test_volume_evidence_names_public_repositories() -> None:
+    profile = _every_fifth_day(_load("profile_senior.json"))
+
+    details = {e.signal: e.detail for e in score(profile).evidence}
+
+    assert (
+        details["high_volume"] == "Committed on 73 days in the last year across public repositories"
+    )
+
+
+def test_a_fallback_sample_says_what_it_counted() -> None:
+    profile = _every_fifth_day(_load("profile_senior.json"))
+    profile.commit_activity_scope = "own_recent_repos"
+
+    result = score(profile)
+    rows = {e.signal: (e.detail, e.weight) for e in result.evidence}
+
+    assert rows["high_volume"][0] == "Committed on 73 days in the last year"
+    assert rows["commit_activity_scope"] == (_FALLBACK_NOTE, 0)
+    assert result.points == 10
+
+
+def test_the_fallback_note_shows_even_without_commit_days() -> None:
+    profile = _load("profile_senior.json")
+    profile.commit_dates = []
+    profile.commit_activity_scope = "own_recent_repos"
+
+    result = score(profile)
+
+    assert result.points == 0
+    assert [(e.signal, e.detail) for e in result.evidence] == [
+        ("commit_activity_scope", _FALLBACK_NOTE)
+    ]
