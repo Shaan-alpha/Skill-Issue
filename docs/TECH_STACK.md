@@ -42,7 +42,7 @@
 | **Alembic** | `1.18+` | Hand-authored migrations; reversibility tested in pytest. |
 | **upstash-redis** | `>=1.2` | Async REST-API client for Upstash. HTTP-based, Fluid-Compute-friendly. Added in v0.7.0. |
 | **cryptography** | `50.0.0+` | AES-GCM for at-rest GitHub-token encryption (v0.5.0). CVE floor raised for GHSA-537c-gmf6-5ccf in the v1.0.x security slice, then to 50.0.0 for CVE-2026-69247 (PKCS#7 Bleichenbacher oracle). |
-| **uvicorn[standard]** | `0.51` | ASGI server in dev; Vercel Functions for production |
+| **uvicorn[standard]** | `0.54` | ASGI server in dev; Vercel Functions for production |
 | **uv** | `0.11.12+` | Package + venv management — significantly faster than pip |
 | **pytest** | `9.x` | Test runner with async support |
 | **pytest-asyncio** | `1.4` | `asyncio_mode = "auto"` so async tests don't need decorators |

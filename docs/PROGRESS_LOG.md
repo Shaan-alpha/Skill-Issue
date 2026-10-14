@@ -19,6 +19,61 @@ Format:
 
 ---
 
+## 2026-10-14 — Claude (Opus 5.5) with Shaan — v1.0.14 continued: two scoring denominators, review tail, docs drift
+
+**Slice:** v1.0.14, continuing the 2026-10-13 entry below. Working notes are still in the gitignored `.audit/2026-10-13-deep-audit.md`; every coverage box there is now checked.
+
+**Done:**
+- **Closed the review-2 tail test-first.**
+  - The end-to-end and cache mocks now use the `PinnedRepos` count and `ExternalPRs` search shapes the queries actually return.
+  - Commit-list and contribution windows are whole UTC days. Their microsecond bounds had given every request a new cache key: the cache never answered one, and each cost an Upstash write. Verified live that GitHub accepts the day-aligned bounds, including a `to` in the future.
+- **Fixed two scoring denominators, live-verified.**
+  - *Licence majority* checked only the top ten repos but divided by every non-fork repo, so past twenty repos it could not pass. Licences now come from the repo list's `license.spdx_id` for every repo (57 of 57 matched `/license` live), and the ten `/license` calls per Professional+ analysis are gone.
+  - *README majority* divided by every non-fork repo, though only the 20 root-listed repos are known, so past forty it could not pass. It is now judged on the inspected repos (`Repo.root_inspected`), and the evidence names that scope.
+  - Live totals, before these two fixes → after: Shaan-alpha 81 → 85, gaearon 63 → 73 (Professional → Senior), sindresorhus 77 → 87 (Senior → Staff), antfu 90 → 100, tj 56 → 62.
+- **The call cap fails the analysis inside fail-soft reads.** Review depth, contribution breadth and the two external-signal queries had swallowed `GitHubCallCapExceeded`, so an analysis at the cap finished degraded and stayed cached for six hours. This was latent (cap 150, worst case 69), and surfaced when the licence call stopped being the first depth request in the end-to-end test.
+- **History card (a11y).** It no longer nests its buttons inside its link: a stretched-link layout, with delete last in the tab order. Checked in Chrome at 1440/1024/768/390 on a throwaway route rendering `HistoryGrid`. It is pixel-identical to the old card, with the old markup confirmed rendered first; the buttons hit-test as themselves, the focus ring wraps the card, and real clicks behave.
+- **Docs drift corrected** in README, ARCHITECTURE, TECH_STACK and the `[1.0.14]` changelog:
+  - removed claims about issues ingestion and ETag requests that the code never made;
+  - the real schema replaces the v0.5.0 sketch;
+  - cache keys gain `v2:` and 409;
+  - PostHog identifies users by user id, and Sentry carries no user id;
+  - versions, the budget default and the domain updated.
+- **Remaining coverage:**
+  - dependencies: `pip-audit` clean; the shipped npm closure is clean, and every dev advisory comes through the `shadcn` CLI; the root's `@vercel/config` → `path-to-regexp` advisory is pinned upstream even in the latest version, but runs only at build time;
+  - production: `/health` ok, 0 unresolved Sentry issues in 14 days, 0 Vercel runtime errors in 7 days.
+- **Final review.** A small workflow read `ff72a46..HEAD`: two fresh-context reviewers, then one skeptic who tried to refute each finding. Of 8 findings, the skeptic confirmed 7, all minor, and refuted 1. Each was fixed test-first:
+  - GraphQL 200s without data, a REST-style rate-limit message or an empty body, were cached even though `graphql()` rejects them, so one bad answer replayed to every analysis of that user for 15 minutes. This was pre-existing: before the first review round they replayed as a crash.
+  - My day-aligned probe stopped at the start of the day a year ago, which the scorer counts as the year before. This was a regression from this session; the probe now runs to 23:59:59 of that day.
+  - The end-to-end concurrency test's tier assertion no longer proved depth enrichment ran. It now checks that the `ReviewDepth` query was sent.
+  - The licence and README evidence now names its sample when the 100-repo list is capped. sindresorhus has 1,144 repos, so "97/100" had read as his whole account.
+  - Four doc slips: a changelog heading that overclaimed, "a clear response", the uvicorn row, and a stale count in `frontend/README.md`.
+- **Verification:**
+  - backend 854 passed against a throwaway Postgres 18 cluster (no skips);
+  - frontend 125 passing, with tsc, lint and a production build;
+  - a live `/u/gaearon` render shows the new evidence, with no overflow at 390.
+
+**Decisions (mine; Shaan approved the score moves and the Dependabot order on 2026-10-14):**
+- The two denominator fixes are defect fixes, not weight changes: each rule's own evidence text promised a share of every repo.
+- B4 (a shared `httpx` client) and B5 (batching `/share/{slug}`'s queries) are not worth doing; the reasons are in PLAN.
+- The Dependabot PRs (#121–#125, all green) merge after this slice.
+
+**Learned / surprises:**
+- **When ingestion samples, a ratio rule must divide by the sample.** Both bugs had the same shape: data fetched for the top N repos, judged against all of them.
+- **The REST repo list already carries `license.spdx_id`**, so the per-repo `/license` request was redundant from the start.
+- **GitHub's default `contributionsCollection` window is the profile calendar's**, about 368 days and week-aligned in the viewer's time zone. Explicit bounds are honoured exactly, and a `to` in the future is accepted.
+- **Git Bash (MSYS) rewrites `gh api /repos/...` into a Windows path.** Drop the leading slash, or every call 404s.
+- **`pg_ctl start` from Git Bash never returns**, because the server inherits the shell's pipe. Run it in the background and poll `pg_isready`.
+- **A signed-out `/me` makes two session requests**, both from `useSession`'s `getSnapshot` during Activity reconnect, and production does the same. Deferred as O2: benign 401s, cause not yet found.
+
+**Blocked / open:**
+- Push the branch, open the PR, get CI green and merge; Shaan has approved the score moves.
+- A production smoke, then the `v1.0.14` tag, which is an operator checkpoint.
+
+**Next:** v1.0.15 toolchain majors.
+
+---
+
 ## 2026-10-13 — Claude (Opus 5.5) with Shaan — v1.0.14: deep audit, scoring currency, parallel ingestion
 
 **Slice:** v1.0.14 (PLAN section of the same name). Working notes for the whole audit live in the gitignored `.audit/2026-10-13-deep-audit.md`, kept resumable in case the session hit the plan's usage limit.
