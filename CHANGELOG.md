@@ -10,6 +10,9 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ## [Unreleased]
 
+### Changed
+- **Dependencies refreshed within their current major versions:** Next.js 16.4, FastAPI 0.143, Pydantic 2.14, Starlette 1.8, both Sentry SDKs and others. Link prefetching keeps its current behaviour.
+
 ## [1.0.14] — 2026-10-13
 
 A release from a full review of how scores are calculated, checked against how developers actually work in 2026. **Many scores change**, most of them by a few points. Saved analyses pick up the new rules at their next refresh.

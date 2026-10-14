@@ -120,12 +120,14 @@ def init_sentry(
         logging.getLogger(__name__).warning("sentry: already initialised, skipping re-init")
         return
 
+    # No send_default_pii and no data_collection: the SDK's default collects no
+    # PII. send_default_pii is deprecated (2.72), even as False, and passing a
+    # data_collection dict opts into its more permissive defaults.
     sentry_sdk.init(
         dsn=dsn,
         environment=environment,
         release=release,
         traces_sample_rate=traces_sample_rate,
-        send_default_pii=False,
         before_send=scrub_event,
         integrations=[
             FastApiIntegration(),

@@ -62,6 +62,10 @@ const nextConfig: NextConfig = {
   // v0.8.6: enable Next 16 Cache Components for `/share/[slug]` ISR with
   // tag-based invalidation via the new `/api/revalidate` route.
   cacheComponents: true,
+  // Next 16.4 asks Cache Components apps to choose. `false` keeps the prefetch
+  // behaviour the app was built and verified on; adopting Partial Prefetching
+  // changes what links prefetch, so it is planned work with its own checks.
+  partialPrefetching: false,
   experimental: {
     optimizePackageImports: ["lucide-react", "@base-ui/react"],
   },

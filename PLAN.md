@@ -1093,6 +1093,10 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 **Candidates:** TypeScript 6.0 (typescript-eslint supports < 6.1), Vitest 5 + `@vitest/ui` 5, `@testing-library/jest-dom` 7, `@sentry/nextjs` 11 (read the migration guide against `src/observability`), framer-motion 13 (visual check at 360/768/1024), openai-python 3 (the narrator's client), SQLAlchemy 2.1 (asyncpg + PgBouncer). Still blocked upstream: ESLint 10 (eslint-plugin-react) and TypeScript 7 (typescript-eslint). Open Dependabot PRs #116–#119 cover four of them.
 
+**Watch for (found during the October refresh):**
+- **The Sentry 11 SDKs drop `sendDefaultPii`.** Their `dataCollection` defaults collect user info, cookies, headers and request bodies, so the migration has to set opt-outs explicitly, for `@sentry/nextjs` 11 and for sentry-python 3 alike. Passing a `data_collection` dict already opts into those defaults today.
+- **Partial Prefetching.** Next 16.4 asks Cache Components apps to choose; the app sets `partialPrefetching: false`, keeping the prefetch behaviour it was verified on. Adopting it, which Next 17 will force, needs back/forward checks in Chrome. No link sets `prefetch` explicitly.
+
 **Exit criteria:**
 - [ ] Each major lands in its own commit with the full suite green.
 - [ ] Dependabot ignore rules removed for each major taken.
