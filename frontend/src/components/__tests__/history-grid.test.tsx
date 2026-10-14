@@ -60,6 +60,26 @@ describe("HistoryGrid", () => {
   });
 });
 
+describe("HistoryGrid server resync", () => {
+  it("shows a refreshed run's new score even when the list of analyses is unchanged", () => {
+    const before = analysis(1, "octocat");
+    const after: SavedAnalysis = {
+      ...before,
+      latest_run: {
+        total_score: 81,
+        tier_name: "Staff Engineer",
+        completed_at: new Date("2026-10-13T00:00:00Z").toISOString(),
+      },
+    };
+
+    const { rerender } = render(<HistoryGrid analyses={[before]} />);
+    rerender(<HistoryGrid analyses={[after]} />);
+
+    expect(screen.getByText("81")).toBeInTheDocument();
+    expect(screen.queryByText("73")).not.toBeInTheDocument();
+  });
+});
+
 // Under `cacheComponents: true` the App Router hides /me behind React's
 // <Activity> rather than unmounting it, so `useState(analyses)` keeps its
 // original seed and never sees the server's newer list.

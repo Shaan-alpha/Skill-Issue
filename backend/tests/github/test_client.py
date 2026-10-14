@@ -1,11 +1,16 @@
+import asyncio
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import httpx
 import pytest
 import respx
 from httpx import Response
 
-from app.github.client import GitHubClient
+from app.github import client as client_module
+from app.github.client import GitHubClient, GitHubRateLimited, RootEntry
+from tests.clock import frozen_at
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "github_responses"
 
@@ -27,22 +32,28 @@ async def test_get_user_returns_typed_payload() -> None:
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_get_repo_root_contents_returns_entry_names() -> None:
+async def test_get_repo_root_contents_returns_names_types_and_sizes() -> None:
+    """Sizes come free with the listing: they measure README depth without
+    downloading each README."""
     respx.get("https://api.github.com/repos/octocat/Hello-World/contents").mock(
         return_value=Response(
             200,
             json=[
-                {"name": "README.md", "type": "file"},
-                {"name": "tests", "type": "dir"},
-                {"name": "Dockerfile", "type": "file"},
+                {"name": "README.md", "type": "file", "size": 4096},
+                {"name": "tests", "type": "dir", "size": 0},
+                {"name": "Dockerfile", "type": "file", "size": 120},
             ],
         )
     )
 
     async with GitHubClient(token="ghs_test") as gh:
-        names = await gh.get_repo_root_contents("octocat", "Hello-World")
+        entries = await gh.get_repo_root_contents("octocat", "Hello-World")
 
-    assert names == ["README.md", "tests", "Dockerfile"]
+    assert entries == [
+        RootEntry("README.md", "file", 4096),
+        RootEntry("tests", "dir", 0),
+        RootEntry("Dockerfile", "file", 120),
+    ]
 
 
 @pytest.mark.asyncio
@@ -74,19 +85,6 @@ async def test_get_repo_root_contents_returns_empty_for_empty_repo_409() -> None
         names = await gh.get_repo_root_contents("owner", "empty")
 
     assert names == []
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_list_recent_commits_sample_returns_empty_on_409_empty_repo() -> None:
-    respx.get("https://api.github.com/repos/owner/empty/commits").mock(
-        return_value=Response(409, json={"message": "Git Repository is empty."})
-    )
-
-    async with GitHubClient(token="ghs_test") as gh:
-        msgs = await gh.list_recent_commits_sample("owner", "empty", limit=10)
-
-    assert msgs == []
 
 
 @pytest.mark.asyncio
@@ -124,103 +122,135 @@ async def test_client_retries_on_secondary_rate_limit() -> None:
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_get_license_returns_spdx_id() -> None:
-    respx.get("https://api.github.com/repos/o/r/license").mock(
-        return_value=Response(200, json={"license": {"spdx_id": "MIT"}})
+async def test_transient_server_error_is_retried_once() -> None:
+    route = respx.get("https://api.github.com/users/octocat").mock(
+        side_effect=[Response(502), Response(200, json={"login": "octocat"})]
     )
+
     async with GitHubClient(token="ghs_test") as gh:
-        assert await gh.get_license("o", "r") == "MIT"
+        user = await gh.get_user("octocat")
+
+    assert user["login"] == "octocat"
+    assert route.call_count == 2
 
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_get_license_returns_none_on_404() -> None:
-    respx.get("https://api.github.com/repos/o/r/license").mock(
-        return_value=Response(404, json={"message": "Not Found"})
-    )
+async def test_persistent_server_error_fails_after_one_retry() -> None:
+    route = respx.get("https://api.github.com/users/octocat").mock(return_value=Response(503))
+
     async with GitHubClient(token="ghs_test") as gh:
-        assert await gh.get_license("o", "r") is None
+        with pytest.raises(httpx.HTTPStatusError):
+            await gh.get_user("octocat")
+
+    assert route.call_count == 2
 
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_get_license_treats_noassertion_as_none() -> None:
-    respx.get("https://api.github.com/repos/o/r/license").mock(
-        return_value=Response(200, json={"license": {"spdx_id": "NOASSERTION"}})
+async def test_dropped_connection_is_retried_once() -> None:
+    route = respx.get("https://api.github.com/users/octocat").mock(
+        side_effect=[httpx.RemoteProtocolError("stream reset"), Response(200, json={"login": "x"})]
     )
+
     async with GitHubClient(token="ghs_test") as gh:
-        assert await gh.get_license("o", "r") is None
+        await gh.get_user("octocat")
+
+    assert route.call_count == 2
+
+
+_UNAVAILABLE = [
+    pytest.param(
+        451, {"message": "Repository access blocked", "block": {"reason": "dmca"}}, id="dmca-451"
+    ),
+    pytest.param(
+        403, {"message": "Repository access blocked", "block": {"reason": "tos"}}, id="tos-403"
+    ),
+    pytest.param(410, {"message": "Gone"}, id="gone-410"),
+]
 
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_list_workflow_files_counts_entries() -> None:
-    respx.get("https://api.github.com/repos/o/r/contents/.github/workflows").mock(
+@pytest.mark.parametrize(("status", "body"), _UNAVAILABLE)
+async def test_unavailable_repository_reads_as_absent(status: int, body: dict[str, object]) -> None:
+    """A repository GitHub won't serve (DMCA'd, blocked, gone) is one repo's
+    problem, not the analysis's: every per-repo read treats it as absent."""
+    respx.route(url__startswith="https://api.github.com/repos/owner/blocked").mock(
+        return_value=Response(status, json=body)
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        assert await gh.list_languages("owner", "blocked") == {}
+        assert await gh.get_repo_root_contents("owner", "blocked") == []
+        assert await gh.list_commits("owner", "blocked", "owner", "2024-01-01") == []
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_rate_limited_repository_read_is_not_mistaken_for_absent() -> None:
+    respx.get("https://api.github.com/repos/owner/repo/languages").mock(
         return_value=Response(
-            200,
-            json=[
-                {"name": "ci.yml", "type": "file"},
-                {"name": "release.yml", "type": "file"},
-                {"name": "examples", "type": "dir"},
-            ],
+            403,
+            json={"message": "API rate limit exceeded for user ID 1."},
+            headers={"Retry-After": "0", "X-RateLimit-Remaining": "0"},
         )
     )
-    async with GitHubClient(token="ghs_test") as gh:
-        files = await gh.list_workflow_files("o", "r")
-    assert files == ["ci.yml", "release.yml"]
+
+    async with GitHubClient(token="ghs_test", max_retries=1) as gh:
+        with pytest.raises(httpx.HTTPStatusError):
+            await gh.list_languages("owner", "repo")
+
+
+class _InFlight:
+    """Async respx side effect that records the peak number of requests in flight."""
+
+    def __init__(self, response: Response) -> None:
+        self._response = response
+        self.current = 0
+        self.peak = 0
+
+    async def __call__(self, request: httpx.Request) -> Response:
+        self.current += 1
+        self.peak = max(self.peak, self.current)
+        try:
+            await asyncio.sleep(0.01)
+            return self._response
+        finally:
+            self.current -= 1
 
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_list_workflow_files_returns_empty_on_404() -> None:
-    respx.get("https://api.github.com/repos/o/r/contents/.github/workflows").mock(
-        return_value=Response(404, json={"message": "Not Found"})
+async def test_client_caps_live_requests_in_flight() -> None:
+    tracker = _InFlight(Response(200, json={"Python": 1}))
+    respx.get(url__regex=r"https://api\.github\.com/repos/o/r\d+/languages").mock(
+        side_effect=tracker
     )
-    async with GitHubClient(token="ghs_test") as gh:
-        assert await gh.list_workflow_files("o", "r") == []
+
+    async with GitHubClient(token="ghs_test", max_concurrency=3) as gh:
+        await asyncio.gather(*(gh.list_languages("o", f"r{i}") for i in range(12)))
+
+    assert tracker.peak == 3
 
 
 @pytest.mark.asyncio
-@respx.mock
-async def test_get_repo_readme_text_returns_decoded() -> None:
-    import base64
+async def test_client_concurrency_defaults_to_the_ingest_setting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app import settings as settings_module
+    from app.settings import Settings
 
-    content = "# Hello\nSecond line."
-    respx.get("https://api.github.com/repos/o/r/readme").mock(
-        return_value=Response(
-            200,
-            json={"content": base64.b64encode(content.encode()).decode(), "encoding": "base64"},
+    monkeypatch.setattr(settings_module, "settings", Settings(gh_ingest_concurrency=2))
+    tracker = _InFlight(Response(200, json={"Python": 1}))
+    with respx.mock:
+        respx.get(url__regex=r"https://api\.github\.com/repos/o/r\d+/languages").mock(
+            side_effect=tracker
         )
-    )
-    async with GitHubClient(token="ghs_test") as gh:
-        assert await gh.get_repo_readme_text("o", "r") == content
+        async with GitHubClient(token="ghs_test") as gh:
+            await asyncio.gather(*(gh.list_languages("o", f"r{i}") for i in range(6)))
 
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_get_repo_readme_text_returns_empty_on_404() -> None:
-    respx.get("https://api.github.com/repos/o/r/readme").mock(
-        return_value=Response(404, json={"message": "Not Found"})
-    )
-    async with GitHubClient(token="ghs_test") as gh:
-        assert await gh.get_repo_readme_text("o", "r") == ""
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_list_recent_commits_sample_returns_message_list() -> None:
-    respx.get(url__startswith="https://api.github.com/repos/o/r/commits").mock(
-        return_value=Response(
-            200,
-            json=[
-                {"commit": {"message": "feat: add thing\n\nlong body"}},
-                {"commit": {"message": "wip"}},
-            ],
-        )
-    )
-    async with GitHubClient(token="ghs_test") as gh:
-        msgs = await gh.list_recent_commits_sample("o", "r", limit=10)
-    assert msgs == ["feat: add thing\n\nlong body", "wip"]
+    assert tracker.peak == 2
 
 
 @pytest.mark.asyncio
@@ -306,6 +336,40 @@ async def test_get_contribution_repos_filters_low_volume() -> None:
 
 @pytest.mark.asyncio
 @respx.mock
+async def test_contribution_count_asks_for_whole_utc_days(
+    fake_cache, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The window is the 365 UTC days up to tonight's midnight. In whole days
+    the query, and so its cache key, stays the same all day; microsecond
+    bounds made every request new, so the cache never answered one."""
+    route = respx.post("https://api.github.com/graphql").mock(
+        return_value=Response(
+            200,
+            json={
+                "data": {
+                    "user": {"contributionsCollection": {"commitContributionsByRepository": []}}
+                }
+            },
+        )
+    )
+    morning = datetime.now(UTC).replace(hour=8, minute=15, second=42, microsecond=123456)
+
+    for moment in (morning, morning.replace(hour=19, minute=3, second=7, microsecond=654321)):
+        monkeypatch.setattr(client_module, "datetime", frozen_at(moment))
+        async with GitHubClient(token="ghs_test", cache=fake_cache) as gh:
+            await gh.get_contribution_repo_count("alice", min_commits=10)
+
+    assert route.call_count == 1
+    midnight = morning.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    variables = json.loads(route.calls[0].request.content)["variables"]
+    assert (variables["from"], variables["to"]) == (
+        (midnight - timedelta(days=365)).isoformat(),
+        midnight.isoformat(),
+    )
+
+
+@pytest.mark.asyncio
+@respx.mock
 async def test_graphql_returns_partial_data_when_errors_present() -> None:
     """GitHub returns partial `data` alongside `errors` when one expensive field
     trips RESOURCE_LIMITS_EXCEEDED (e.g. hyper-active accounts). We must surface
@@ -351,6 +415,125 @@ async def test_graphql_raises_only_when_no_data_returned() -> None:
     async with GitHubClient(token="ghs_test") as gh:
         with pytest.raises(RuntimeError, match="GraphQL error"):
             await gh.graphql("query {}", {"login": "ghost"})
+
+
+# GitHub documents GraphQL rate limits as HTTP 200 with an error message (primary,
+# x-ratelimit-remaining 0) or 200/403 naming a secondary rate limit. The status
+# alone can't tell a caller it was refused, so the client raises one exception
+# for every shape and fail-soft callers can still let it fail the analysis.
+_PRIMARY_LIMIT_200 = Response(
+    200,
+    json={
+        "data": None,
+        "errors": [{"type": "RATE_LIMITED", "message": "API rate limit exceeded for user ID 1."}],
+    },
+    headers={"X-RateLimit-Remaining": "0"},
+)
+_SECONDARY_LIMIT_200 = Response(
+    200,
+    json={
+        "errors": [
+            {"message": "You have exceeded a secondary rate limit. Please wait a few minutes."}
+        ]
+    },
+)
+# A REST-style body on a 200, with no `data` or `errors` at all.
+_SECONDARY_LIMIT_200_MESSAGE = Response(
+    200, json={"message": "You have exceeded a secondary rate limit. Please wait a few minutes."}
+)
+_SECONDARY_LIMIT_403 = Response(
+    403,
+    json={"message": "You have exceeded a secondary rate limit. Please wait a few minutes."},
+    headers={"Retry-After": "0"},
+)
+
+
+@pytest.mark.asyncio
+@respx.mock
+@pytest.mark.parametrize(
+    "response",
+    [_PRIMARY_LIMIT_200, _SECONDARY_LIMIT_200, _SECONDARY_LIMIT_200_MESSAGE, _SECONDARY_LIMIT_403],
+    ids=["primary-200", "secondary-200", "secondary-200-message", "secondary-403"],
+)
+async def test_a_graphql_rate_limit_raises_rate_limited(response: Response) -> None:
+    respx.post("https://api.github.com/graphql").mock(return_value=response)
+
+    async with GitHubClient(token="ghs_test", max_retries=1) as gh:
+        with pytest.raises(GitHubRateLimited):
+            await gh.graphql("query Probe { viewer { login } }", {})
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_a_graphql_body_without_data_is_an_error_not_an_empty_answer() -> None:
+    """Returned as None, it crashed callers outside their fail-soft blocks
+    and quietly emptied the workflow probe."""
+    respx.post("https://api.github.com/graphql").mock(return_value=Response(200, json={}))
+
+    async with GitHubClient(token="ghs_test") as gh:
+        with pytest.raises(RuntimeError, match="GraphQL"):
+            await gh.graphql("query Probe { viewer { login } }", {})
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_review_depth_lets_a_rate_limit_fail_the_analysis() -> None:
+    """Review depth degrades when GitHub can't resolve the query, but a rate
+    limit read as "no reviews" is a low score the report cache keeps for 6 h."""
+    respx.post("https://api.github.com/graphql").mock(return_value=_PRIMARY_LIMIT_200)
+
+    async with GitHubClient(token="ghs_test") as gh:
+        with pytest.raises(GitHubRateLimited):
+            await gh.get_review_depth("antfu")
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_contribution_count_lets_a_rate_limit_fail_the_analysis() -> None:
+    respx.post("https://api.github.com/graphql").mock(return_value=_PRIMARY_LIMIT_200)
+
+    async with GitHubClient(token="ghs_test") as gh:
+        with pytest.raises(GitHubRateLimited):
+            await gh.get_contribution_repo_count("antfu", min_commits=10)
+
+
+@pytest.mark.asyncio
+@respx.mock
+@pytest.mark.parametrize("read", ["review_depth", "contribution_count"])
+async def test_depth_reads_let_the_call_cap_stop_the_analysis(read: str) -> None:
+    """These reads degrade when GitHub can't resolve them, but an analysis past
+    its call cap must stop with a 503, not finish scored without them and keep
+    that report cached for six hours."""
+    from app.github.client import GitHubCallCapExceeded
+
+    respx.post("https://api.github.com/graphql").mock(
+        return_value=Response(200, json={"data": {"user": None}})
+    )
+
+    async with GitHubClient(token="ghs_test", max_calls=0) as gh:
+        with pytest.raises(GitHubCallCapExceeded):
+            if read == "review_depth":
+                await gh.get_review_depth("antfu")
+            else:
+                await gh.get_contribution_repo_count("antfu", min_commits=10)
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_a_403_with_retry_after_is_a_rate_limit_not_a_blocked_repo() -> None:
+    """GitHub's older secondary-limit wording never says "rate limit"; the
+    Retry-After header is what marks it."""
+    respx.get("https://api.github.com/repos/owner/repo/languages").mock(
+        return_value=Response(
+            403,
+            json={"message": "You have triggered an abuse detection mechanism."},
+            headers={"Retry-After": "0"},
+        )
+    )
+
+    async with GitHubClient(token="ghs_test", max_retries=1) as gh:
+        with pytest.raises(httpx.HTTPStatusError):
+            await gh.list_languages("owner", "repo")
 
 
 # Regression for SKILL-ISSUE-BACKEND-4 (scoring-engine leg): the review-depth and

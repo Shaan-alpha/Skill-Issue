@@ -1,15 +1,23 @@
 import asyncio
 import base64
+import contextlib
 import copy
 import json
+from collections.abc import AsyncIterator, Callable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import httpx
 import pytest
 import respx
 from httpx import Response
 
-from app.github.client import GitHubClient
-from app.ingestion.profile import ingest_profile
+from app.github.client import GitHubCallCapExceeded, GitHubClient, GitHubRateLimited
+from app.ingestion import profile as profile_module
+from app.ingestion.profile import ROOT_CONTENT_LIMIT, ingest_profile
+from app.scoring import engineering_maturity
+from tests.clock import frozen_at
+from tests.graphql_router import graphql_router
 
 FIXTURES = Path(__file__).parent / "fixtures" / "github_responses"
 
@@ -91,55 +99,191 @@ def _mock_contents(
             )
 
 
+def _pinned_payload(count: int = 0) -> dict[str, object]:
+    return {"data": {"user": {"pinnedItems": {"totalCount": count}}}}
+
+
+def _external_prs_payload(
+    *,
+    external_prs: int = 0,
+    own_repo_prs: int = 0,
+    external_owners: tuple[str, ...] = (),
+    sponsors: bool = True,
+    star: bool = False,
+    dev_program: bool = True,
+) -> dict[str, object]:
+    return {
+        "data": {
+            "user": {
+                "hasSponsorsListing": sponsors,
+                "isGitHubStar": star,
+                "isDeveloperProgramMember": dev_program,
+                # Every merged PR the user authored, their own repositories included.
+                "pullRequests": {"totalCount": external_prs + own_repo_prs, "nodes": []},
+            },
+            # Merged PRs into repositories the user does not own.
+            "search": {
+                "issueCount": external_prs,
+                "nodes": [{"repository": {"owner": {"login": o}}} for o in external_owners],
+            },
+        }
+    }
+
+
+def _review_count_payload(total: int = 0) -> dict[str, object]:
+    return {
+        "data": {
+            "user": {
+                "contributionsCollection": {"pullRequestReviewContributions": {"totalCount": total}}
+            }
+        }
+    }
+
+
+def _workflow_files_payload(
+    repos: dict[str, dict[str, list[tuple[str, str]]]],
+) -> dict[str, object]:
+    """`{"r0": {"github": [("ci.yml", "blob")]}}` -> the WorkflowFiles response."""
+    return {
+        "data": {
+            alias: {
+                forge: ({"entries": [{"name": n, "type": t} for n, t in entries]})
+                for forge, entries in dirs.items()
+            }
+            for alias, dirs in repos.items()
+        }
+    }
+
+
 def _mock_graphql(
     *,
-    pinned_nodes: list[dict[str, object]] | None = None,
+    pinned_count: int = 0,
     external_prs: int = 0,
     external_reviews: int = 0,
-) -> None:
-    # ingest_profile issues three GraphQL POSTs in order: PINNED_REPOS, EXTERNAL_PRS,
-    # then EXTERNAL_REVIEW_COUNT (the review count is a separate isolated query).
-    respx.post("https://api.github.com/graphql").mock(
-        side_effect=[
-            Response(
-                200,
-                json={
-                    "data": {
-                        "user": {
-                            "pinnedItems": {
-                                "nodes": pinned_nodes or [],
-                            }
-                        }
-                    }
-                },
-            ),
-            Response(
-                200,
-                json={
-                    "data": {
-                        "user": {
-                            "hasSponsorsListing": True,
-                            "isGitHubStar": False,
-                            "isDeveloperProgramMember": True,
-                            "pullRequests": {"totalCount": external_prs, "nodes": []},
-                        }
-                    }
-                },
-            ),
-            Response(
-                200,
-                json={
-                    "data": {
-                        "user": {
-                            "contributionsCollection": {
-                                "pullRequestReviewContributions": {"totalCount": external_reviews}
-                            }
-                        }
-                    }
-                },
-            ),
-        ]
+    workflow_files: dict[str, object] | Response | None = None,
+) -> respx.Route:
+    responses: dict[str, object] = {
+        "PinnedRepos": _pinned_payload(pinned_count),
+        "ExternalPRs": _external_prs_payload(external_prs=external_prs),
+        "ExternalReviewCount": _review_count_payload(external_reviews),
+    }
+    if workflow_files is not None:
+        responses["WorkflowFiles"] = workflow_files
+    return respx.post("https://api.github.com/graphql").mock(side_effect=graphql_router(responses))
+
+
+def _one_repo_with_root(*entries: str) -> list[dict[str, object]]:
+    repos_payload = [_fake_repo("lib", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_commits(repos_payload)
+    _mock_profile_readme()
+    _mock_contents(repos_payload, {"lib": [{"name": e, "type": "dir"} for e in entries]})
+    return repos_payload
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_a_dot_github_without_workflows_is_not_ci() -> None:
+    """`.github` often holds only FUNDING.yml, issue templates, dependabot.yml or
+    assistant instructions. Only workflow files under `.github/workflows` run CI."""
+    _one_repo_with_root(".github", "README.md")
+    # `.github` exists but has no workflows/ directory: GitHub answers null.
+    _mock_graphql(workflow_files={"data": {"r0": {"github": None, "forgejo": None, "gitea": None}}})
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.repos[0].has_ci is False
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_workflow_files_mean_ci_and_are_counted() -> None:
+    _one_repo_with_root(".github")
+    _mock_graphql(
+        workflow_files=_workflow_files_payload(
+            {
+                "r0": {
+                    "github": [
+                        ("ci.yml", "blob"),
+                        ("release.yaml", "blob"),
+                        ("README.md", "blob"),
+                        ("templates", "tree"),
+                    ]
+                }
+            }
+        )
     )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.repos[0].has_ci is True
+    assert profile.workflow_counts == {"octocat/lib": 2}
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_forgejo_workflows_count_as_ci() -> None:
+    _one_repo_with_root(".forgejo")
+    _mock_graphql(
+        workflow_files=_workflow_files_payload({"r0": {"forgejo": [("build.yaml", "blob")]}})
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.repos[0].has_ci is True
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_a_failed_workflow_probe_falls_back_to_the_dot_github_dir() -> None:
+    """The probe only sharpens the CI signal; GitHub failing it must not cost
+    every repo its CI credit."""
+    _one_repo_with_root(".github")
+    _mock_graphql(workflow_files=Response(502))
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.repos[0].has_ci is True
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_a_dotnet_test_project_directory_counts_as_tests() -> None:
+    repos_payload = [_fake_repo("lib", language="C#")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_commits(repos_payload)
+    _mock_profile_readme()
+    _mock_contents(
+        repos_payload,
+        {"lib": [{"name": "Lib.Tests", "type": "dir"}, {"name": ".env.test", "type": "file"}]},
+    )
+    _mock_graphql()
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.repos[0].has_tests is True
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_no_workflow_probe_without_a_workflow_directory() -> None:
+    _one_repo_with_root("README.md", "tests")
+    route = _mock_graphql()
+
+    async with GitHubClient(token="ghs_test") as gh:
+        await ingest_profile("octocat", gh)
+
+    sent = [json.loads(call.request.content)["query"] for call in route.calls]
+    assert not any("WorkflowFiles" in query for query in sent)
 
 
 def _fake_repo(name: str, *, language: str | None = None) -> dict[str, object]:
@@ -149,6 +293,77 @@ def _fake_repo(name: str, *, language: str | None = None) -> dict[str, object]:
     raw["language"] = language
     raw["fork"] = False
     return raw
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_repo_licences_come_with_the_repo_list() -> None:
+    """The repo list already carries each repo's detected licence, so no
+    request per repo is needed. NOASSERTION is GitHub's "a licence file we
+    couldn't identify", which is not a recognised SPDX licence."""
+    repos_payload = [_fake_repo("mit"), _fake_repo("unclear"), _fake_repo("bare")]
+    repos_payload[0]["license"] = {"key": "mit", "spdx_id": "MIT"}
+    repos_payload[1]["license"] = {"key": "other", "spdx_id": "NOASSERTION"}
+    repos_payload[2]["license"] = None
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_commits(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql()
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert [(r.name, r.has_license) for r in profile.repos] == [
+        ("mit", True),
+        ("unclear", False),
+        ("bare", False),
+    ]
+
+
+@pytest.mark.asyncio
+@respx.mock
+@pytest.mark.parametrize(("listed", "capped"), [(100, True), (99, False)])
+async def test_a_full_repo_list_page_marks_the_list_capped(listed: int, capped: bool) -> None:
+    """The repo list is one page of the 100 most recently updated repos. A
+    full page may hide older ones, so evidence must not read as the whole
+    account's repos."""
+    repos_payload = [_fake_repo(f"r{i}") for i in range(listed)]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload[:ROOT_CONTENT_LIMIT])
+    _mock_commits(repos_payload[:10])
+    _mock_contents(repos_payload[:ROOT_CONTENT_LIMIT])
+    _mock_profile_readme()
+    _mock_graphql()
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.repo_list_capped is capped
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_repos_past_the_root_listing_limit_are_marked_uninspected() -> None:
+    """Root listings are read for the most recently updated repos only. The
+    rest have unknown README/tests/CI flags, not absent ones, and say so."""
+    repos_payload = [_fake_repo(f"r{i}") for i in range(ROOT_CONTENT_LIMIT + 2)]
+    inspected = repos_payload[:ROOT_CONTENT_LIMIT]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(inspected)
+    _mock_commits(repos_payload[:10])
+    _mock_contents(inspected)
+    _mock_profile_readme()
+    _mock_graphql()
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert [r.root_inspected for r in profile.repos] == [True] * ROOT_CONTENT_LIMIT + [False] * 2
 
 
 @pytest.mark.asyncio
@@ -172,23 +387,27 @@ async def test_ingest_profile_maps_to_domain() -> None:
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_pinned_repos_get_tagged() -> None:
+async def test_pinned_repo_with_tests_is_not_production_ready() -> None:
+    """A pin is a curation choice, not a deployment artifact. Pinning a repo that
+    has tests but no deployment config must not earn Engineering Maturity's
+    "Pairs testing with deployment artifacts" signal."""
+    repos_payload = [_fake_repo("tested-lib", language="Python")]
     _mock_user()
-    repos_payload = _mock_repos()
+    _mock_repos(repos_payload)
     _mock_languages(repos_payload)
     _mock_commits(repos_payload)
-    _mock_contents(repos_payload)
     _mock_profile_readme()
-    # Pin the first non-fork repo from the fixture
-    first_non_fork_name = next(r["name"] for r in repos_payload if not r.get("fork", False))
-    _mock_graphql(pinned_nodes=[{"name": first_non_fork_name}])
+    _mock_contents(
+        repos_payload,
+        {"tested-lib": [{"name": "README.md", "type": "file"}, {"name": "tests", "type": "dir"}]},
+    )
+    _mock_graphql(pinned_count=1)
 
     async with GitHubClient(token="ghs_test") as gh:
         profile = await ingest_profile("octocat", gh)
 
-    pinned = [r for r in profile.repos if "pinned" in r.deployment_hints]
-    assert len(pinned) == 1
-    assert pinned[0].name == first_non_fork_name
+    signals = {e.signal for e in engineering_maturity.score(profile).evidence}
+    assert "production_ready" not in signals
 
 
 @pytest.mark.asyncio
@@ -218,11 +437,198 @@ async def test_ingest_profile_populates_languages_readme_and_external_counts() -
         profile = await ingest_profile("octocat", gh)
 
     assert profile.languages == {"Python": 1000, "TypeScript": 200, "Rust": 300}
-    assert profile.profile_readme_chars == len(readme)
+    assert profile.profile_readme_chars == len(readme.strip())  # visible text
     assert profile.external_prs_merged == 12
     assert profile.external_reviews == 4
     assert profile.has_sponsors_listing is True
     assert profile.is_developer_program_member is True
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_merged_prs_into_own_repositories_are_not_external() -> None:
+    """`user.pullRequests(states: MERGED)` counts every merged PR the user
+    authored, including into their own repositories, so a solo developer merging
+    their own PRs looked like a prolific open-source contributor. Only PRs into
+    repositories the user does not own are external. Live on 2026-10-13:
+    Shaan-alpha had 141 merged PRs, 8 of them into other people's repositories."""
+    repos_payload = [_fake_repo("alpha-api", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_commits(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    route = respx.post("https://api.github.com/graphql").mock(
+        side_effect=graphql_router(
+            {
+                "PinnedRepos": _pinned_payload(),
+                "ExternalPRs": _external_prs_payload(
+                    external_prs=8,
+                    own_repo_prs=133,
+                    external_owners=("home-assistant", "narwhals-dev", "home-assistant"),
+                ),
+                "ExternalReviewCount": _review_count_payload(),
+            }
+        )
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.external_prs_merged == 8
+    assert profile.external_orgs == {"home-assistant", "narwhals-dev"}
+    sent = [json.loads(call.request.content) for call in route.calls]
+    external_query = next(body for body in sent if "ExternalPRs" in body["query"])
+    assert "-user:octocat" in json.dumps(external_query["variables"])
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_external_pr_search_counts_public_repositories_only() -> None:
+    """Search results depend on what the token can see: a token with access to
+    private repositories would count private PRs, and the report cache, keyed by
+    username alone, would then serve that count to everyone."""
+    repos_payload = [_fake_repo("alpha-api", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_commits(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    route = _mock_graphql()
+
+    async with GitHubClient(token="ghs_test") as gh:
+        await ingest_profile("octocat", gh)
+
+    sent = [json.loads(call.request.content) for call in route.calls]
+    external_query = next(body for body in sent if "ExternalPRs" in body["query"])
+    assert "is:public" in external_query["variables"]["externalMerged"].split()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_readme_size_and_manifests_come_from_the_root_listing() -> None:
+    """README depth and dependency manifests used to cost ten README downloads
+    and five more root listings in depth enrichment; the listing ingestion
+    already fetches has both."""
+    repos_payload = [_fake_repo("web", language="TypeScript")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_commits(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql()
+    respx.get("https://api.github.com/repos/octocat/web/contents").mock(
+        return_value=Response(
+            200,
+            json=[
+                {"name": "README.md", "type": "file", "size": 5120},
+                {"name": "package.json", "type": "file", "size": 900},
+                {"name": "App.csproj", "type": "file", "size": 300},
+                {"name": "readme-assets", "type": "dir", "size": 0},
+                {"name": "src", "type": "dir", "size": 0},
+            ],
+        )
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    repo = profile.repos[0]
+    assert repo.readme_bytes == 5120
+    assert repo.manifests == ["*.csproj", "package.json"]
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_commit_subjects_come_from_the_users_own_commits() -> None:
+    """Commit-message quality used to sample each repo's latest commits by
+    anyone, bots included, at five extra calls. Ingestion already fetches the
+    user's own commits; their first lines are the subjects."""
+    repos_payload = [_fake_repo("lib", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql()
+    respx.get(url__startswith="https://api.github.com/repos/octocat/lib/commits").mock(
+        return_value=Response(
+            200,
+            json=[
+                {
+                    "commit": {
+                        "author": {"date": "2026-10-02T10:00:00Z"},
+                        "message": "Add retry budget\n\nBody.",
+                    }
+                },
+                {"commit": {"author": {"date": "2026-10-01T10:00:00Z"}, "message": "wip"}},
+            ],
+        )
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.commit_subjects == ["Add retry budget", "wip"]
+
+
+_STARTER_PROFILE_README = """### Hi there 👋
+
+<!--
+**octocat/octocat** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
+
+Here are some ideas to get you started:
+
+- 🔭 I'm currently working on ...
+- 🌱 I'm currently learning ...
+- 👯 I'm looking to collaborate on ...
+- 🤔 I'm looking for help with ...
+- 💬 Ask me about ...
+- 📫 How to reach me: ...
+- 😄 Pronouns: ...
+- ⚡ Fun fact: ...
+-->
+"""
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_an_untouched_starter_profile_readme_counts_as_almost_empty() -> None:
+    """GitHub creates the profile README from a template that is nearly all
+    HTML comment. Only text a visitor can see counts toward its length."""
+    repos_payload = [_fake_repo("alpha-api", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_commits(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_graphql()
+    _mock_profile_readme(_STARTER_PROFILE_README)
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.profile_readme_chars == len("### Hi there 👋")
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_pinned_repositories_are_counted() -> None:
+    repos_payload = [_fake_repo("alpha-api", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_commits(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql(pinned_count=4)
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.pinned_count == 4
 
 
 _RESOURCE_LIMIT_ERROR = {
@@ -251,26 +657,18 @@ async def test_ingest_profile_keeps_pr_count_when_review_query_hits_resource_lim
     _mock_commits(repos_payload)
     _mock_contents(repos_payload)
     _mock_profile_readme()
-    # POSTs in order: PINNED_REPOS (ok), EXTERNAL_PRS (ok, 137 merged PRs),
-    # EXTERNAL_REVIEW_COUNT (rejected with RESOURCE_LIMITS_EXCEEDED).
+    # EXTERNAL_PRS succeeds (137 merged PRs); EXTERNAL_REVIEW_COUNT is rejected
+    # with RESOURCE_LIMITS_EXCEEDED.
     respx.post("https://api.github.com/graphql").mock(
-        side_effect=[
-            Response(200, json={"data": {"user": {"pinnedItems": {"nodes": []}}}}),
-            Response(
-                200,
-                json={
-                    "data": {
-                        "user": {
-                            "hasSponsorsListing": True,
-                            "isGitHubStar": True,
-                            "isDeveloperProgramMember": False,
-                            "pullRequests": {"totalCount": 137, "nodes": []},
-                        }
-                    }
-                },
-            ),
-            Response(200, json=_RESOURCE_LIMIT_ERROR),
-        ]
+        side_effect=graphql_router(
+            {
+                "PinnedRepos": _pinned_payload(),
+                "ExternalPRs": _external_prs_payload(
+                    external_prs=137, sponsors=True, star=True, dev_program=False
+                ),
+                "ExternalReviewCount": _RESOURCE_LIMIT_ERROR,
+            }
+        )
     )
 
     async with GitHubClient(token="ghs_test") as gh:
@@ -298,22 +696,13 @@ async def test_ingest_profile_keeps_review_count_when_pr_query_fails() -> None:
     _mock_contents(repos_payload)
     _mock_profile_readme()
     respx.post("https://api.github.com/graphql").mock(
-        side_effect=[
-            Response(200, json={"data": {"user": {"pinnedItems": {"nodes": []}}}}),
-            Response(200, json=_RESOURCE_LIMIT_ERROR),
-            Response(
-                200,
-                json={
-                    "data": {
-                        "user": {
-                            "contributionsCollection": {
-                                "pullRequestReviewContributions": {"totalCount": 9}
-                            }
-                        }
-                    }
-                },
-            ),
-        ]
+        side_effect=graphql_router(
+            {
+                "PinnedRepos": _pinned_payload(),
+                "ExternalPRs": _RESOURCE_LIMIT_ERROR,
+                "ExternalReviewCount": _review_count_payload(9),
+            }
+        )
     )
 
     async with GitHubClient(token="ghs_test") as gh:
@@ -345,7 +734,8 @@ async def test_ingest_profile_detects_readme_tests_ci_and_deployment_hints() -> 
     _mock_languages(repos_payload)
     _mock_commits(repos_payload)
     _mock_profile_readme()
-    _mock_graphql()
+    # Only "polished" has .github, so it is the probe's r0; it runs a ci.yml.
+    _mock_graphql(workflow_files=_workflow_files_payload({"r0": {"github": [("ci.yml", "blob")]}}))
     _mock_contents(
         repos_payload,
         {
@@ -375,8 +765,399 @@ async def test_ingest_profile_detects_readme_tests_ci_and_deployment_hints() -> 
     assert bare.has_readme is False
     assert bare.has_tests is False
     assert bare.has_ci is False
-    # Deployment hints stay empty (or only "pinned" if pinned, which it isn't here)
     assert bare.deployment_hints == []
+
+
+_DMCA_BLOCKED = Response(
+    451, json={"message": "Repository access blocked", "block": {"reason": "dmca"}}
+)
+
+
+def _two_repo_profile() -> list[dict[str, object]]:
+    repos_payload = [
+        _fake_repo("healthy", language="Python"),
+        _fake_repo("taken-down", language="Go"),
+    ]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_profile_readme()
+    _mock_contents(repos_payload)
+    _mock_graphql()
+    return repos_payload
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_one_unavailable_repo_does_not_sink_the_languages() -> None:
+    repos_payload = _two_repo_profile()
+    _mock_commits(repos_payload)
+    respx.get("https://api.github.com/repos/octocat/healthy/languages").mock(
+        return_value=Response(200, json={"Python": 1000})
+    )
+    respx.get("https://api.github.com/repos/octocat/taken-down/languages").mock(
+        return_value=_DMCA_BLOCKED
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.languages == {"Python": 1000}
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_one_unavailable_repo_does_not_sink_the_commit_history() -> None:
+    repos_payload = _two_repo_profile()
+    _mock_languages(repos_payload)
+    respx.get(url__startswith="https://api.github.com/repos/octocat/healthy/commits").mock(
+        return_value=Response(200, json=[{"commit": {"author": {"date": "2026-10-01T10:00:00Z"}}}])
+    )
+    respx.get(url__startswith="https://api.github.com/repos/octocat/taken-down/commits").mock(
+        return_value=_DMCA_BLOCKED
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert [d.date().isoformat() for d in profile.commit_dates] == ["2026-10-01"]
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_a_rate_limited_repo_read_fails_the_ingest_instead_of_scoring_it_low() -> None:
+    """Treating a rate-limited read as "no README, no tests, no CI" produced a
+    silently low score that the report cache then kept for six hours."""
+    repos_payload = [_fake_repo("alpha-api", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_commits(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql()
+    respx.get("https://api.github.com/repos/octocat/alpha-api/contents").mock(
+        return_value=Response(
+            403,
+            json={"message": "API rate limit exceeded for user ID 1."},
+            headers={"Retry-After": "0", "X-RateLimit-Remaining": "0"},
+        )
+    )
+
+    async with GitHubClient(token="ghs_test", max_retries=1) as gh:
+        with pytest.raises(httpx.HTTPStatusError):
+            await ingest_profile("octocat", gh)
+
+
+_GRAPHQL_PRIMARY_LIMIT = Response(
+    200,
+    json={
+        "data": None,
+        "errors": [{"type": "RATE_LIMITED", "message": "API rate limit exceeded for user ID 1."}],
+    },
+    headers={"X-RateLimit-Remaining": "0"},
+)
+_GRAPHQL_SECONDARY_LIMIT = Response(
+    403,
+    json={"message": "You have exceeded a secondary rate limit. Please wait a few minutes."},
+    headers={"Retry-After": "0"},
+)
+
+
+@pytest.mark.asyncio
+@respx.mock
+@pytest.mark.parametrize(
+    "operation", ["PinnedRepos", "ExternalPRs", "ExternalReviewCount", "WorkflowFiles"]
+)
+@pytest.mark.parametrize(
+    "limit", [_GRAPHQL_PRIMARY_LIMIT, _GRAPHQL_SECONDARY_LIMIT], ids=["primary", "secondary"]
+)
+async def test_a_rate_limited_graphql_query_fails_the_ingest(
+    operation: str, limit: Response
+) -> None:
+    """The external-PR, review-count and workflow reads degrade when GitHub
+    can't answer them, but a rate limit read as "none" scored up to 14 points
+    low, and the report cache kept that for six hours."""
+    _one_repo_with_root(".github")
+    responses: dict[str, object] = {
+        "PinnedRepos": _pinned_payload(),
+        "ExternalPRs": _external_prs_payload(external_prs=40),
+        "ExternalReviewCount": _review_count_payload(4),
+        "WorkflowFiles": _workflow_files_payload({"r0": {"github": [("ci.yml", "blob")]}}),
+    }
+    responses[operation] = limit
+    respx.post("https://api.github.com/graphql").mock(side_effect=graphql_router(responses))
+
+    async with GitHubClient(token="ghs_test", max_retries=1) as gh:
+        with pytest.raises(GitHubRateLimited):
+            await ingest_profile("octocat", gh)
+
+
+@pytest.mark.asyncio
+@respx.mock
+@pytest.mark.parametrize("operation", ["ExternalPRs", "ExternalReviewCount"])
+async def test_the_call_cap_stops_an_ingest_inside_a_fail_soft_read(
+    operation: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The external reads degrade when GitHub can't answer, but reaching the
+    per-analysis call cap there must stop the analysis like anywhere else."""
+    _one_repo_with_root(".github")
+    respx.post("https://api.github.com/graphql").mock(
+        side_effect=graphql_router(
+            {
+                "PinnedRepos": _pinned_payload(),
+                "ExternalPRs": _external_prs_payload(external_prs=40),
+                "ExternalReviewCount": _review_count_payload(4),
+                "WorkflowFiles": _workflow_files_payload({"r0": {"github": [("ci.yml", "blob")]}}),
+            }
+        )
+    )
+    real_graphql = GitHubClient.graphql
+
+    async def graphql(self: GitHubClient, query: str, variables: dict[str, object]) -> object:
+        if f"query {operation}(" in query:
+            raise GitHubCallCapExceeded(151, 150)
+        return await real_graphql(self, query, variables)
+
+    monkeypatch.setattr(GitHubClient, "graphql", graphql)
+
+    async with GitHubClient(token="ghs_test") as gh:
+        with pytest.raises(GitHubCallCapExceeded):
+            await ingest_profile("octocat", gh)
+
+
+def _commit(day: datetime, *, committed: datetime | None = None) -> dict[str, object]:
+    return {
+        "commit": {
+            "author": {"date": day.strftime("%Y-%m-%dT12:00:00Z")},
+            "committer": {"date": (committed or day).strftime("%Y-%m-%dT12:00:00Z")},
+            "message": "Fix",
+        }
+    }
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_a_full_commit_page_marks_where_the_history_is_complete() -> None:
+    """Each repo contributes at most one page of 100 commits. When a page comes
+    back full, older commits exist that ingestion never saw, so the scorer
+    must not read the stretch before them as silence."""
+    repos_payload = [_fake_repo("busy", language="Python"), _fake_repo("quiet", language="Go")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql()
+    today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    respx.get(url__startswith="https://api.github.com/repos/octocat/busy/commits").mock(
+        return_value=Response(200, json=[_commit(today - timedelta(days=i)) for i in range(100)])
+    )
+    respx.get(url__startswith="https://api.github.com/repos/octocat/quiet/commits").mock(
+        return_value=Response(200, json=[_commit(today - timedelta(days=300))])
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.commit_history_complete_since == today - timedelta(days=99)
+
+
+def _busy_repo_commits(prior_year_day: datetime | None) -> Callable[[httpx.Request], Response]:
+    """A repo whose page of 100 commits falls inside the last year. Asked for
+    the year before (`until`), it answers with `prior_year_day` if given."""
+    today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    def _answer(request: httpx.Request) -> Response:
+        if "until" in request.url.params:
+            return Response(200, json=[_commit(prior_year_day)] if prior_year_day else [])
+        return Response(200, json=[_commit(today - timedelta(days=i)) for i in range(100)])
+
+    return _answer
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_a_full_page_inside_the_last_year_is_checked_for_older_commits() -> None:
+    """Learning Trajectory credits commits in each of the last two years. When
+    a repo's 100 commits all fall inside the last year, its older ones went
+    unseen, so ingestion asks GitHub for one commit from the year before."""
+    repos_payload = [_fake_repo("busy", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql()
+    prior_year_day = datetime.now(UTC).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ) - timedelta(days=500)
+    respx.get(url__startswith="https://api.github.com/repos/octocat/busy/commits").mock(
+        side_effect=_busy_repo_commits(prior_year_day)
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert prior_year_day in profile.commit_dates
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_the_older_commit_check_covers_the_whole_day_a_year_ago(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Commit days count whole, so the day exactly a year ago belongs to the
+    year before. The check for an older commit must reach the end of that day,
+    not stop at its start."""
+    repos_payload = [_fake_repo("busy", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql()
+    now = datetime.now(UTC).replace(hour=13, minute=0, second=0, microsecond=0)
+    monkeypatch.setattr(profile_module, "datetime", frozen_at(now))
+    year_ago = (now - timedelta(days=365)).replace(hour=0)
+    committed = year_ago.replace(hour=12)  # _commit's time of day
+
+    def _answer(request: httpx.Request) -> Response:
+        until = request.url.params.get("until")
+        if until is None:
+            return Response(200, json=[_commit(now - timedelta(days=i)) for i in range(100)])
+        # GitHub lists the commits committed at or before `until`.
+        older = committed <= datetime.fromisoformat(until)
+        return Response(200, json=[_commit(year_ago)] if older else [])
+
+    respx.get(url__startswith="https://api.github.com/repos/octocat/busy/commits").mock(
+        side_effect=_answer
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert year_ago in profile.commit_dates
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_no_older_commit_check_when_the_year_before_is_already_visible() -> None:
+    repos_payload = [_fake_repo("busy", language="Python"), _fake_repo("quiet", language="Go")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql()
+    busy = respx.get(url__startswith="https://api.github.com/repos/octocat/busy/commits").mock(
+        side_effect=_busy_repo_commits(None)
+    )
+    today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    respx.get(url__startswith="https://api.github.com/repos/octocat/quiet/commits").mock(
+        return_value=Response(200, json=[_commit(today - timedelta(days=400))])
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        await ingest_profile("octocat", gh)
+
+    assert [call.request.url.params.get("until") for call in busy.calls] == [None]
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_the_history_boundary_follows_committer_dates() -> None:
+    """GitHub filters and orders a commit list by committer date. A rebased
+    commit keeps its old author date, so taking the boundary from author dates
+    would claim the history complete further back than the page reaches."""
+    repos_payload = [_fake_repo("busy", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql()
+    today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    page = [_commit(today - timedelta(days=i)) for i in range(99)]
+    page.append(_commit(today - timedelta(days=300), committed=today - timedelta(days=10)))
+    respx.get(url__startswith="https://api.github.com/repos/octocat/busy/commits").mock(
+        return_value=Response(200, json=page)
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.commit_history_complete_since == today - timedelta(days=98)
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_short_commit_pages_mean_the_history_is_complete() -> None:
+    repos_payload = [_fake_repo("quiet", language="Go")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql()
+    today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    respx.get(url__startswith="https://api.github.com/repos/octocat/quiet/commits").mock(
+        return_value=Response(200, json=[_commit(today - timedelta(days=i)) for i in range(99)])
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.commit_history_complete_since is None
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_repeating_an_analysis_the_same_day_reuses_the_cached_commit_pages(
+    fake_cache, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Commit lists are the most numerous GitHub reads. Their windows start at
+    a UTC midnight, so the same analysis repeated later that day (a retry after
+    a timeout, say) asks the same questions and the cache answers them.
+    Microsecond bounds made every request new, so the cache never did."""
+    repos_payload = [_fake_repo("busy", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql()
+    morning = datetime.now(UTC).replace(hour=8, minute=15, second=42, microsecond=123456)
+    commits = respx.get(url__startswith="https://api.github.com/repos/octocat/busy/commits").mock(
+        side_effect=_busy_repo_commits(morning - timedelta(days=500))
+    )
+
+    for moment in (morning, morning.replace(hour=19, minute=3, second=7, microsecond=654321)):
+        monkeypatch.setattr(profile_module, "datetime", frozen_at(moment))
+        async with GitHubClient(token="ghs_test", cache=fake_cache) as gh:
+            await ingest_profile("octocat", gh)
+
+    # The page and the check for older commits, each asked once.
+    assert commits.call_count == 2
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_an_empty_profile_readme_repo_reads_as_no_readme() -> None:
+    """`<user>/<user>` created but never pushed answers 409, like any empty repo."""
+    repos_payload = [_fake_repo("alpha-api", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_commits(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_graphql()
+    respx.get("https://api.github.com/repos/octocat/octocat/readme").mock(
+        return_value=Response(409, json={"message": "Git Repository is empty."})
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.profile_readme_chars == 0
 
 
 @pytest.mark.asyncio
@@ -417,37 +1198,47 @@ async def test_ingest_profile_rejects_organizations() -> None:
     assert "username instead" in msg.lower() or "individual" in msg.lower()
 
 
-# ─── v0.9.0: bounded GH fan-out ──────────────────────────────────────
+# ─── Ingestion parallelism ───────────────────────────────────────────
+#
+# Ingestion issues every independent read at once and leaves the bound on
+# in-flight requests to GitHubClient (tests/github/test_client.py), so the
+# fake below is deliberately unbounded: it records what overlapped.
 
 
 class FakeGitHubClient:
-    """Minimal GitHubClient stand-in for the bounded-fanout tests.
+    """GitHubClient stand-in that records which reads were in flight together.
 
-    Instruments every GH-touching method with a current/max in-flight
-    counter. A tiny `asyncio.sleep` forces real concurrency — without
-    it, fast coros could resolve sequentially and the cap assertion
-    would pass vacuously.
+    A tiny `asyncio.sleep` inside every call forces genuine interleaving;
+    without it fast coroutines could finish one by one and every overlap
+    assertion would fail for the wrong reason.
     """
 
     def __init__(self, *, repo_count: int) -> None:
         self.repo_count = repo_count
-        self.current_in_flight = 0
-        self.max_in_flight = 0
-        self.total_calls = 0
+        self.in_flight: list[str] = []
+        self.overlapped: dict[str, set[str]] = {}
+        self.peak_by_method: dict[str, int] = {}
 
-    async def _enter(self) -> None:
-        self.total_calls += 1
-        self.current_in_flight += 1
-        self.max_in_flight = max(self.max_in_flight, self.current_in_flight)
-        # Force genuine concurrency by yielding to the event loop.
-        await asyncio.sleep(0.005)
+    @contextlib.asynccontextmanager
+    async def _call(self, method: str) -> AsyncIterator[None]:
+        for other in self.in_flight:
+            self.overlapped.setdefault(method, set()).add(other)
+            self.overlapped.setdefault(other, set()).add(method)
+        self.in_flight.append(method)
+        self.peak_by_method[method] = max(
+            self.peak_by_method.get(method, 0), self.in_flight.count(method)
+        )
+        try:
+            await asyncio.sleep(0.005)
+            yield
+        finally:
+            self.in_flight.remove(method)
 
-    def _exit(self) -> None:
-        self.current_in_flight -= 1
+    def ran_together(self, a: str, b: str) -> bool:
+        return b in self.overlapped.get(a, set())
 
     async def get_user(self, login: str) -> dict[str, object]:
-        await self._enter()
-        try:
+        async with self._call("get_user"):
             return {
                 "login": login,
                 "type": "User",
@@ -459,12 +1250,9 @@ class FakeGitHubClient:
                 "blog": None,
                 "hireable": False,
             }
-        finally:
-            self._exit()
 
     async def list_repos(self, login: str) -> list[dict[str, object]]:
-        await self._enter()
-        try:
+        async with self._call("list_repos"):
             return [
                 {
                     "name": f"repo-{i}",
@@ -480,77 +1268,81 @@ class FakeGitHubClient:
                 }
                 for i in range(self.repo_count)
             ]
-        finally:
-            self._exit()
 
     async def graphql(self, query: str, variables: dict[str, object]) -> dict[str, object]:
-        await self._enter()
-        try:
+        operation = query.split("(", 1)[0].split()[-1]
+        async with self._call(f"graphql:{operation}"):
             return {
                 "user": {
-                    "pinnedItems": {"nodes": []},
+                    "pinnedItems": {"totalCount": 0},
                     "hasSponsorsListing": False,
                     "isGitHubStar": False,
                     "isDeveloperProgramMember": False,
-                    "pullRequests": {"totalCount": 0, "nodes": []},
                     "contributionsCollection": {
                         "pullRequestReviewContributions": {"totalCount": 0}
                     },
-                }
+                },
+                "search": {"issueCount": 0, "nodes": []},
             }
-        finally:
-            self._exit()
 
     async def get_profile_readme(self, login: str) -> str | None:
-        await self._enter()
-        try:
+        async with self._call("get_profile_readme"):
             return None
-        finally:
-            self._exit()
 
     async def get_repo_root_contents(self, owner: str, name: str) -> list[str]:
-        await self._enter()
-        try:
+        async with self._call("get_repo_root_contents"):
             return []
-        finally:
-            self._exit()
 
     async def list_languages(self, owner: str, name: str) -> dict[str, int]:
-        await self._enter()
-        try:
-            return {}
-        finally:
-            self._exit()
+        async with self._call("list_languages"):
+            return {"Python": 100}
 
     async def list_commits(
-        self, owner: str, name: str, author: str, since: str
+        self,
+        owner: str,
+        name: str,
+        author: str,
+        since: str,
+        per_page: int = 100,
+        until: str | None = None,
     ) -> list[dict[str, object]]:
-        await self._enter()
-        try:
+        async with self._call("list_commits"):
             return []
-        finally:
-            self._exit()
 
 
 @pytest.mark.asyncio
-async def test_bounded_fanout_default_cap() -> None:
-    """At default cap 8, a 50-repo profile must never burst >8 in-flight."""
-    fake = FakeGitHubClient(repo_count=50)
+async def test_independent_profile_reads_run_concurrently() -> None:
+    """Repos, pinned items, external signals and the profile README don't
+    depend on each other, so none of them should wait for another."""
+    fake = FakeGitHubClient(repo_count=3)
     await ingest_profile("octocat", fake)
-    assert fake.max_in_flight <= 8, f"expected ≤8 in-flight, observed {fake.max_in_flight}"
-    # Sanity: the test actually drove enough load to be meaningful.
-    assert fake.total_calls >= 50
+
+    assert fake.ran_together("list_repos", "get_profile_readme")
+    assert fake.ran_together("list_repos", "graphql:PinnedRepos")
+    assert fake.ran_together("graphql:ExternalPRs", "graphql:ExternalReviewCount")
 
 
 @pytest.mark.asyncio
-async def test_bounded_fanout_overridable_via_settings(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Overriding settings.gh_ingest_concurrency=2 must cap in-flight at 2."""
-    from app import settings as settings_module
-    from app.settings import Settings
-
-    monkeypatch.setattr(settings_module, "settings", Settings(gh_ingest_concurrency=2))
-    fake = FakeGitHubClient(repo_count=50)
+async def test_language_reads_run_concurrently() -> None:
+    """Twenty repos' languages used to be fetched one after another."""
+    fake = FakeGitHubClient(repo_count=20)
     await ingest_profile("octocat", fake)
-    assert fake.max_in_flight <= 2, (
-        f"expected ≤2 in-flight at override, observed {fake.max_in_flight}"
-    )
+
+    assert fake.peak_by_method["list_languages"] > 1
+
+
+@pytest.mark.asyncio
+async def test_per_repo_phases_overlap() -> None:
+    fake = FakeGitHubClient(repo_count=12)
+    await ingest_profile("octocat", fake)
+
+    assert fake.ran_together("get_repo_root_contents", "list_languages")
+    assert fake.ran_together("list_languages", "list_commits")
+
+
+@pytest.mark.asyncio
+async def test_languages_keep_repo_order_when_fetched_concurrently() -> None:
+    fake = FakeGitHubClient(repo_count=5)
+    profile = await ingest_profile("octocat", fake)
+
+    assert profile.languages == {"Python": 500}

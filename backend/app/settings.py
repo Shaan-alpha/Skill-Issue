@@ -3,7 +3,7 @@ from typing import Literal
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-VERSION = "1.0.13"
+VERSION = "1.0.14"
 
 
 class Settings(BaseSettings):
@@ -92,12 +92,12 @@ class Settings(BaseSettings):
     # rollover. Override via env FORCE_REFRESH_PER_USER_PER_HOUR.
     force_refresh_per_user_per_hour: int = 10
 
-    # v0.9.0 — ingestion fan-out cap
-    # Per-call asyncio.Semaphore limit applied to GH API requests inside
-    # ingest_profile. Caps the burst from `_enrich_repo_signals` (≤20 root
-    # contents) and `list_commits` (≤10 commits). Default 8 keeps a single
-    # analysis well inside GitHub's secondary rate-limit threshold. Override
-    # via env GH_INGEST_CONCURRENCY without a redeploy.
+    # v0.9.0 — fan-out cap
+    # Live GitHub requests one analysis may have in flight at once, enforced by
+    # GitHubClient for every caller (ingestion and depth enrichment alike).
+    # Default 8 keeps a single analysis well inside GitHub's secondary rate
+    # limits (100 concurrent requests, 900 REST points/minute per token).
+    # Override via env GH_INGEST_CONCURRENCY without a redeploy.
     gh_ingest_concurrency: int = 8
 
     # v1.0.5 — ingest amplification containment.

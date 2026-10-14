@@ -3,12 +3,13 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Any, NamedTuple, Self
 
 import httpx
 
+from app import settings as settings_module
 from app.cache.keys import (
     GH_SHARED_QUOTA_KEY,
     NAMESPACE_GH,
@@ -16,7 +17,7 @@ from app.cache.keys import (
     gh_request_key,
     ttl_for_gh_endpoint,
 )
-from app.settings import VERSION, settings
+from app.settings import VERSION
 
 if TYPE_CHECKING:
     from app.cache.client import RedisCache
@@ -25,12 +26,58 @@ logger = logging.getLogger(__name__)
 
 API_BASE = "https://api.github.com"
 GRAPHQL_URL = "https://api.github.com/graphql"
+# The repo list is one page: the account's most recently updated repos.
+REPO_LIST_PAGE_SIZE = 100
 
 # Status codes whose response bodies are safe to cache. 5xx and 429 are
 # transient and should always retry against the live API.
 _CACHEABLE_STATUSES = frozenset({200, 404, 409, 422})
 # 409 covers the "Git Repository is empty." case GitHub returns on
 # /contents and /commits endpoints when a repo has no commits yet.
+
+# Worth one immediate retry: a bad load-balancer node or a dropped HTTP/2
+# stream usually answers on the second try. A real outage fails both.
+_TRANSIENT_STATUSES = frozenset({500, 502, 503, 504})
+
+
+def is_rate_limited(resp: httpx.Response | _CachedResponse) -> bool:
+    if resp.status_code == 429:
+        return True
+    if resp.status_code != 403:
+        return False
+    # A secondary limit may carry only Retry-After: GitHub's older wording
+    # ("abuse detection mechanism") never says "rate limit".
+    return (
+        resp.headers.get("X-RateLimit-Remaining") == "0"
+        or "Retry-After" in resp.headers
+        or "rate limit" in resp.text.lower()
+    )
+
+
+def _graphql_rate_limited(resp: httpx.Response | _CachedResponse, errors: list[Any]) -> bool:
+    """Whether a GraphQL body's errors are a rate limit. GitHub reports a
+    primary limit on an HTTP 200 with x-ratelimit-remaining 0, and a secondary
+    one on a 200 or 403 whose message names it."""
+    if resp.headers.get("X-RateLimit-Remaining") == "0":
+        return True
+    return any(
+        isinstance(error, dict)
+        and (
+            error.get("type") == "RATE_LIMITED"
+            or "rate limit" in str(error.get("message", "")).lower()
+        )
+        for error in errors
+    )
+
+
+def _repo_unavailable(resp: httpx.Response | _CachedResponse) -> bool:
+    """True when one repository can't be read: missing, empty (409), gone,
+    DMCA'd (451) or blocked (a 403 that isn't a rate limit). That is the
+    repo's problem, read as absent data. A rate limit or a server error is the
+    analysis's problem and must fail it, not quietly score the repo as bare."""
+    if resp.status_code in (404, 409, 410, 451):
+        return True
+    return resp.status_code == 403 and not is_rate_limited(resp)
 
 
 class _CachedResponse:
@@ -52,6 +99,24 @@ class _CachedResponse:
             raise httpx.HTTPStatusError(
                 f"Cached {self.status_code}", request=request, response=response
             )
+
+
+class RootEntry(NamedTuple):
+    """One entry of a repository's root listing."""
+
+    name: str
+    type: str  # "file", "dir", "symlink" or "submodule"
+    size: int
+
+
+class GitHubRateLimited(Exception):
+    """GitHub refused a GraphQL request for rate-limit reasons.
+
+    GraphQL reports a rate limit on an HTTP 200 as well as a 403, so a caller
+    can't tell from the status. Fail-soft callers that degrade a signal when
+    GitHub can't answer must let this one through: a rate limit read as "none"
+    is a wrong score that the report cache keeps for six hours.
+    """
 
 
 class GitHubCallCapExceeded(Exception):
@@ -133,6 +198,7 @@ class GitHubClient:
         is_shared_token: bool = False,
         cache: RedisCache | None = None,
         read_cache: bool = True,
+        max_concurrency: int | None = None,
     ) -> None:
         headers: dict[str, str] = {
             "Accept": "application/vnd.github+json",
@@ -148,12 +214,46 @@ class GitHubClient:
         self._is_shared_token = is_shared_token
         self._cache = cache
         self._read_cache = read_cache
+        # Per-analysis bound on live requests in flight (v0.9.0 introduced it
+        # around ingestion only; depth enrichment fanned out past it).
+        self._in_flight = asyncio.Semaphore(
+            max_concurrency or settings_module.settings.gh_ingest_concurrency
+        )
 
     async def __aenter__(self) -> Self:
         return self
 
     async def __aexit__(self, *_exc: object) -> None:
         await self._client.aclose()
+
+    async def _send_live(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+        """One logical request against GitHub. Rate limits get up to
+        `max_retries` attempts with a bounded Retry-After sleep between them; a
+        transient failure (5xx or a dropped connection) gets one immediate
+        retry on top of that budget."""
+        rate_limited_attempts = 0
+        retried_transient = False
+        while True:
+            try:
+                resp = await self._client.request(method, url, **kwargs)
+            except httpx.TransportError:
+                if retried_transient:
+                    raise
+                retried_transient = True
+                continue
+            # v1.0.5 SI-06: also honor a plain 429; cap the sleep; parse an
+            # HTTP-date Retry-After safely instead of crashing on float().
+            if is_rate_limited(resp):
+                rate_limited_attempts += 1
+                if rate_limited_attempts < self._max_retries:
+                    ceiling = settings_module.settings.github_retry_after_ceiling_seconds
+                    await asyncio.sleep(_retry_after_seconds(resp, ceiling=ceiling))
+                    continue
+                return resp
+            if resp.status_code in _TRANSIENT_STATUSES and not retried_transient:
+                retried_transient = True
+                continue
+            return resp
 
     async def _request(
         self, method: str, url: str, **kwargs: Any
@@ -184,19 +284,11 @@ class GitHubClient:
             if self._live_calls > self._max_calls:
                 raise GitHubCallCapExceeded(self._live_calls, self._max_calls)
 
-        # Live request with existing retry/rate-limit logic.
-        resp: httpx.Response | None = None
-        for _attempt in range(self._max_retries):
-            resp = await self._client.request(method, url, **kwargs)
-            is_rl_403 = resp.status_code == 403 and "rate limit" in resp.text.lower()
-            # v1.0.5 SI-06: also honor a plain 429; cap the sleep; parse an
-            # HTTP-date Retry-After safely instead of crashing on float().
-            if is_rl_403 or resp.status_code == 429:
-                ceiling = settings.github_retry_after_ceiling_seconds
-                await asyncio.sleep(_retry_after_seconds(resp, ceiling=ceiling))
-                continue
-            break
-        assert resp is not None  # max_retries >= 1, so the loop body ran at least once
+        # Live request, bounded per analysis: the cap covers every caller,
+        # depth enrichment included, so none can burst past GitHub's
+        # secondary rate limits.
+        async with self._in_flight:
+            resp = await self._send_live(method, url, **kwargs)
 
         # v1.0.6: record the shared token's remaining quota when it dips low, so
         # the breaker can shed new anon analyses before exhaustion. Only writes
@@ -217,18 +309,27 @@ class GitHubClient:
             and cache_key is not None
             and resp.status_code in _CACHEABLE_STATUSES
         ):
-            ttl = ttl_for_gh_endpoint(url) or settings.cache_default_ttl_seconds
+            ttl = ttl_for_gh_endpoint(url) or settings_module.settings.cache_default_ttl_seconds
             try:
                 try:
                     body_json: Any = resp.json()
                 except ValueError:
                     body_json = None
-                await self._cache.set_json(
-                    NAMESPACE_GH,
-                    cache_key,
-                    {"status": resp.status_code, "body": body_json},
-                    ttl_seconds=ttl,
+                # GraphQL failures ride on a 200: a rate limit, a query GitHub
+                # couldn't resolve this time, or a body with no data at all.
+                # graphql() rejects them all; only a clean answer is kept.
+                graphql_failure = url == GRAPHQL_URL and not (
+                    isinstance(body_json, dict)
+                    and body_json.get("data") is not None
+                    and not body_json.get("errors")
                 )
+                if not graphql_failure:
+                    await self._cache.set_json(
+                        NAMESPACE_GH,
+                        cache_key,
+                        {"status": resp.status_code, "body": body_json},
+                        ttl_seconds=ttl,
+                    )
             except Exception:
                 logger.warning("cache set raised in GitHubClient", exc_info=True)
 
@@ -239,7 +340,9 @@ class GitHubClient:
         resp.raise_for_status()
         return resp.json()
 
-    async def list_repos(self, username: str, *, per_page: int = 100) -> list[dict[str, Any]]:
+    async def list_repos(
+        self, username: str, *, per_page: int = REPO_LIST_PAGE_SIZE
+    ) -> list[dict[str, Any]]:
         resp = await self._request(
             "GET",
             f"{API_BASE}/users/{username}/repos",
@@ -250,11 +353,19 @@ class GitHubClient:
 
     async def list_languages(self, owner: str, repo: str) -> dict[str, int]:
         resp = await self._request("GET", f"{API_BASE}/repos/{owner}/{repo}/languages")
+        if _repo_unavailable(resp):
+            return {}
         resp.raise_for_status()
         return resp.json()
 
     async def list_commits(
-        self, owner: str, repo: str, author: str, since: str, per_page: int = 100
+        self,
+        owner: str,
+        repo: str,
+        author: str,
+        since: str,
+        per_page: int = 100,
+        until: str | None = None,
     ) -> list[dict[str, Any]]:
         """List commits on a repo filtered by author + since-date.
 
@@ -262,18 +373,17 @@ class GitHubClient:
         Both surface as []. (The 409 path bit a real user analysis in v0.8.2:
         empty repos in mohit-sharma2's account broke the ingestion fan-out.)
         """
-        resp = await self._request(
-            "GET",
-            f"{API_BASE}/repos/{owner}/{repo}/commits",
-            params={"author": author, "since": since, "per_page": per_page},
-        )
-        if resp.status_code in (404, 409):
+        params: dict[str, Any] = {"author": author, "since": since, "per_page": per_page}
+        if until is not None:
+            params["until"] = until
+        resp = await self._request("GET", f"{API_BASE}/repos/{owner}/{repo}/commits", params=params)
+        if _repo_unavailable(resp):
             return []
         resp.raise_for_status()
         return resp.json()
 
-    async def get_repo_root_contents(self, owner: str, repo: str) -> list[str]:
-        """Return root-level file and directory names for a repo.
+    async def get_repo_root_contents(self, owner: str, repo: str) -> list[RootEntry]:
+        """Return the root-level entries (name, type, size) of a repo.
 
         Empty repos return 409 ("Git Repository is empty.") on `/contents`; older
         GitHub responses occasionally returned 404 for the same condition. Surface
@@ -282,76 +392,20 @@ class GitHubClient:
         directory listing.
         """
         resp = await self._request("GET", f"{API_BASE}/repos/{owner}/{repo}/contents")
-        if resp.status_code in (404, 409):
+        if _repo_unavailable(resp):
             return []
         resp.raise_for_status()
         data = resp.json()
         if not isinstance(data, list):
             return []
-        return [str(entry.get("name", "")) for entry in data]
-
-    async def get_license(self, owner: str, repo: str) -> str | None:
-        """Return the repo's SPDX licence id, or None if absent / NOASSERTION.
-
-        404 = no detected license. 409 = repo is empty (no commits / no detectable
-        license). Both map to None.
-        """
-        resp = await self._request("GET", f"{API_BASE}/repos/{owner}/{repo}/license")
-        if resp.status_code in (404, 409):
-            return None
-        resp.raise_for_status()
-        spdx = (resp.json().get("license") or {}).get("spdx_id")
-        if not spdx or spdx == "NOASSERTION":
-            return None
-        return str(spdx)
-
-    async def list_workflow_files(self, owner: str, repo: str) -> list[str]:
-        """Return the names of files (not directories) under .github/workflows.
-
-        Returns [] when the directory doesn't exist (404) or when the whole repo
-        is empty (409 — "Git Repository is empty.").
-        """
-        resp = await self._request(
-            "GET", f"{API_BASE}/repos/{owner}/{repo}/contents/.github/workflows"
-        )
-        if resp.status_code in (404, 409):
-            return []
-        resp.raise_for_status()
-        data = resp.json()
-        if not isinstance(data, list):
-            return []
-        return [str(e["name"]) for e in data if e.get("type") == "file"]
-
-    async def get_repo_readme_text(self, owner: str, repo: str) -> str:
-        """Return decoded README text for any repo, or "" when missing.
-
-        404 = no README file. 409 = repo is empty (no commits yet) — also treated
-        as no README.
-        """
-        resp = await self._request("GET", f"{API_BASE}/repos/{owner}/{repo}/readme")
-        if resp.status_code in (404, 409):
-            return ""
-        resp.raise_for_status()
-        content = resp.json().get("content", "")
-        return _decode_readme_content(content)
-
-    async def list_recent_commits_sample(
-        self, owner: str, repo: str, *, limit: int = 100
-    ) -> list[str]:
-        """Return the most-recent commit messages on the default branch (up to limit).
-
-        404 = repo or branch missing. 409 = repo is empty (no commits yet).
-        Both surface as [].
-        """
-        resp = await self._request(
-            "GET",
-            f"{API_BASE}/repos/{owner}/{repo}/commits",
-            params={"per_page": limit},
-        )
-        if resp.status_code in (404, 409):
-            return []
-        resp.raise_for_status()
-        return [str(c.get("commit", {}).get("message", "")) for c in resp.json()]
+        return [
+            RootEntry(
+                name=str(entry.get("name", "")),
+                type=str(entry.get("type", "")),
+                size=int(entry.get("size") or 0),
+            )
+            for entry in data
+        ]
 
     async def get_review_depth(self, username: str) -> int | None:
         """Return the avg bodyText length across the 25 most-recent reviews, or None.
@@ -361,11 +415,14 @@ class GitHubClient:
         RESOURCE_LIMITS_EXCEEDED for hyper-active accounts (SKILL-ISSUE-BACKEND-4) —
         either fully (graphql() raises) or with partial data whose `nodes` field is
         null — so every access below is null-guarded and the call is wrapped.
+        A rate limit or the call cap still fails the analysis.
         """
         from app.github.queries import REVIEW_DEPTH
 
         try:
             data = await self.graphql(REVIEW_DEPTH, {"login": username})
+        except (GitHubRateLimited, GitHubCallCapExceeded):
+            raise
         except Exception:
             logger.warning(
                 "Review-depth query failed for %s; skipping signal", username, exc_info=True
@@ -386,22 +443,27 @@ class GitHubClient:
 
         Bonus depth signal — degrades to 0 rather than failing the analysis when
         GitHub can't resolve this `contributionsCollection` query (the same
-        RESOURCE_LIMITS_EXCEEDED rejection hyper-active accounts trigger).
-        """
-        from datetime import UTC, datetime, timedelta
+        RESOURCE_LIMITS_EXCEEDED rejection hyper-active accounts trigger). A rate
+        limit or the call cap still fails the analysis.
 
+        The year is the 365 UTC days up to tonight's midnight. Whole days keep
+        the query, and so its cache key, the same all day.
+        """
         from app.github.queries import CONTRIBUTION_REPOS
 
-        now = datetime.now(UTC)
+        today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+        midnight = today + timedelta(days=1)
         try:
             data = await self.graphql(
                 CONTRIBUTION_REPOS,
                 {
                     "login": username,
-                    "from": (now - timedelta(days=365)).isoformat(),
-                    "to": now.isoformat(),
+                    "from": (midnight - timedelta(days=365)).isoformat(),
+                    "to": midnight.isoformat(),
                 },
             )
+        except (GitHubRateLimited, GitHubCallCapExceeded):
+            raise
         except Exception:
             logger.warning(
                 "Contribution-repo-count query failed for %s; defaulting to 0",
@@ -418,7 +480,7 @@ class GitHubClient:
 
     async def get_profile_readme(self, username: str) -> str | None:
         resp = await self._request("GET", f"{API_BASE}/repos/{username}/{username}/readme")
-        if resp.status_code == 404:
+        if _repo_unavailable(resp):
             return None
         resp.raise_for_status()
 
@@ -429,17 +491,23 @@ class GitHubClient:
         resp = await self._request(
             "POST", GRAPHQL_URL, json={"query": query, "variables": variables}
         )
+        if is_rate_limited(resp):
+            raise GitHubRateLimited(f"GitHub GraphQL rate limit (HTTP {resp.status_code})")
         resp.raise_for_status()
         body = resp.json()
         payload = body.get("data")
         errors = body.get("errors")
+        # A REST-style {"message": ...} body can stand in for both.
+        message = str(body.get("message") or "")
+        if (errors and _graphql_rate_limited(resp, errors)) or "rate limit" in message.lower():
+            raise GitHubRateLimited(f"GitHub GraphQL rate limit: {errors or message}")
         # GitHub's GraphQL returns partial `data` alongside `errors` when it can
         # resolve some fields but not others — e.g. RESOURCE_LIMITS_EXCEEDED on an
         # expensive field for a hyper-active account. Downstream ingestion reads
         # every field defensively, so partial data is still useful. Only treat the
         # response as fatal when nothing came back at all.
+        if payload is None:
+            raise RuntimeError(f"GraphQL error: {errors or message or 'no data returned'}")
         if errors:
-            if payload is None:
-                raise RuntimeError(f"GraphQL error: {errors}")
             logger.warning("Partial GraphQL response; continuing with partial data: %s", errors)
         return payload

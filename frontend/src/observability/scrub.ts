@@ -1,3 +1,5 @@
+import type { ErrorEvent } from "@sentry/nextjs";
+
 /**
  * Shared PII scrubbing helpers for Sentry's beforeSend hook.
  *
@@ -45,4 +47,22 @@ export function scrubObject<T>(value: T): T {
     out[k] = scrubObject(v);
   }
   return out as unknown as T;
+}
+
+/**
+ * The `beforeSend` hook for every runtime (browser, server, edge), so the PII
+ * contract can't drift between copies.
+ */
+export function scrubEvent(event: ErrorEvent): ErrorEvent {
+  if (event.request) {
+    event.request.headers = scrubHeaders(
+      event.request.headers as Record<string, string> | undefined,
+    );
+  }
+  if (event.user && "email" in event.user) {
+    delete (event.user as { email?: string }).email;
+  }
+  if (event.extra) event.extra = scrubObject(event.extra);
+  if (event.contexts) event.contexts = scrubObject(event.contexts);
+  return event;
 }

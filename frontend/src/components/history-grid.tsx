@@ -30,7 +30,11 @@ export function HistoryGrid({ analyses }: { analyses: SavedAnalysis[] }) {
   // us a new array every time, and resetting on that would wipe an in-flight
   // undo. This is React's documented "adjusting state when a prop changes"
   // pattern: a plain render-time computation, no effect and no extra paint.
-  const signature = analyses.map((a) => a.id).join(",");
+  // Each run's completion time is part of the content: a refresh or the daily
+  // cron changes a score without changing which analyses are listed.
+  const signature = analyses
+    .map((a) => `${a.id}@${a.latest_run?.completed_at ?? ""}`)
+    .join(",");
   const [syncedSignature, setSyncedSignature] = useState(signature);
   if (signature !== syncedSignature) {
     setSyncedSignature(signature);

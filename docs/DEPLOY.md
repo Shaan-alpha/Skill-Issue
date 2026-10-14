@@ -70,7 +70,7 @@ In Vercel → **Settings** → **Environment Variables**, add (Production + Prev
 | `CRON_SECRET` | 32+ byte random hex string. Vercel Cron injects `Authorization: Bearer ${CRON_SECRET}` on every fire; the backend's `require_cron_auth` constant-time-compares it. Unset = the cron route (`GET /cron/refresh-saved-analyses`) returns 503. Generate: `python -c "import secrets; print(secrets.token_hex(32))"`. (v0.8.1+) | ✅ |
 | `FRONTEND_BASE_URL` | `https://<your-vercel-host>` (no trailing slash). **Backend env only.** Where the share-revalidate webhook POSTs to. Unset = webhook is a logged no-op; the 3600s `cacheLife` fallback absorbs revocations. (v0.8.6+) | — |
 | `REVALIDATE_SECRET` | 32+ byte random hex string. **Both `frontend` and `backend` services**, same value byte-for-byte. Authenticates the backend → frontend webhook that busts `/share/[slug]` cache tags on every share toggle. Unset = webhook disabled; revocations only revalidate at the 3600s fallback. Generate: `python -c "import secrets; print(secrets.token_hex(32))"`. (v0.8.6+) | ✅ |
-| `GH_INGEST_CONCURRENCY` | Max concurrent GitHub API calls per `ingest_profile` invocation. Default `8`. Backend env only. Raise if Layer A cache hit-rate is high and you want lower analysis latency; lower if you're hitting GitHub secondary rate-limit 403s. (v0.9.0+) | — |
+| `GH_INGEST_CONCURRENCY` | Max live GitHub requests one analysis may have in flight, enforced by `GitHubClient` for ingestion and depth enrichment alike (v1.0.14; ingestion only before). Default `8`. Backend env only. Raise if Layer A cache hit-rate is high and you want lower analysis latency; lower if you're hitting GitHub secondary rate-limit 403s. (v0.9.0+) | — |
 | `INTERNAL_PROXY_SECRET` | 32+ byte random hex string. **Both `frontend` and `backend` services**, same value byte-for-byte. Lets the backend trust the real client IP the Next.js RSC forwards (`X-Client-IP`) for proxied anonymous `/analyze`. Unset = anonymous `/analyze` is **not** IP-limited (real visitors are never throttled by mistake); narrative + signed-in limits stay active. Generate: `python -c "import secrets; print(secrets.token_hex(32))"`. (v0.9.2+) | — |
 | `ANALYZE_ANON_PER_IP_PER_HOUR` | Anonymous per-IP `/analyze` cap. Default `20`. Backend env only. (v0.9.2+) | — |
 | `ANALYZE_USER_PER_HOUR` | Signed-in per-user `/analyze` cap. Default `60`. Backend env only. (v0.9.2+) | — |
@@ -111,7 +111,7 @@ After the first migration: every subsequent push that includes a new migration r
 ```bash
 # Health — should report db=up and cache=up after Upstash is provisioned
 curl https://<your-vercel-host>/_/backend/health
-# -> {"status":"ok","version":"1.0.13","db":"up","cache":"up"}
+# -> {"status":"ok","version":"1.0.14","db":"up","cache":"up"}
 
 # Anonymous analyze
 curl https://<your-vercel-host>/_/backend/analyze/octocat
@@ -149,13 +149,13 @@ time curl -s -o /dev/null https://<your-vercel-host>/_/backend/analyze/octocat
 
 Cold call: ~5-8s. Warm call (cached): ≤200ms p95 target. If the warm call isn't fast, check `/health` for `cache: "up"` and verify the env vars survived the deploy.
 
-## Known limits as of v1.0.13
+## Known limits as of v1.0.14
 
 - **Sentry source-map upload not wired.** Frontend stack traces in Sentry show minified function names — runtime capture still works, only symbolication is degraded. Re-add the `withSentryConfig` wrapper once `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` / `SENTRY_PROJECT` are provisioned.
 - **Sentry alert rules not wired.** The integration ships without thresholds; needs ~1 week of baseline data first.
 - **CSP is Report-Only.** `frontend/next.config.ts` ships the Content-Security-Policy in report-only mode with `unsafe-inline`. v1.0.8 (SI-31) added the backend origin to `connect-src`, so the policy is now **promotable**; flipping it to enforcing (nonce-based) remains a deferred slice.
 - **SBOM not published.** The remaining piece of audit SI-37; `security.txt` and the PR dependency-review gate shipped in v1.0.8.
-- **Majors held back on purpose.** ESLint 10 and TypeScript 7 are blocked upstream (`eslint-plugin-react` still calls the `context.getFilename()` that ESLint 10 removed; `typescript-eslint` supports TypeScript < 6.1), so Dependabot ignores them. The other majors (TypeScript 6, Vitest 5, jest-dom 7, Sentry SDK 11, framer-motion 13, openai 3, SQLAlchemy 2.1) are scoped as v1.0.14. The CI `npm audit` gate has been back at `high` since v1.0.13.
+- **Majors held back on purpose.** ESLint 10 and TypeScript 7 are blocked upstream (`eslint-plugin-react` still calls the `context.getFilename()` that ESLint 10 removed; `typescript-eslint` supports TypeScript < 6.1), so Dependabot ignores them. The other majors (TypeScript 6, Vitest 5, jest-dom 7, Sentry SDK 11, framer-motion 13, openai 3, SQLAlchemy 2.1) are scoped as v1.0.15. The CI `npm audit` gate has been back at `high` since v1.0.13.
 
 _(Resolved since earlier: global rate limiting shipped in v0.9.2 and was hardened in v1.0.4–v1.0.6; session ids are hashed at rest and mutations carry an Origin check as of v1.0.8; `/share/[slug]` gained on-demand ISR in v0.8.6; the custom domain — skillissue.tech — went live in v1.0.1.)_
 

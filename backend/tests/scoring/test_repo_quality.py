@@ -94,3 +94,83 @@ def test_repo_quality_license_majority_does_not_fire_when_few_licensed() -> None
     profile.licensed_repos = [profile.repos[0].full_name]
     result = repo_quality.score(profile)
     assert not any(e.signal == "license_majority" for e in result.evidence)
+
+
+def test_readme_depth_is_shown_as_evidence() -> None:
+    profile = _with_recent_commit(_load("profile_senior.json"))
+    profile.repos[0].readme_bytes = 4096
+    profile.repos[1].readme_bytes = 2048
+    before = score(profile).points
+
+    rows = [(e.detail, e.weight) for e in score(profile).evidence if e.signal == "readme_depth"]
+    assert rows == [("READMEs average 3.0 KB across 2 repos", 0)]
+    assert score(profile).points == before
+
+
+def test_readme_majority_counts_only_repos_whose_roots_were_read() -> None:
+    """Ingestion reads root listings for the 20 most recently updated repos;
+    past those a README is unknown, not missing. Dividing by every repo made a
+    majority unreachable past forty repos."""
+    profile = _load("profile_oss.json")
+    template = profile.repos[0]
+    profile.repos = [
+        template.model_copy(
+            update={
+                "name": f"r{i}",
+                "full_name": f"x/r{i}",
+                "is_fork": False,
+                "has_readme": i < 15,
+                "root_inspected": i < 20,
+            }
+        )
+        for i in range(50)
+    ]
+
+    rows = [(e.detail, e.weight) for e in score(profile).evidence if e.signal == "readme_majority"]
+
+    assert rows == [("75% of the 20 most recently updated non-fork repos have READMEs", 6)]
+
+
+def test_readme_majority_speaks_for_every_repo_when_all_were_read() -> None:
+    profile = _load("profile_oss.json")
+    template = profile.repos[0]
+    profile.repos = [
+        template.model_copy(
+            update={"name": f"r{i}", "full_name": f"x/r{i}", "is_fork": False, "has_readme": i < 3}
+        )
+        for i in range(4)
+    ]
+
+    rows = [e.detail for e in score(profile).evidence if e.signal == "readme_majority"]
+
+    assert rows == ["75% of non-fork repos have READMEs"]
+
+
+def test_evidence_names_its_scope_when_the_repo_list_was_capped() -> None:
+    """Past 100 repos only the most recently updated are listed, so neither
+    the licence nor the README row may read as the account's whole set."""
+    profile = _load("profile_oss.json")
+    template = profile.repos[0]
+    profile.repos = [
+        template.model_copy(
+            update={
+                "name": f"r{i}",
+                "full_name": f"x/r{i}",
+                "is_fork": False,
+                "has_readme": True,
+                "has_license": True,
+            }
+        )
+        for i in range(12)
+    ]
+    profile.licensed_repos = [r.full_name for r in profile.repos[:9]]
+    profile.repo_list_capped = True
+
+    details = {e.signal: e.detail for e in score(profile).evidence}
+
+    assert details["license_majority"] == (
+        "9/12 of the most recently updated non-fork repos carry a recognised SPDX license"
+    )
+    assert details["readme_majority"] == (
+        "100% of the 12 most recently updated non-fork repos have READMEs"
+    )

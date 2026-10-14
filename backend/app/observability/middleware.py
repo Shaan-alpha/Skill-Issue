@@ -7,6 +7,9 @@ The ID is:
 - Bound into Sentry's scope (the integration picks it up automatically).
 - Echoed back to the client in the `X-Request-ID` response header.
 
+It also stamps `request.state.started_at`, the moment the request arrived,
+before any dependency ran (`/analyze` measures its latency from it).
+
 Pure ASGI (no Starlette imports) so it composes cleanly under any framework
 and stays cheap on the hot path.
 """
@@ -14,6 +17,7 @@ and stays cheap on the hot path.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 import sentry_sdk
 import structlog
@@ -49,6 +53,7 @@ class RequestIDMiddleware:
                 break
 
         request_id = _coerce_uuid(incoming)
+        scope.setdefault("state", {})["started_at"] = datetime.now(UTC)
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(request_id=request_id)
 

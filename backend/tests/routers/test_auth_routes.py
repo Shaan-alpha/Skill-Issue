@@ -1,4 +1,3 @@
-from importlib import reload
 from urllib.parse import parse_qs, urlparse
 
 import respx
@@ -21,15 +20,20 @@ async def test_login_redirects_to_github_with_state(monkeypatch):
     # They are str | None in Settings; the build_authorize_url helper
     # tolerates None with fallback to "" — but the route should still emit
     # a valid querystring with state.
-    monkeypatch.setenv("GITHUB_OAUTH_CLIENT_ID", "abc")
-    monkeypatch.setenv("OAUTH_REDIRECT_URL", "http://localhost:8000/auth/callback")
-    # Reload settings since it's a module-level singleton.
-    from app import settings as settings_mod
+    # Patch the settings object oauth.py holds. Reloading the modules instead
+    # re-created InvalidOAuthState, so tests/auth/test_oauth.py failed whenever
+    # this file ran before it.
     from app.auth import oauth as oauth_mod
+    from app.settings import Settings
 
-    reload(settings_mod)
-    # Re-import oauth so it sees the reloaded settings
-    reload(oauth_mod)
+    monkeypatch.setattr(
+        oauth_mod,
+        "settings",
+        Settings(
+            github_oauth_client_id="abc",
+            oauth_redirect_url="http://localhost:8000/auth/callback",
+        ),
+    )
 
     async with await _client() as ac:
         r = await ac.get("/auth/login")
@@ -38,6 +42,7 @@ async def test_login_redirects_to_github_with_state(monkeypatch):
     assert loc.startswith("https://github.com/login/oauth/authorize?")
     qs = parse_qs(urlparse(loc).query)
     assert "state" in qs
+    assert qs["client_id"] == ["abc"]
     # State cookie set
     assert "si_oauth_state" in r.headers.get("set-cookie", "")
 
@@ -108,15 +113,71 @@ async def test_callback_happy_path_creates_user_and_session(db, monkeypatch):
     assert session is not None
 
 
-async def test_callback_state_mismatch_returns_400(db):
+def _assert_failed_sign_in(r) -> None:
+    """Back to the site with a reason it can show, never a raw error page, and
+    never a session."""
+    assert r.status_code == 302
+    assert r.headers["location"] == "/?auth=failed"
+    assert not any("si_session=" in c for c in r.headers.get_list("set-cookie"))
+
+
+@respx.mock
+async def test_callback_state_mismatch_fails_without_exchanging_the_code(db):
+    exchange = respx.post("https://github.com/login/oauth/access_token")
     await _seed_db_override(db)
 
     async with await _client() as ac:
         ac.cookies.set("si_oauth_state", "real")
         r = await ac.get("/auth/callback?code=x&state=fake")
     app.dependency_overrides.clear()
-    assert r.status_code == 400
-    assert r.json() == {"error": "invalid_state"}
+
+    _assert_failed_sign_in(r)
+    assert not exchange.called
+
+
+@respx.mock
+async def test_callback_with_an_expired_or_reused_code_fails_cleanly(db, monkeypatch):
+    """GitHub answers a bad code with 200 and an error body, which escaped as
+    an unhandled 500."""
+    respx.post("https://github.com/login/oauth/access_token").mock(
+        return_value=HTTPXResponse(
+            200,
+            json={
+                "error": "bad_verification_code",
+                "error_description": "The code passed is incorrect or expired.",
+            },
+        )
+    )
+    await _seed_db_override(db)
+
+    async with await _client() as ac:
+        ac.cookies.set("si_oauth_state", "s")
+        r = await ac.get("/auth/callback?code=old&state=s")
+    app.dependency_overrides.clear()
+
+    _assert_failed_sign_in(r)
+
+
+@respx.mock
+async def test_callback_when_github_is_down_fails_cleanly(db):
+    respx.post("https://github.com/login/oauth/access_token").mock(return_value=HTTPXResponse(503))
+    await _seed_db_override(db)
+
+    async with await _client() as ac:
+        ac.cookies.set("si_oauth_state", "s")
+        r = await ac.get("/auth/callback?code=c&state=s")
+    app.dependency_overrides.clear()
+
+    _assert_failed_sign_in(r)
+
+
+async def test_callback_with_another_github_error_fails_cleanly(db):
+    await _seed_db_override(db)
+    async with await _client() as ac:
+        r = await ac.get("/auth/callback?error=redirect_uri_mismatch&state=s")
+    app.dependency_overrides.clear()
+
+    _assert_failed_sign_in(r)
 
 
 async def test_callback_user_cancelled_redirects_to_root(db):

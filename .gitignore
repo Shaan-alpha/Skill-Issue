@@ -52,6 +52,8 @@ coverage/
 # --- AI / agent artifacts ---
 .aider*
 .cursor/
+# Local, resumable audit working notes (kept out of history on purpose)
+.audit/
 
 # --- Misc ---
 *.local

@@ -62,8 +62,14 @@ class Repo(BaseModel):
     has_readme: bool
     has_tests: bool
     has_ci: bool
-    deployment_hints: list[str]  # e.g. ["dockerfile", "vercel.json"]
+    has_license: bool = False  # a recognised SPDX licence, as the repo list reports it
+    # False for repos past ingestion's root-listing limit: their README, tests,
+    # CI and deployment flags are unknown, not absent.
+    root_inspected: bool = True
+    deployment_hints: list[str]  # e.g. ["dockerfile", "vercel"]; deployment artifacts only
     size_kb: int = 0
+    readme_bytes: int = 0  # size of the root README file, 0 when there is none
+    manifests: list[str] = Field(default_factory=list)  # root dependency manifests
     last_commit_at: datetime | None
     created_at: datetime
 
@@ -71,7 +77,7 @@ class Repo(BaseModel):
 class Profile(BaseModel):
     username: str
     bio: str | None
-    profile_readme_chars: int
+    profile_readme_chars: int  # visible text, HTML comments excluded
     followers: int
     public_repos: int
     languages: dict[str, int]  # language -> bytes
@@ -80,21 +86,30 @@ class Profile(BaseModel):
     external_reviews: int
     external_orgs: set[str] = Field(default_factory=set)
     commit_dates: list[datetime]
+    # First lines of the user's own commits (the same fetch as commit_dates).
+    commit_subjects: list[str] = Field(default_factory=list)
+    # Set when a repo's commit page came back full: its older commits went
+    # unseen, so the history is complete only from this day on.
+    commit_history_complete_since: datetime | None = None
+    # True when the repo list came back as a full page: `repos` is then the
+    # most recently updated slice of the account, not all of it.
+    repo_list_capped: bool = False
     account_created_at: datetime
     # Recruiter Signal fields
+    pinned_count: int = 0
     company: str | None = None
     blog: str | None = None
     hireable: bool = False
     has_sponsors_listing: bool = False
     is_github_star: bool = False
     is_developer_program_member: bool = False
-    # --- v0.3.0 depth signals (populated only when base tier unlocks them) ---
+    # --- depth signals ---
+    # licensed_repos, review_avg_comments and cross_repo_contribution_count are
+    # set only when the base tier unlocks them; workflow_counts comes from
+    # ingestion's workflow probe for every profile.
     licensed_repos: list[str] = Field(default_factory=list)
     workflow_counts: dict[str, int] = Field(default_factory=dict)
-    readme_lengths: dict[str, int] = Field(default_factory=dict)
     review_avg_comments: int | None = None
-    dep_files: dict[str, list[str]] = Field(default_factory=dict)
-    commit_message_quality: int | None = None
     cross_repo_contribution_count: int | None = None
 
 

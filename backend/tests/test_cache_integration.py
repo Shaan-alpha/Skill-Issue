@@ -14,6 +14,7 @@ from httpx import ASGITransport, AsyncClient, Response
 from app import dependencies as dep_module
 from app import main as app_module
 from app.settings import Settings
+from tests.graphql_router import graphql_router
 
 if TYPE_CHECKING:
     from app.cache.client import RedisCache
@@ -52,6 +53,7 @@ def _repo_payload(name: str, *, language: str = "Python") -> dict[str, Any]:
         "size": 512,
         "pushed_at": pushed,
         "created_at": "2021-06-01T00:00:00Z",
+        "license": {"key": "mit", "spdx_id": "MIT"},
     }
 
 
@@ -91,12 +93,6 @@ def _mock_github_for_testuser() -> None:
                 ],
             )
         )
-        respx.get(f"https://api.github.com/repos/{owner}/{name}/license").mock(
-            return_value=Response(200, json={"license": {"spdx_id": "MIT"}})
-        )
-        respx.get(f"https://api.github.com/repos/{owner}/{name}/contents/.github/workflows").mock(
-            return_value=Response(200, json=[])
-        )
         respx.get(f"https://api.github.com/repos/{owner}/{name}/readme").mock(
             return_value=Response(
                 200,
@@ -108,27 +104,29 @@ def _mock_github_for_testuser() -> None:
         )
 
     respx.post("https://api.github.com/graphql").mock(
-        side_effect=[
-            Response(200, json={"data": {"user": {"pinnedItems": {"nodes": []}}}}),
-            Response(
-                200,
-                json={
+        side_effect=graphql_router(
+            {
+                "PinnedRepos": {"data": {"user": {"pinnedItems": {"totalCount": 0}}}},
+                "ExternalPRs": {
                     "data": {
                         "user": {
                             "hasSponsorsListing": False,
                             "isGitHubStar": False,
                             "isDeveloperProgramMember": False,
-                            "pullRequests": {"totalCount": 0, "nodes": []},
+                        },
+                        "search": {"issueCount": 0, "nodes": []},
+                    }
+                },
+                "ExternalReviewCount": {
+                    "data": {
+                        "user": {
                             "contributionsCollection": {
                                 "pullRequestReviewContributions": {"totalCount": 0}
-                            },
+                            }
                         }
                     }
                 },
-            ),
-            Response(
-                200,
-                json={
+                "ReviewDepth": {
                     "data": {
                         "user": {
                             "contributionsCollection": {
@@ -137,16 +135,19 @@ def _mock_github_for_testuser() -> None:
                         }
                     }
                 },
-            ),
-            Response(
-                200,
-                json={
+                "WorkflowFiles": {
+                    "data": {
+                        f"r{i}": {"github": {"entries": [{"name": "ci.yml", "type": "blob"}]}}
+                        for i in range(3)
+                    }
+                },
+                "ContributionRepos": {
                     "data": {
                         "user": {"contributionsCollection": {"commitContributionsByRepository": []}}
                     }
                 },
-            ),
-        ]
+            }
+        )
     )
 
 

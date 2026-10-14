@@ -5,7 +5,6 @@ from app.scoring.base import make_result
 
 MAX_POINTS = 30
 NINETY_DAYS = timedelta(days=90)
-NON_DEPLOYMENT_HINTS = {"pinned"}
 
 
 def score(profile: Profile) -> ScoreResult:
@@ -13,13 +12,21 @@ def score(profile: Profile) -> ScoreResult:
     evidence: list[Evidence] = []
     points = 0
 
-    if non_fork:
-        readme_ratio = sum(1 for repo in non_fork if repo.has_readme) / len(non_fork)
+    # READMEs are known only where ingestion read the root listing, and a
+    # capped repo list holds only the most recently updated repos.
+    inspected = [repo for repo in non_fork if repo.root_inspected]
+    if inspected:
+        readme_ratio = sum(1 for repo in inspected if repo.has_readme) / len(inspected)
         if readme_ratio >= 0.5:
+            scope = (
+                "non-fork repos"
+                if len(inspected) == len(non_fork) and not profile.repo_list_capped
+                else f"the {len(inspected)} most recently updated non-fork repos"
+            )
             evidence.append(
                 Evidence(
                     signal="readme_majority",
-                    detail=f"{readme_ratio:.0%} of non-fork repos have READMEs",
+                    detail=f"{readme_ratio:.0%} of {scope} have READMEs",
                     weight=6,
                 )
             )
@@ -35,7 +42,7 @@ def score(profile: Profile) -> ScoreResult:
         )
         points += 8
 
-    if any(set(repo.deployment_hints) - NON_DEPLOYMENT_HINTS for repo in non_fork):
+    if any(repo.deployment_hints for repo in non_fork):
         evidence.append(
             Evidence(
                 signal="deployment_hint",
@@ -62,13 +69,30 @@ def score(profile: Profile) -> ScoreResult:
     if non_fork:
         licensed = sum(1 for r in non_fork if r.full_name in profile.licensed_repos)
         if licensed / len(non_fork) >= 0.5:
+            listed = (
+                "of the most recently updated non-fork repos"
+                if profile.repo_list_capped
+                else "non-fork repos"
+            )
             evidence.append(
                 Evidence(
                     signal="license_majority",
-                    detail=f"{licensed}/{len(non_fork)} non-fork repos carry a recognised SPDX license",
+                    detail=f"{licensed}/{len(non_fork)} {listed} carry a recognised SPDX license",
                     weight=4,
                 )
             )
             points += 4
+
+    # Context row (no points): README size comes free with the root listing.
+    readmes = [r.readme_bytes for r in non_fork if r.readme_bytes > 0]
+    if readmes:
+        average_kb = sum(readmes) / len(readmes) / 1024
+        evidence.append(
+            Evidence(
+                signal="readme_depth",
+                detail=f"READMEs average {average_kb:.1f} KB across {len(readmes)} repos",
+                weight=0,
+            )
+        )
 
     return make_result(points=points, max_points=MAX_POINTS, evidence=evidence)

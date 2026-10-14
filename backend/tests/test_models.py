@@ -96,8 +96,7 @@ def test_profile_depth_defaults() -> None:
     # New depth fields must default empty / zero so existing call sites keep working.
     assert p.licensed_repos == []
     assert p.workflow_counts == {}
-    assert p.readme_lengths == {}
     assert p.review_avg_comments is None
-    assert p.dep_files == {}
-    assert p.commit_message_quality is None
     assert p.cross_repo_contribution_count is None
+    assert p.commit_subjects == []
+    assert p.pinned_count == 0

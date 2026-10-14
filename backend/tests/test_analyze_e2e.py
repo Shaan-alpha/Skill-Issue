@@ -19,6 +19,7 @@ from httpx import ASGITransport, AsyncClient, Response
 from app import dependencies as dep_module
 from app import main as app_module
 from app.settings import Settings
+from tests.graphql_router import graphql_router
 
 
 @pytest.fixture
@@ -55,6 +56,7 @@ def _repo_payload(name: str, *, language: str, days_since_push: int = 5) -> dict
         "size": 512,
         "pushed_at": pushed,
         "created_at": "2021-06-01T00:00:00Z",
+        "license": {"key": "mit", "spdx_id": "MIT"},
     }
 
 
@@ -64,7 +66,9 @@ def _commit_payload(days_ago: int) -> dict[str, Any]:
 
 
 def _mock_github_for_testuser(
-    repos: list[dict[str, Any]], commits_by_repo: dict[str, list[dict[str, Any]]]
+    repos: list[dict[str, Any]],
+    commits_by_repo: dict[str, list[dict[str, Any]]],
+    graphql_overrides: dict[str, Any] | None = None,
 ) -> None:
     respx.get("https://api.github.com/users/testuser").mock(
         return_value=Response(200, json=_user_payload())
@@ -97,16 +101,6 @@ def _mock_github_for_testuser(
                 ],
             )
         )
-        # Pro+ depth endpoints (Professional Developer tier and above)
-        respx.get(f"https://api.github.com/repos/{owner}/{name}/license").mock(
-            return_value=Response(200, json={"license": {"spdx_id": "MIT"}})
-        )
-        respx.get(f"https://api.github.com/repos/{owner}/{name}/contents/.github/workflows").mock(
-            return_value=Response(
-                200,
-                json=[{"name": "ci.yml", "type": "file"}],
-            )
-        )
         respx.get(f"https://api.github.com/repos/{owner}/{name}/readme").mock(
             return_value=Response(
                 200,
@@ -118,31 +112,29 @@ def _mock_github_for_testuser(
         )
 
     respx.post("https://api.github.com/graphql").mock(
-        side_effect=[
-            Response(
-                200,
-                json={"data": {"user": {"pinnedItems": {"nodes": []}}}},
-            ),
-            Response(
-                200,
-                json={
+        side_effect=graphql_router(
+            {
+                "PinnedRepos": {"data": {"user": {"pinnedItems": {"totalCount": 0}}}},
+                "ExternalPRs": {
                     "data": {
                         "user": {
                             "hasSponsorsListing": False,
                             "isGitHubStar": False,
                             "isDeveloperProgramMember": False,
-                            "pullRequests": {"totalCount": 0, "nodes": []},
+                        },
+                        "search": {"issueCount": 0, "nodes": []},
+                    }
+                },
+                "ExternalReviewCount": {
+                    "data": {
+                        "user": {
                             "contributionsCollection": {
                                 "pullRequestReviewContributions": {"totalCount": 0}
-                            },
+                            }
                         }
                     }
                 },
-            ),
-            # REVIEW_DEPTH (Senior Engineer tier and above)
-            Response(
-                200,
-                json={
+                "ReviewDepth": {
                     "data": {
                         "user": {
                             "contributionsCollection": {
@@ -151,17 +143,20 @@ def _mock_github_for_testuser(
                         }
                     }
                 },
-            ),
-            # CONTRIBUTION_REPOS (Staff Engineer tier and above)
-            Response(
-                200,
-                json={
+                "WorkflowFiles": {
+                    "data": {
+                        f"r{i}": {"github": {"entries": [{"name": "ci.yml", "type": "blob"}]}}
+                        for i in range(3)
+                    }
+                },
+                "ContributionRepos": {
                     "data": {
                         "user": {"contributionsCollection": {"commitContributionsByRepository": []}}
                     }
                 },
-            ),
-        ]
+                **(graphql_overrides or {}),
+            }
+        )
     )
 
 
@@ -230,6 +225,122 @@ async def test_analyze_returns_complete_report(
     # Reaching this assertion at all proves both paths ran without raising.
     assert breakdown["consistency"]["max_points"] == 10
     assert breakdown["learning_trajectory"]["max_points"] == 10
+
+
+_RATE_LIMITED = Response(
+    403,
+    json={"message": "API rate limit exceeded for user ID 1."},
+    headers={"Retry-After": "0", "X-RateLimit-Remaining": "0"},
+)
+
+
+def _senior_tier_testuser(graphql_overrides: dict[str, Any] | None = None) -> None:
+    """Mocks for a profile whose base score clears Senior Engineer, so the
+    tier-gated depth enrichment queries GitHub after ingestion."""
+    repos = [
+        _repo_payload("alpha", language="TypeScript"),
+        _repo_payload("beta", language="Python"),
+    ]
+    commits = [_commit_payload(days_ago=i * 2) for i in range(35)]
+    last_year = [*commits[:5], _commit_payload(days_ago=400)]
+    _mock_github_for_testuser(repos, {"alpha": commits, "beta": last_year}, graphql_overrides)
+
+
+async def _get_analyze(path: str = "/analyze/testuser") -> Any:
+    # A crash must come back as the 500 a real client sees, not raise here.
+    transport = ASGITransport(app=app_module.app, raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        return await client.get(path)
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_rate_limited_ingest_is_service_busy(_settings_with_token: None) -> None:
+    _senior_tier_testuser()
+    respx.get("https://api.github.com/repos/testuser/alpha/contents").mock(
+        return_value=_RATE_LIMITED
+    )
+
+    resp = await _get_analyze()
+
+    assert resp.status_code == 503
+    assert resp.json() == {"error": "service_busy"}
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_rate_limit_during_depth_enrichment_is_service_busy_not_a_crash(
+    _settings_with_token: None,
+) -> None:
+    _senior_tier_testuser(graphql_overrides={"ReviewDepth": _RATE_LIMITED})
+
+    resp = await _get_analyze()
+
+    assert resp.status_code == 503
+    assert resp.json() == {"error": "service_busy"}
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_call_cap_reached_during_depth_enrichment_is_a_503(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.github.client import GitHubClient
+    from app.ingestion.profile import ingest_profile
+
+    _senior_tier_testuser()
+    # Measure what ingestion alone costs, then cap the analysis exactly there:
+    # ingestion completes and the first depth-enrichment call exceeds the cap.
+    async with GitHubClient(token="ghs_test") as gh:
+        await ingest_profile("testuser", gh)
+    ingest_calls = respx.calls.call_count
+    capped = Settings(github_token="ghs_test", gh_max_calls_per_analysis=ingest_calls)
+    monkeypatch.setattr(app_module, "settings", capped)
+    monkeypatch.setattr(dep_module, "settings", capped)
+
+    resp = await _get_analyze()
+
+    assert resp.status_code == 503
+    assert resp.json() == {"error": "analysis_too_large"}
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_whole_analysis_never_exceeds_the_concurrency_cap() -> None:
+    """Depth enrichment used to fan out outside the ingestion semaphore, up to
+    thirty requests at once. The cap lives in the client now, so ingestion and
+    scoring together stay under it."""
+    import asyncio
+
+    from app.github.client import GitHubClient
+    from app.ingestion.profile import ingest_profile
+    from app.scoring.engine import run_scoring_engine
+
+    _senior_tier_testuser()
+    current = peak = 0
+    queries: list[str] = []
+
+    async with GitHubClient(token="ghs_test", max_concurrency=4) as gh:
+        send = gh._client.request
+
+        async def tracked(*args: Any, **kwargs: Any) -> Any:
+            nonlocal current, peak
+            queries.append((kwargs.get("json") or {}).get("query", ""))
+            current += 1
+            peak = max(peak, current)
+            try:
+                await asyncio.sleep(0.005)
+                return await send(*args, **kwargs)
+            finally:
+                current -= 1
+
+        gh._client.request = tracked  # type: ignore[method-assign]
+        profile = await ingest_profile("testuser", gh)
+        await run_scoring_engine(profile, gh)
+
+    # Depth enrichment's own request was among those measured.
+    assert any("query ReviewDepth(" in q for q in queries)
+    assert 1 < peak <= 4
 
 
 @pytest.mark.asyncio
@@ -438,3 +549,109 @@ async def test_anonymous_analyze_does_not_persist(db, monkeypatch):
     assert r.status_code == 200
     count = await db.scalar(select(func.count()).select_from(Analysis))
     assert count == 0
+
+
+def _fixed_report(generated_at: datetime) -> Any:
+    from app.models import Report, ScoreBreakdown, ScoreResult, TierInfo
+
+    return Report(
+        username="octocat",
+        tier=TierInfo(name="Senior Engineer", sub_rank=50, band=(65, 80)),
+        badges=[],
+        breakdown=ScoreBreakdown(
+            repo_quality=ScoreResult(points=20, max_points=30),
+            engineering_maturity=ScoreResult(points=10, max_points=20),
+            oss_collab=ScoreResult(points=10, max_points=15),
+            consistency=ScoreResult(points=5, max_points=10),
+            recruiter_signal=ScoreResult(points=15, max_points=15),
+            learning_trajectory=ScoreResult(points=10, max_points=10),
+        ),
+        total=70,
+        generated_at=generated_at,
+    )
+
+
+async def _signed_in_analyze(db, monkeypatch, reports: list[Any], *, delay: float = 0.0) -> Any:
+    """GET /analyze/octocat once per report as a signed-in user; return the user."""
+    import asyncio
+    import base64
+    import secrets
+
+    from app.auth.sessions import create_session
+    from app.db.models import User
+    from app.db.session import get_db
+
+    monkeypatch.setenv(
+        "SESSION_TOKEN_ENC_KEY", base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()
+    )
+    user = User(github_id=5, github_login="me")
+    db.add(user)
+    await db.flush()
+    sid = await create_session(db, user_id=user.id, github_access_token="t", ttl_days=30)
+    await db.commit()
+
+    queue = list(reports)
+
+    async def _report() -> Any:
+        await asyncio.sleep(delay)
+        return queue.pop(0)
+
+    async def _db() -> Any:
+        yield db
+
+    app_module.app.dependency_overrides[dep_module.get_report_for_user] = _report
+    app_module.app.dependency_overrides[get_db] = _db
+    try:
+        transport = ASGITransport(app=app_module.app)
+        async with AsyncClient(transport=transport, base_url="http://t") as client:
+            client.cookies.set("si_session", sid)
+            for _ in reports:
+                assert (await client.get("/analyze/octocat")).status_code == 200
+    finally:
+        app_module.app.dependency_overrides.clear()
+    return user
+
+
+async def _runs(db) -> list[Any]:
+    from sqlalchemy import select
+
+    from app.db.models import AnalysisRun
+
+    db.expunge_all()
+    return list((await db.scalars(select(AnalysisRun))).all())
+
+
+@pytest.mark.asyncio
+async def test_viewing_the_same_report_again_records_no_new_run(db, monkeypatch) -> None:
+    """A cached report re-served on every page view is the same run. Each view
+    used to store another copy of the full report JSON."""
+    report = _fixed_report(datetime(2026, 10, 1, tzinfo=UTC))
+    await _signed_in_analyze(db, monkeypatch, [report, report, report])
+
+    assert len(await _runs(db)) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_newly_scored_report_records_a_new_run(db, monkeypatch) -> None:
+    await _signed_in_analyze(
+        db,
+        monkeypatch,
+        [
+            _fixed_report(datetime(2026, 10, 1, tzinfo=UTC)),
+            _fixed_report(datetime(2026, 10, 2, tzinfo=UTC)),
+        ],
+    )
+
+    assert len(await _runs(db)) == 2
+
+
+@pytest.mark.asyncio
+async def test_recorded_latency_covers_producing_the_report(db, monkeypatch) -> None:
+    """The clock started after the report dependency had already run, so every
+    recorded latency was about 0ms."""
+    await _signed_in_analyze(
+        db, monkeypatch, [_fixed_report(datetime(2026, 10, 1, tzinfo=UTC))], delay=0.15
+    )
+
+    (run,) = await _runs(db)
+    assert run.ingestion_latency_ms >= 150

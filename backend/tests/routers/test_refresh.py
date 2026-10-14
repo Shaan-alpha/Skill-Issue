@@ -283,3 +283,40 @@ async def test_refresh_stays_capped_while_redis_errors(db, monkeypatch):
 
     assert statuses[:10] == [200] * 10
     assert statuses[10] == 429
+
+
+async def test_refresh_holds_no_transaction_during_the_analysis(db, monkeypatch):
+    """A forced refresh spends seconds on GitHub. A transaction left open by the
+    saved-analysis lookup held a pooled connection idle the whole time."""
+    sid = await _setup_signed_in(db, monkeypatch)
+    u = await db.scalar(select(User).where(User.github_login == "alice"))
+    assert u is not None
+    await upsert_analysis(db, user_id=u.id, target_login="octocat")
+    await db.commit()
+
+    from app.db.session import get_db
+    from app.main import app
+
+    async def _o():
+        yield db
+
+    app.dependency_overrides[get_db] = _o
+    in_transaction_during_analysis: list[bool] = []
+    stub = _stub_report()
+
+    async def _fake_get_report_for_user(username, session=None):
+        in_transaction_during_analysis.append(db.in_transaction())
+        return stub
+
+    monkeypatch.setattr(
+        "app.routers.refresh.get_fresh_report_for_user", _fake_get_report_for_user, raising=False
+    )
+
+    try:
+        async with await _client() as ac:
+            ac.cookies.set("si_session", sid)
+            r = await ac.post("/me/refresh/octocat")
+        assert r.status_code == 200, r.text
+        assert in_transaction_during_analysis == [False]
+    finally:
+        app.dependency_overrides.clear()

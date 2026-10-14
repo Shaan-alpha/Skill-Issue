@@ -140,3 +140,28 @@ async def test_reasoning_effort_omitted_for_non_reasoning_models() -> None:
     )
     [t async for t in llm.stream_chat([], reasoning_effort="low")]
     assert "reasoning_effort" not in completions.last_kwargs
+
+
+async def test_completion_budget_is_sent_as_max_completion_tokens() -> None:
+    """Groq deprecates `max_tokens` in favour of `max_completion_tokens`, and
+    OpenAI accepts the new name for every chat model."""
+    llm, completions = _client_with(
+        [_FakeChunk([_FakeChoice(content="x", finish_reason="stop")])],
+        model="openai/gpt-oss-120b",
+    )
+    [t async for t in llm.stream_chat([], max_output_tokens=900)]
+
+    assert completions.last_kwargs["max_completion_tokens"] == 900
+    assert "max_tokens" not in completions.last_kwargs
+
+
+def test_a_hung_provider_cannot_hold_the_stream_for_minutes() -> None:
+    """The SDK defaults are a 600s timeout and two retries: a provider that
+    accepts the connection and goes quiet held the SSE stream, and the function
+    serving it, for up to half an hour."""
+    llm = NarrativeLLM(api_key="sk-test", model="openai/gpt-oss-120b")
+
+    timeout = llm._client.timeout
+    assert timeout.read <= 30
+    assert timeout.connect <= 10
+    assert llm._client.max_retries <= 1

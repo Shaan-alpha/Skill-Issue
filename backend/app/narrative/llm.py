@@ -2,12 +2,20 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
 
+import httpx
 from openai import AsyncOpenAI
 
 # Models that draw their reasoning from the same completion budget as the
 # visible answer, and that accept `reasoning_effort`. The parameter is gated on
 # the model name because the OpenAI default path (gpt-4o) rejects it with a 400.
 _REASONING_MODEL_MARKERS = ("gpt-oss",)
+
+# The SDK default is a 600s timeout with two retries, so a provider that took
+# the connection and went quiet held the SSE stream, and the function serving
+# it, for up to half an hour. A streamed token arrives well inside 30s on a
+# healthy provider; the read timeout applies between chunks.
+_PROVIDER_TIMEOUT = httpx.Timeout(30.0, connect=5.0)
+_PROVIDER_MAX_RETRIES = 1
 
 
 def supports_reasoning_effort(model: str) -> bool:
@@ -42,7 +50,12 @@ class NarrativeLLM:
     """
 
     def __init__(self, *, api_key: str, model: str, base_url: str | None = None) -> None:
-        self._client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+        self._client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            timeout=_PROVIDER_TIMEOUT,
+            max_retries=_PROVIDER_MAX_RETRIES,
+        )
         self._model = model
 
     async def stream_chat(
@@ -58,7 +71,9 @@ class NarrativeLLM:
             "model": self._model,
             "messages": messages,
             "stream": True,
-            "max_tokens": max_output_tokens,
+            # Not `max_tokens`: Groq deprecates it, and OpenAI accepts
+            # `max_completion_tokens` for every chat model.
+            "max_completion_tokens": max_output_tokens,
             "temperature": temperature,
         }
         if reasoning_effort is not None and supports_reasoning_effort(self._model):

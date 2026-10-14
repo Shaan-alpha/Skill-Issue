@@ -11,6 +11,7 @@ import logging
 from typing import Any
 
 import sentry_sdk
+from sentry_sdk.integrations import DidNotEnable, Integration
 from sentry_sdk.integrations.asyncpg import AsyncPGIntegration
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.httpx import HttpxIntegration
@@ -80,6 +81,24 @@ def scrub_event(event: dict[str, Any], _hint: dict[str, Any]) -> dict[str, Any]:
     return event
 
 
+def _disabled_integrations() -> list[Integration]:
+    """Sentry's OpenAI integration, which is auto-enabled because openai is
+    installed. It reports every provider failure as unhandled, though the
+    narrator falls back, and the dedupe integration then drops the
+    fingerprinted event the narrative-outage alert matches. Provider calls
+    still show up as httpx spans.
+
+    Imported here, defensively: it raises at import when openai is missing or
+    reorganised, and telemetry must never stop the app from starting. Then
+    there is nothing to turn off.
+    """
+    try:
+        from sentry_sdk.integrations.openai import OpenAIIntegration
+    except (ImportError, DidNotEnable):
+        return []
+    return [OpenAIIntegration()]
+
+
 def init_sentry(
     *,
     dsn: str | None,
@@ -114,4 +133,5 @@ def init_sentry(
             HttpxIntegration(),
             LoggingIntegration(level=logging.INFO, event_level=logging.ERROR),
         ],
+        disabled_integrations=_disabled_integrations(),
     )

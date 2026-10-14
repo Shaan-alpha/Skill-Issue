@@ -971,7 +971,7 @@ fastapi = [
 
 [[package]]
 name = "skill-issue-backend"
-version = "1.0.13"
+version = "1.0.14"
 source = { virtual = "." }
 dependencies = [
     { name = "alembic" },

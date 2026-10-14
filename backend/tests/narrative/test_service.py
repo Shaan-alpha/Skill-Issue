@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime
 from unittest.mock import patch
 
@@ -394,3 +395,28 @@ async def test_healthy_stream_reports_no_fallback() -> None:
             pass
 
     assert report.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_an_upstream_failure_becomes_exactly_one_sentry_event(caplog) -> None:
+    """Sentry's logging integration files every ERROR record as an event of its
+    own (event_level=ERROR in app/observability/sentry.py). A fallback that also
+    logged at ERROR raised two or three issues beside the one the fingerprinted
+    alert exists for. It is reported once, carrying the provider's exception."""
+    svc = NarrativeService(cache=NarrativeCache(), budget=DailyBudget(limit=10), llm=_BoomLLM())
+
+    with (
+        caplog.at_level(logging.INFO),
+        patch("app.observability.narrative_health.sentry_sdk") as sdk,
+    ):
+        async for _ in svc.stream_narrative("roast", _report()):
+            pass
+
+    assert sdk.capture_exception.call_count + sdk.capture_message.call_count == 1
+    (error,) = sdk.capture_exception.call_args.args
+    assert str(error) == "provider 502"
+    assert sdk.capture_exception.call_args.kwargs["fingerprint"] == ["narrative-fallback", "error"]
+    app_errors = [
+        r for r in caplog.records if r.levelno >= logging.ERROR and r.name.startswith("app.")
+    ]
+    assert app_errors == []

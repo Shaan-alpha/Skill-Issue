@@ -66,10 +66,16 @@ async def optional_session(
     if si_session is None:
         return None
     resolved = await get_session_with_token(db, si_session)
+    if resolved is not None:
+        await touch_session(db, si_session)
+    # End the transaction the lookup opened, whether or not the cookie
+    # resolved. The analysis that follows spends seconds on GitHub; an open
+    # transaction would hold its pooled connection idle all that time. Loaded
+    # objects stay usable (expire_on_commit=False).
+    await db.commit()
     if resolved is None:
         return None
     user, token = resolved
-    await touch_session(db, si_session)
     return _ResolvedSession(user=user, access_token=token, session_id=si_session)
 
 

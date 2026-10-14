@@ -1,9 +1,11 @@
 "use client";
 
+import { Collapsible } from "@base-ui/react/collapsible";
 import { m } from "framer-motion";
 import { useEffect, useRef } from "react";
 import {
   ArrowLeft,
+  ChevronDown,
   ExternalLink,
   Award,
   Terminal,
@@ -83,6 +85,50 @@ interface ScoreCardProps {
   delay: number;
 }
 
+// Every point is backed by evidence; this is where a reader sees it. Rows
+// that earned points carry their weight, context rows (weight 0) carry none.
+function EvidenceList({ title, result }: { title: string; result: ScoreResult }) {
+  const { points, max_points, evidence } = result;
+  return (
+    <Collapsible.Root className="border-t border-white/5 pt-1">
+      <Collapsible.Trigger className="group -mx-1 flex min-h-11 w-[calc(100%+0.5rem)] items-center justify-between gap-2 rounded-md px-1 text-left text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
+        <span>
+          Why {points} of {max_points}
+          <span className="sr-only"> points in {title}</span>
+        </span>
+        <ChevronDown
+          className="h-3.5 w-3.5 shrink-0 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-data-[panel-open]:rotate-180"
+          aria-hidden="true"
+        />
+      </Collapsible.Trigger>
+      <Collapsible.Panel className="h-[var(--collapsible-panel-height)] overflow-hidden transition-[height] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] data-[ending-style]:h-0 data-[starting-style]:h-0">
+        <ul className="space-y-2 pb-1 pt-1">
+          {evidence.length === 0 ? (
+            <li className="text-xs leading-relaxed text-muted-foreground">
+              Nothing in this bucket has earned points yet.
+            </li>
+          ) : (
+            evidence.map((row) => (
+              <li key={row.signal} className="flex items-start gap-2.5 text-xs leading-relaxed">
+                {row.weight > 0 ? (
+                  <span className="mt-px min-w-8 shrink-0 rounded-full bg-accent/10 px-1.5 py-px text-center font-mono text-[11px] tabular-nums text-accent">
+                    +{row.weight}
+                  </span>
+                ) : (
+                  <span className="flex min-w-8 shrink-0 justify-center pt-2" aria-hidden="true">
+                    <span className="h-1 w-1 rounded-full bg-white/25" />
+                  </span>
+                )}
+                <span className="min-w-0 break-words text-muted-foreground">{row.detail}</span>
+              </li>
+            ))
+          )}
+        </ul>
+      </Collapsible.Panel>
+    </Collapsible.Root>
+  );
+}
+
 function ScoreItem({ title, result, icon, description, delay }: ScoreCardProps) {
   const { points, max_points } = result;
   return (
@@ -108,7 +154,12 @@ function ScoreItem({ title, result, icon, description, delay }: ScoreCardProps) 
               {title}: {points} of {max_points} points
             </ProgressLabel>
           </Progress>
-          <p className="text-xs text-muted-foreground leading-relaxed">{description}</p>
+          {/* Two lines reserved, so every card's "Why" row lines up across a
+              grid row even where a description fits on one line. */}
+          <p className="min-h-[2lh] text-xs leading-relaxed text-muted-foreground">
+            {description}
+          </p>
+          <EvidenceList title={title} result={result} />
         </CardContent>
       </Card>
     </m.div>
@@ -180,13 +231,13 @@ export function ResultsView({
       name: "Recruiter Signal",
       result: breakdown.recruiter_signal,
       icon: <Target />,
-      desc: "What a hiring manager sees in eight seconds: bio, pin, stars, links.",
+      desc: "What a hiring manager sees first: profile README, pins, bio, links, stars.",
     },
     {
       name: "Learning Trajectory",
       result: breakdown.learning_trajectory,
       icon: <Award />,
-      desc: "Are you levelling up? New stacks, bigger projects, year over year.",
+      desc: "Staying power: account age, new projects this year, activity year over year.",
     },
   ];
 

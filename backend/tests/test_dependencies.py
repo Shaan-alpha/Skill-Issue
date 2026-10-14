@@ -20,6 +20,7 @@ async def test_uses_session_token_when_session_present(monkeypatch):
             cache=None,
             max_retries: int = 3,
             max_calls=None,
+            max_concurrency=None,
             is_shared_token=False,
             read_cache=True,
         ):
@@ -61,6 +62,7 @@ async def test_falls_back_to_project_token_when_no_session(monkeypatch):
             cache=None,
             max_retries: int = 3,
             max_calls=None,
+            max_concurrency=None,
             is_shared_token=False,
             read_cache=True,
         ):
@@ -72,15 +74,12 @@ async def test_falls_back_to_project_token_when_no_session(monkeypatch):
         async def __aexit__(self, *_):
             return None
 
-    monkeypatch.setenv("GITHUB_TOKEN", "project-token")
-    # Reload settings so it sees the env var.
-    from importlib import reload
-
+    # Patch the settings object dependencies.py holds rather than reloading
+    # modules, which re-created their classes and functions for later tests.
     import app.dependencies as deps_mod
-    from app import settings as settings_mod
+    from app.settings import Settings
 
-    reload(settings_mod)
-    reload(deps_mod)
+    monkeypatch.setattr(deps_mod, "settings", Settings(github_token="project-token"))
 
     monkeypatch.setattr(deps_mod, "GitHubClient", FakeClient)
     monkeypatch.setattr(deps_mod, "ingest_profile", AsyncMock(return_value=MagicMock()))
@@ -105,6 +104,23 @@ async def test_call_cap_exceeded_maps_to_503(monkeypatch):
         await deps._live_ingest("octocat", None, cache=None)
     assert exc.value.status_code == 503
     assert exc.value.detail["error"] == "analysis_too_large"
+
+
+async def test_github_rate_limit_from_graphql_maps_to_503(monkeypatch):
+    from fastapi import HTTPException
+
+    import app.dependencies as deps
+    from app.github.client import GitHubRateLimited
+
+    async def _limited(username, gh):
+        raise GitHubRateLimited("GitHub GraphQL rate limit")
+
+    monkeypatch.setattr(deps, "ingest_profile", _limited)
+    monkeypatch.setattr(deps.settings, "github_token", "t", raising=False)
+    with pytest.raises(HTTPException) as exc:
+        await deps._live_ingest("octocat", None, cache=None)
+    assert exc.value.status_code == 503
+    assert exc.value.detail["error"] == "service_busy"
 
 
 async def test_ingest_deadline_maps_to_503(monkeypatch):

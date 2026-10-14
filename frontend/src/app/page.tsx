@@ -1,6 +1,8 @@
 "use client";
 
 import { m } from "framer-motion";
+import { Suspense } from "react";
+import { AuthNotice } from "@/components/auth-notice";
 import { SearchBar } from "@/components/search-bar";
 import { ExampleProfiles } from "@/components/landing/example-profiles";
 import { HowItWorks } from "@/components/landing/how-it-works";
@@ -77,6 +79,9 @@ export default function Home() {
       <ExampleProfiles />
       <HowItWorks />
       <StarCta />
+      <Suspense fallback={null}>
+        <AuthNotice />
+      </Suspense>
     </>
   );
 }

@@ -19,6 +19,147 @@ Format:
 
 ---
 
+## 2026-10-14 — Claude (Opus 5.5) with Shaan — v1.0.14 continued: two scoring denominators, review tail, docs drift
+
+**Slice:** v1.0.14, continuing the 2026-10-13 entry below. Working notes are still in the gitignored `.audit/2026-10-13-deep-audit.md`; every coverage box there is now checked.
+
+**Done:**
+- **Closed the review-2 tail test-first.**
+  - The end-to-end and cache mocks now use the `PinnedRepos` count and `ExternalPRs` search shapes the queries actually return.
+  - Commit-list and contribution windows are whole UTC days. Their microsecond bounds had given every request a new cache key: the cache never answered one, and each cost an Upstash write. Verified live that GitHub accepts the day-aligned bounds, including a `to` in the future.
+- **Fixed two scoring denominators, live-verified.**
+  - *Licence majority* checked only the top ten repos but divided by every non-fork repo, so past twenty repos it could not pass. Licences now come from the repo list's `license.spdx_id` for every repo (57 of 57 matched `/license` live), and the ten `/license` calls per Professional+ analysis are gone.
+  - *README majority* divided by every non-fork repo, though only the 20 root-listed repos are known, so past forty it could not pass. It is now judged on the inspected repos (`Repo.root_inspected`), and the evidence names that scope.
+  - Live totals, before these two fixes → after: Shaan-alpha 81 → 85, gaearon 63 → 73 (Professional → Senior), sindresorhus 77 → 87 (Senior → Staff), antfu 90 → 100, tj 56 → 62.
+- **The call cap fails the analysis inside fail-soft reads.** Review depth, contribution breadth and the two external-signal queries had swallowed `GitHubCallCapExceeded`, so an analysis at the cap finished degraded and stayed cached for six hours. This was latent (cap 150, worst case 69), and surfaced when the licence call stopped being the first depth request in the end-to-end test.
+- **History card (a11y).** It no longer nests its buttons inside its link: a stretched-link layout, with delete last in the tab order. Checked in Chrome at 1440/1024/768/390 on a throwaway route rendering `HistoryGrid`. It is pixel-identical to the old card, with the old markup confirmed rendered first; the buttons hit-test as themselves, the focus ring wraps the card, and real clicks behave.
+- **Docs drift corrected** in README, ARCHITECTURE, TECH_STACK and the `[1.0.14]` changelog:
+  - removed claims about issues ingestion and ETag requests that the code never made;
+  - the real schema replaces the v0.5.0 sketch;
+  - cache keys gain `v2:` and 409;
+  - PostHog identifies users by user id, and Sentry carries no user id;
+  - versions, the budget default and the domain updated.
+- **Remaining coverage:**
+  - dependencies: `pip-audit` clean; the shipped npm closure is clean, and every dev advisory comes through the `shadcn` CLI; the root's `@vercel/config` → `path-to-regexp` advisory is pinned upstream even in the latest version, but runs only at build time;
+  - production: `/health` ok, 0 unresolved Sentry issues in 14 days, 0 Vercel runtime errors in 7 days.
+- **Final review.** A small workflow read `ff72a46..HEAD`: two fresh-context reviewers, then one skeptic who tried to refute each finding. Of 8 findings, the skeptic confirmed 7, all minor, and refuted 1. Each was fixed test-first:
+  - GraphQL 200s without data, a REST-style rate-limit message or an empty body, were cached even though `graphql()` rejects them, so one bad answer replayed to every analysis of that user for 15 minutes. This was pre-existing: before the first review round they replayed as a crash.
+  - My day-aligned probe stopped at the start of the day a year ago, which the scorer counts as the year before. This was a regression from this session; the probe now runs to 23:59:59 of that day.
+  - The end-to-end concurrency test's tier assertion no longer proved depth enrichment ran. It now checks that the `ReviewDepth` query was sent.
+  - The licence and README evidence now names its sample when the 100-repo list is capped. sindresorhus has 1,144 repos, so "97/100" had read as his whole account.
+  - Four doc slips: a changelog heading that overclaimed, "a clear response", the uvicorn row, and a stale count in `frontend/README.md`.
+- **Verification:**
+  - backend 854 passed against a throwaway Postgres 18 cluster (no skips);
+  - frontend 125 passing, with tsc, lint and a production build;
+  - a live `/u/gaearon` render shows the new evidence, with no overflow at 390.
+
+**Decisions (mine; Shaan approved the score moves and the Dependabot order on 2026-10-14):**
+- The two denominator fixes are defect fixes, not weight changes: each rule's own evidence text promised a share of every repo.
+- B4 (a shared `httpx` client) and B5 (batching `/share/{slug}`'s queries) are not worth doing; the reasons are in PLAN.
+- The Dependabot PRs (#121–#125, all green) merge after this slice.
+
+**Learned / surprises:**
+- **When ingestion samples, a ratio rule must divide by the sample.** Both bugs had the same shape: data fetched for the top N repos, judged against all of them.
+- **The REST repo list already carries `license.spdx_id`**, so the per-repo `/license` request was redundant from the start.
+- **GitHub's default `contributionsCollection` window is the profile calendar's**, about 368 days and week-aligned in the viewer's time zone. Explicit bounds are honoured exactly, and a `to` in the future is accepted.
+- **Git Bash (MSYS) rewrites `gh api /repos/...` into a Windows path.** Drop the leading slash, or every call 404s.
+- **`pg_ctl start` from Git Bash never returns**, because the server inherits the shell's pipe. Run it in the background and poll `pg_isready`.
+- **A signed-out `/me` makes two session requests**, both from `useSession`'s `getSnapshot` during Activity reconnect, and production does the same. Deferred as O2: benign 401s, cause not yet found.
+
+**Blocked / open:**
+- Push the branch, open the PR, get CI green and merge; Shaan has approved the score moves.
+- A production smoke, then the `v1.0.14` tag, which is an operator checkpoint.
+
+**Next:** v1.0.15 toolchain majors.
+
+---
+
+## 2026-10-13 — Claude (Opus 5.5) with Shaan — v1.0.14: deep audit, scoring currency, parallel ingestion
+
+**Slice:** v1.0.14 (PLAN section of the same name). Working notes for the whole audit live in the gitignored `.audit/2026-10-13-deep-audit.md`, kept resumable in case the session hit the plan's usage limit.
+
+**Done:**
+- **Read the whole codebase inline** (backend, frontend, CI), then ran **one 3-agent research workflow** on the scoring heuristics and API currency (official docs per tool). Raw research and a digest are in `.audit/`.
+- **Every finding was proven by a failing test first.** DB-backed tests ran locally against a throwaway Postgres 18 cluster in the scratchpad, on port 54329 (see Learned for the port).
+- **Scoring corrections, live-verified:**
+  - external merged PRs now exclude the user's own repositories (Shaan-alpha 141 → 8, sindresorhus 2,242 → 1,072) and private ones (`is:public`, since the report cache is keyed by username alone);
+  - Consistency reads the last year only, with the gap from the window start counted; a single recent commit had been earning "low dry spell";
+  - a pinned repo with tests no longer earns "production ready".
+- **Detection currency:**
+  - CI requires real workflow files, via a batched GraphQL probe of `.github`/`.forgejo`/`.gitea` `workflows/` (verified live: 7 of Shaan-alpha's 20 inspected repos, 18 files); 13 more CI systems count;
+  - modern test and deployment markers;
+  - 36 more typed languages;
+  - a dependency-manifest list across ecosystems.
+- **Bottlenecks removed, measured live and uncached from this machine, identical scores:**
+  - ingestion now runs its independent reads concurrently: 20.0 s → 8.8 s for Shaan-alpha, 24.1 s → 14.3 s for sindresorhus, 21.7 s → 9.5 s for gaearon;
+  - depth tiers run concurrently: 16.9 s → 10.9 s for a Staff-tier analysis;
+  - the dead depth signals were rewired from ingestion's own data: 89 → 69 GitHub calls.
+- **Robustness:**
+  - rate limits fail with 503 `service_busy` instead of caching a low score for 6 h;
+  - an unavailable repo (DMCA'd or blocked) reads as absent instead of failing the analysis;
+  - 5xx errors get one retry;
+  - depth enrichment sits inside the error mapping;
+  - the in-flight bound moved into `GitHubClient`, so depth enrichment is capped too.
+- **Ops:**
+  - narrator timeout of 30 s with one retry, and `max_completion_tokens` (verified live on Groq);
+  - one Sentry event per narrative outage;
+  - server and edge Sentry events carry `release`;
+  - the session lookup commits before the ingest, freeing its pooled connection;
+  - `last_used_at` is written at most every 10 minutes;
+  - `/analyze` deduplicates runs and records real latency;
+  - report cache schema → v2.
+- **UI:**
+  - "Why N of M" evidence disclosure on every score card, verified in Chrome at 1440/1024/768/390/360 (no overflow, 44 px targets, rows inside cards, one baseline console entry);
+  - `?auth=failed`/`cancelled` notice;
+  - a history-card refresh now shows the new score.
+- **Merged PR #120** (Next 16.3.8, README fixes) and rebased the branch onto it.
+- **Review round.** A fresh-context reviewer read `1ec5817..3e0171b` and returned "with fixes": no Critical, four Important and ten Minor findings, each with a reproduction. All were fixed test-first:
+  - GraphQL rate limits (an HTTP 200 carrying `RATE_LIMITED`, or a secondary-limit 200/403) now raise `GitHubRateLimited`. The four fail-soft readers and the workflow probe let it through, `/analyze` maps it to 503, and errored GraphQL bodies are never cached;
+  - Sentry's auto-enabled OpenAI integration captured provider exceptions first, and dedupe then dropped our fingerprinted event, so the integration is disabled. A real client with an in-memory transport proves one fingerprinted event per outage;
+  - the 100-commit page cut-off no longer reads as a dry spell (`commit_history_complete_since`). A cut-off that hides the year before triggers one `per_page=1` look for a commit in it, which also fixed a pre-existing Learning Trajectory loss for very active developers;
+  - manifest evidence uses fixed labels (`*.csproj`, `Cargo.toml`), so no file name a repo owner chose reaches the narrator's prompt;
+  - minors: transactions end before slow analyses (stale cookie, `/me/refresh`); a 403 with `Retry-After` counts as a rate limit; `.env.test` is not a test suite; tool-written subjects match case-insensitively; `PinnedRepos` asks for `totalCount` only; `gather_all` moved to `app/concurrency.py`; the run dedupe selects one column; stale docs corrected;
+  - one pushback: "Fortran Free Form" and "Lean 4" need no entries, because GitHub reports a language's Linguist group (checked on fortran-lang/stdlib and leanprover-community/mathlib4).
+
+**Decisions (Shaan, via questions):**
+1. Wire the dead depth signals in at zero cost (evidence rows, no points).
+2. Rebalance Recruiter Signal, then approve option A from a live impact table: README 3 · pins 3 · bio 2 · website/hireable 2 · >50 stars 3 · recognition 2. Live results: Shaan-alpha 10 → 12, octocat 15 → 7, ThePrimeagen 15 → 10.
+3. Show evidence on every card.
+4. Merge #120 first.
+
+**Decisions (mine, recorded as rulings):**
+- This audit is v1.0.14 and the toolchain majors move to v1.0.15.
+- Weights change only where Shaan approved them; the other fixes correct detection or arithmetic.
+- Licence points stay Professional+-gated: licence data is now free via GraphQL, but awarding the points lower down is a product call.
+- No change to `recent_activity`'s use of `pushed_at`. A Dependabot push could refresh it, but no instance turned up in the sampled profiles, so there is no evidence to act on.
+
+**Learned / surprises:**
+- **`user.pullRequests(states: MERGED).totalCount` counts PRs into your own repositories.** The external count had been inflated since v0.1.0. The search qualifier `-user:X` fixes it at the same cost, and `is:public` makes it token-independent.
+- **v0.3.0's depth signals were half-built.** README depth, dependency files and commit-message quality were fetched on every Professional+/Senior+/Staff+ analysis (up to 20 calls) and read by nothing. Ingestion's own reads already held all three.
+- **The commit-quality heuristic inverted git's guidance**, counting 50+ characters as "good". It now uses git-commit(1)'s short, specific subject.
+- **Windows reserves dynamic TCP port ranges** (55378–55477 here; check `netsh interface ipv4 show excludedportrange protocol=tcp`). Binding 55432 failed with "Permission denied", which looks like a sandbox error and isn't one.
+- **Positional `side_effect=[...]` GraphQL mocks encode call order.** The e2e mock's labels had already drifted, with "REVIEW_DEPTH" being consumed by ExternalReviewCount, and parallelising would have broken them silently. `tests/graphql_router.py` routes by operation name now.
+- **`next dev` 16.3.8 regenerates the managed block in `frontend/AGENTS.md`** on every start, so it was committed to keep the tree clean.
+- **Pre-existing test-order dependence:** reloading `app.auth.oauth` in one test broke `pytest.raises` in another whenever the files ran in that order. Fixed by patching module-held settings instead of reloading.
+- **Sentry's dedupe drops a second capture of the same exception object.** Whichever integration captures first wins, here the auto-enabled OpenAI one, and unit tests that mock the SDK can't see it. Only a real client with an in-memory transport showed the lost event.
+- **GitHub's GraphQL API reports rate limits on an HTTP 200.** Status-based error handling and the response cache both treated them as success.
+- **`ruff format` rewrites a `.json` file passed to it explicitly**, as though it were a Python dict literal (four-space indent, trailing comma). Pass it `.py` paths only.
+
+**Blocked / open:**
+- PR to merge, then a prod smoke: `/health` 1.0.14, a live analysis showing the new evidence, the narrator streaming. The tag `v1.0.14` is an operator checkpoint.
+- Deferred, with reasons in PLAN:
+  - a per-token process-wide GitHub concurrency limit;
+  - the REST API 2026-03-10 migration (2022-11-28 is supported until 2028-03-10);
+  - nested buttons in history-card links (needs a signed-in visual check);
+  - a shared httpx client;
+  - batching `/share/{slug}`'s queries.
+- Still operator-side from v1.0.13: the Sentry alert rule and source-map upload.
+- For v1.0.15: Starlette's deprecation warning for its `httpx`-based test client (the one warning in the backend suite).
+
+**Next:** v1.0.15 toolchain majors (Dependabot #116–#119 already open), then a Python 3.13/3.14 slice and v1.1.0 Progress Pulse.
+
+---
+
 ## 2026-10-01 — Claude (Opus 5.5) with Shaan — v1.0.13 released
 
 **Slice:** v1.0.13 closeout.

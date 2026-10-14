@@ -29,6 +29,9 @@ async def force_refresh(
     analysis = await get_user_analysis_by_target(db, user_id=session.user.id, target_login=username)
     if analysis is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no_saved_analysis")
+    # End the lookup's transaction: the analysis below spends seconds on GitHub,
+    # and an open transaction would hold a pooled connection idle all that time.
+    await db.commit()
 
     now = datetime.now(UTC)
     allowed = await hourly_limit_allows(

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Cookie, HTTPException, Query, status
+from fastapi import APIRouter, Cookie, Query, status
 from fastapi.responses import RedirectResponse, Response
-from httpx import HTTPStatusError
+from httpx import HTTPError
 
 import app.auth.oauth as _oauth_mod
 from app.auth.oauth import build_authorize_url, generate_state_token
@@ -17,6 +18,14 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 _OAUTH_STATE_COOKIE = "si_oauth_state"
 _OAUTH_STATE_TTL_SECONDS = 600  # 10 min
+
+logger = logging.getLogger(__name__)
+
+
+def _back_to_site(outcome: str) -> RedirectResponse:
+    resp = RedirectResponse(f"/?auth={outcome}", status_code=302)
+    resp.delete_cookie(_OAUTH_STATE_COOKIE, path="/")
+    return resp
 
 
 @router.get("/login")
@@ -50,20 +59,24 @@ async def callback(
 ) -> RedirectResponse:
     # User cancelled the OAuth flow.
     if error == "access_denied":
-        resp = RedirectResponse("/?auth=cancelled", status_code=302)
-        resp.delete_cookie(_OAUTH_STATE_COOKIE, path="/")
-        return resp
+        return _back_to_site("cancelled")
 
-    if not code or not state:
-        raise HTTPException(status_code=400, detail={"error": "missing_code_or_state"})
+    # Every other failure lands back on the site too, never on a raw error
+    # page: GitHub's other `error=` values, a missing code, a state that
+    # doesn't match (CSRF, or a callback older than the 10-minute cookie), a
+    # code GitHub rejects as expired or reused, or GitHub being down.
+    if error or not code or not state:
+        logger.warning("auth.callback_failed reason=%s", error or "missing_code_or_state")
+        return _back_to_site("failed")
 
     # Use module-level lookup so that test reloads of app.auth.oauth don't
     # create a class-identity mismatch between the imported symbol and the
     # live module's class.
     try:
         _oauth_mod.verify_state_token(cookie=si_oauth_state, query=state)
-    except _oauth_mod.InvalidOAuthState as exc:
-        raise HTTPException(status_code=400, detail={"error": "invalid_state"}) from exc
+    except _oauth_mod.InvalidOAuthState:
+        logger.warning("auth.callback_failed reason=invalid_state")
+        return _back_to_site("failed")
 
     # Construct a fresh Settings instance so monkeypatched env vars are picked
     # up in tests (the module-level singleton is frozen at import time).
@@ -72,8 +85,10 @@ async def callback(
     try:
         access_token = await _oauth_mod.exchange_code_for_token(code)
         gh_user = await _oauth_mod.fetch_github_user(access_token)
-    except HTTPStatusError as exc:
-        raise HTTPException(status_code=502, detail={"error": "github_failure"}) from exc
+    except (HTTPError, RuntimeError) as exc:
+        # RuntimeError: GitHub answered 200 without a token (bad_verification_code).
+        logger.warning("auth.callback_failed reason=github error=%s", type(exc).__name__)
+        return _back_to_site("failed")
 
     user = await upsert_user_from_github_payload(db, gh_user)
     sid = await create_session(
