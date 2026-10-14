@@ -318,12 +318,14 @@ async def test_whole_analysis_never_exceeds_the_concurrency_cap() -> None:
 
     _senior_tier_testuser()
     current = peak = 0
+    queries: list[str] = []
 
     async with GitHubClient(token="ghs_test", max_concurrency=4) as gh:
         send = gh._client.request
 
         async def tracked(*args: Any, **kwargs: Any) -> Any:
             nonlocal current, peak
+            queries.append((kwargs.get("json") or {}).get("query", ""))
             current += 1
             peak = max(peak, current)
             try:
@@ -334,9 +336,10 @@ async def test_whole_analysis_never_exceeds_the_concurrency_cap() -> None:
 
         gh._client.request = tracked  # type: ignore[method-assign]
         profile = await ingest_profile("testuser", gh)
-        report = await run_scoring_engine(profile, gh)
+        await run_scoring_engine(profile, gh)
 
-    assert report.tier.name == "Senior Engineer"  # enrichment really ran
+    # Depth enrichment's own request was among those measured.
+    assert any("query ReviewDepth(" in q for q in queries)
     assert 1 < peak <= 4
 
 
