@@ -62,7 +62,7 @@
 | **v1.0.12** | Narrative output sweep — truncated/empty/markdown narratives, alertable fallback signal; + alembic logging bug, 72 DB tests enabled in CI (12 repaired), Next 16.3.2 | ✅ shipped |
 | **v1.0.13** | Audit remediation + dependency refresh — two critical Next.js advisories, commit-before-response, singleflight coalescing, fresh force refresh, cron classification, honest share/delete UI, structured logs; `requirements.txt` generated in CI | ✅ shipped |
 | **v1.0.14** | Deep audit — external-PR and consistency scoring corrected, CI/test/deploy/language detection brought up to date, Recruiter Signal rebalanced, licence and README checks fixed for large portfolios, evidence on every score card, parallel ingestion (cold analyses ~2x faster), rate limits fail loudly | ✅ shipped |
-| **v1.0.15** | Commit activity from contribution data — public commit days across every repository; repos inspected by push recency | 🔄 in PR |
+| **v1.0.15** | Commit activity from contribution data — public commit days across every repository; repos inspected by push recency | ✅ shipped |
 | **v1.0.16** | Toolchain majors — TypeScript 6, Vitest 5, jest-dom 7, Sentry SDK 11, framer-motion 13, openai 3, SQLAlchemy 2.1, each proven alone | 📋 proposed |
 
 ---
@@ -1106,8 +1106,8 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 - [x] Live before/after table in the spec, approved by Shaan before merge (2026-10-14).
 - [x] Evidence wording checked in Chrome at 1440/1024/768/390.
 - [x] Fresh-context review: "With fixes"; three findings fixed, then the six minors, each test-first, at Shaan's request (spec §9).
-- [ ] PR checks green and merged. Prod smoke: `/health` 1.0.15, a live analysis shows commit days across public repositories, the narrator streams.
-- [ ] `CHANGELOG.md` `[1.0.15]`; tag `v1.0.15`; GitHub Release published.
+- [x] PR checks green and merged (#129 as `598adf7`); prod smoke: `/health` 1.0.15, live analyses show commit days across public repositories (gaearon 76, torvalds 73, matching §6), the narrator streams.
+- [x] `CHANGELOG.md` `[1.0.15]`; tag `v1.0.15`; GitHub Release published.
 
 ---
 
