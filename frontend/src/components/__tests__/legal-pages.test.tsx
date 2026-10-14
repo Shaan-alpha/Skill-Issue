@@ -18,6 +18,12 @@ describe("legal pages", () => {
     expect(screen.getByText(/analytics cookie/i)).toBeInTheDocument();
   });
 
+  // The page's Changes section promises the date reflects the latest version.
+  it("privacy page dates its v1.0.16 revision", () => {
+    render(<PrivacyPage />);
+    expect(screen.getByText(/Last updated 2026-10-14/)).toBeInTheDocument();
+  });
+
   it("terms page shows its heading and the governing law", () => {
     render(<TermsPage />);
     expect(

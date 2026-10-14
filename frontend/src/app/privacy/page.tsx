@@ -10,7 +10,7 @@ const EMAIL = "shaansatsangi.cse@gmail.com";
 
 export default function PrivacyPage() {
   return (
-    <LegalProse title="Privacy Policy" lastUpdated="2026-05-28">
+    <LegalProse title="Privacy Policy" lastUpdated="2026-10-14">
       <p>
         Skill Issue is operated by Shaan Satsangi (&ldquo;we&rdquo;). This policy explains, in plain
         language, what we collect, why, and the choices you have. We collect as little as we need to
