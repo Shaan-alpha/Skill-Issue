@@ -61,7 +61,7 @@
 | **v1.0.11** | Cache Components navigation-state sweep — roast duplication, `/me` staleness, analytics double-count, badge a11y, session snapshot; + fixture time-bomb and backend version-drift guards | ✅ shipped |
 | **v1.0.12** | Narrative output sweep — truncated/empty/markdown narratives, alertable fallback signal; + alembic logging bug, 72 DB tests enabled in CI (12 repaired), Next 16.3.2 | ✅ shipped |
 | **v1.0.13** | Audit remediation + dependency refresh — two critical Next.js advisories, commit-before-response, singleflight coalescing, fresh force refresh, cron classification, honest share/delete UI, structured logs; `requirements.txt` generated in CI | ✅ shipped |
-| **v1.0.14** | Deep audit — external-PR and consistency scoring corrected, CI/test/deploy/language detection brought up to date, Recruiter Signal rebalanced, evidence on every score card, parallel ingestion (cold analyses ~2x faster), rate limits fail loudly | 🔄 in PR |
+| **v1.0.14** | Deep audit — external-PR and consistency scoring corrected, CI/test/deploy/language detection brought up to date, Recruiter Signal rebalanced, licence and README checks fixed for large portfolios, evidence on every score card, parallel ingestion (cold analyses ~2x faster), rate limits fail loudly | ✅ shipped |
 | **v1.0.15** | Toolchain majors — TypeScript 6, Vitest 5, jest-dom 7, Sentry SDK 11, framer-motion 13, openai 3, SQLAlchemy 2.1, each proven alone | 📋 proposed |
 
 ---
@@ -1082,8 +1082,8 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 - [x] Backend: ruff clean; full suite green against a real Postgres (854 after session 2 and its review).
 - [x] Frontend: lint, tsc, vitest (125) and a production build pass; UI verified in Chrome at five widths.
 - [x] All version constants at `1.0.14`; report cache schema bumped so pre-fix reports are not served.
-- [ ] PR checks green and merged; prod smoke: `/health` 1.0.14, a live analysis shows the new evidence, the narrator streams.
-- [ ] `CHANGELOG.md` `[1.0.14]`; tag `v1.0.14`; GitHub Release published.
+- [x] PR checks green and merged (#126 as `a6d5674`); prod smoke: `/health` 1.0.14, a live analysis shows the new evidence, the narrator streams.
+- [x] `CHANGELOG.md` `[1.0.14]`; tag `v1.0.14`; GitHub Release published.
 
 ---
 
