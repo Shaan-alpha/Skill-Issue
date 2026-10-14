@@ -40,7 +40,10 @@ updates:
       backend-minor-patch:
         update-types: ["minor", "patch"]
     ignore:
-      # Majors evaluated by hand in v1.0.16; pyproject bounds them (<3, <2.1).
+      # Majors evaluated by hand in v1.0.18; pyproject bounds them
+      # (openai <3, sqlalchemy <2.1, sentry-sdk <3: its 3.x defaults collect PII).
+      - dependency-name: "sentry-sdk"
+        update-types: ["version-update:semver-major"]
       - dependency-name: "openai"
         update-types: ["version-update:semver-major"]
       - dependency-name: "sqlalchemy"
