@@ -19,6 +19,35 @@ Format:
 
 ---
 
+## 2026-10-14 — Claude (Opus 5.5) with Shaan — v1.0.14 released
+
+**Slice:** v1.0.14 closeout.
+
+**Done:**
+- **Merged and deployed.** PR #126 merged as `a6d5674`, with all five checks green. No preview deployment was built (previews are off), so no v2 report reached the cache before production did.
+- **Production verified:**
+  - `/health` returns `{"status":"ok","version":"1.0.14","db":"up","cache":"up"}`, about 80 s after the merge.
+  - A live `/analyze/gaearon` returned 73, Senior, matching the local run, with the new evidence: "95% of the 20 most recently updated non-fork repos have READMEs" and "22/43 of the most recently updated non-fork repos carry a recognised SPDX license". It took 5.4 s cold and 0.48 s warm.
+  - A live roast streamed from Groq: 223 chunks, ended by the done sentinel, not truncated, with no fallback text.
+  - `/u/gaearon` and `/` return 200, and the security headers are unchanged.
+  - 0 Vercel runtime errors and 0 unresolved Sentry issues after the deploy.
+- **Released:** tagged `v1.0.14` on `a6d5674`, and `release.yml` published the GitHub Release from `CHANGELOG [1.0.14]`.
+
+**Decisions (Shaan, 2026-10-14):**
+- The five open Dependabot PRs (#121–#125) land as one hand-made deps PR that syncs TECH_STACK, as `af98820` and `d4a99e3` did, and are then closed as superseded.
+- S18 becomes a scoring slice, planned properly (brainstorm, spec, plan) before any score changes. S18: Consistency only sees commits on the default branch of the user's own ten sampled repos, so org work is invisible. gaearon scores 0/10 with 2,860 external merged PRs. Re-ordering the sample from `updated` to `pushed` was measured and has mixed effects (sindresorhus +3, tj +4, Shaan-alpha −3), so it was not hotfixed.
+
+**Learned / surprises:**
+- **GitHub moves a repo's `updated_at` when it gains stars.** gaearon's ten "most recently updated" repos were all last pushed between 2015 and 2019, and all showed yesterday as their update date.
+
+**Blocked / open:**
+- O2: a signed-out `/me` makes two session requests, in production too. Benign, deferred.
+- Operator items carried over: the Sentry alert rule and source-map upload.
+
+**Next:** the deps PR, then the S18 scoring slice (brainstorm first), then v1.0.15 toolchain majors.
+
+---
+
 ## 2026-10-14 — Claude (Opus 5.5) with Shaan — v1.0.14 continued: two scoring denominators, review tail, docs drift
 
 **Slice:** v1.0.14, continuing the 2026-10-13 entry below. Working notes are still in the gitignored `.audit/2026-10-13-deep-audit.md`; every coverage box there is now checked.
