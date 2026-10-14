@@ -16,11 +16,15 @@ updates:
       - dependency-name: "eslint"
         update-types: ["version-update:semver-major"]
       # Blocked upstream: typescript-eslint supports typescript <6.1.
-      # TypeScript majors are evaluated by hand (v1.0.16).
+      # TypeScript majors are evaluated by hand (v1.0.17).
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
       # Tracks the Node runtime (24.x). Bump together with the runtime.
       - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      # Sentry 11 changes data collection and streams spans past
+      # beforeSendTransaction; it lands with its privacy checks in v1.0.18.
+      - dependency-name: "@sentry/nextjs"
         update-types: ["version-update:semver-major"]
 
   # Repo-root tooling (@vercel/config, typescript).

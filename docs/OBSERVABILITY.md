@@ -193,7 +193,7 @@ replay:
 
 ## PII contract
 
-No cookie, session id, token, app secret, IP address, geolocation header, OAuth value or request body may reach Sentry, from errors or transactions. PostHog stores no IP address and records no sessions. Since v1.0.16 this is enforced in both apps, tested end to end, and backed by provider settings.
+No cookie, session id, token, app secret, IP address, geolocation header, OAuth value or request body may reach Sentry, from errors or transactions. Since v1.0.16 that is enforced in both apps and tested end to end, with Sentry's own scrubbing settings as a backstop. PostHog records no sessions (disabled in code) and stores no IP address; posthog-js has no client-side switch for the IP, so that rests on the project's **Discard client IP data** setting.
 
 **The contract** (identical lists in [`backend/app/observability/sentry.py`](../backend/app/observability/sentry.py) and [`frontend/src/observability/scrub.ts`](../frontend/src/observability/scrub.ts); `backend/tests/observability/test_scrub_drift.py` fails if they diverge):
 

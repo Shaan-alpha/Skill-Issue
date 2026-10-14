@@ -16,8 +16,8 @@ A privacy release. Error and performance reports sent to Sentry could carry more
 
 ### Security
 - **Sentry receives no cookies, tokens, secrets, IP addresses, location headers, OAuth values or request bodies,** from errors or from performance traces. Both apps share one contract: a short allow-list of request headers, sensitive query values replaced with `[Filtered]`, no variable values from stack frames, and no request bodies. Tests send fake secrets through the real app and check that none arrives.
-- **Signed-in sessions were reset** after the fix went live, and the app's internal secrets and GitHub token were rotated, so anything captured before the fix no longer works. Sign in again to continue.
-- **Database errors no longer include the values they were working with.**
+- **This release resets every signed-in session** and rotates the app's internal secrets and GitHub token, so anything captured before the fix stops working. You will need to sign in again.
+- **Database errors no longer include the parameters bound to the failing statement.**
 
 ### Changed
 - **PostHog stores no IP address** and records no sessions; the privacy page now lists its analytics cookie.

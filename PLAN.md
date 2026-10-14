@@ -1152,6 +1152,7 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 - **openai 3:** the transport becomes httpx2. That means an `httpx2.Timeout`, a rewritten outage test (respx can't see httpx2), the `httpx2`/`httpcore2` log filters, and a TLS check on Linux.
 - **SQLAlchemy 2.1:** no code change, but CI never goes through Neon's pooler, so prove it against a Neon branch.
 - **Previews:** they are off for every branch, so plan a one-off preview or a Neon-branch run first.
+- **Partial Prefetching** (not a dependency, carried from the old v1.0.16 note): Next 16.4 asks Cache Components apps to choose, and the app sets `partialPrefetching: false`. Next 17 will force it on, so adopt it in its own slice before then: opt routes in one at a time with `export const prefetch = 'partial'`, clear the dev-overlay instant-navigation insights, and check back/forward in Chrome on `next build && next start`, since prefetching doesn't run in `next dev`.
 
 ---
 
