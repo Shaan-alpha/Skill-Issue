@@ -115,15 +115,15 @@ def _mock_github_for_testuser(
     respx.post("https://api.github.com/graphql").mock(
         side_effect=graphql_router(
             {
-                "PinnedRepos": {"data": {"user": {"pinnedItems": {"nodes": []}}}},
+                "PinnedRepos": {"data": {"user": {"pinnedItems": {"totalCount": 0}}}},
                 "ExternalPRs": {
                     "data": {
                         "user": {
                             "hasSponsorsListing": False,
                             "isGitHubStar": False,
                             "isDeveloperProgramMember": False,
-                            "pullRequests": {"totalCount": 0, "nodes": []},
-                        }
+                        },
+                        "search": {"issueCount": 0, "nodes": []},
                     }
                 },
                 "ExternalReviewCount": {

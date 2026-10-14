@@ -1100,7 +1100,7 @@ class FakeGitHubClient:
         async with self._call(f"graphql:{operation}"):
             return {
                 "user": {
-                    "pinnedItems": {"nodes": []},
+                    "pinnedItems": {"totalCount": 0},
                     "hasSponsorsListing": False,
                     "isGitHubStar": False,
                     "isDeveloperProgramMember": False,
