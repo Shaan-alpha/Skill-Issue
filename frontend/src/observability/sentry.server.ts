@@ -1,6 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
 import { APP_VERSION } from "@/lib/site";
-import { scrubEvent } from "./scrub";
+import { SENTRY_DATA_COLLECTION, scrubEvent } from "./scrub";
 
 const dsn = process.env.SENTRY_DSN;
 
@@ -12,7 +12,15 @@ if (dsn) {
     // Ties server events to a release, as the browser's and backend's are.
     release: APP_VERSION,
     tracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE ?? 0.1),
-    sendDefaultPii: false,
+    // The privacy contract (scrub.ts): collected at the source, then
+    // scrubbed on every error and transaction.
+    dataCollection: SENTRY_DATA_COLLECTION,
     beforeSend: scrubEvent,
+    beforeSendTransaction: scrubEvent,
+    // Replaces the Next.js init's default Http integration (same name) to
+    // stop it capturing incoming request bodies; httpBodies doesn't in 10.x.
+    integrations: [
+      Sentry.httpIntegration({ disableIncomingRequestSpans: true, maxIncomingRequestBodySize: "none" }),
+    ],
   });
 }
