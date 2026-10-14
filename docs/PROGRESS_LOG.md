@@ -19,6 +19,62 @@ Format:
 
 ---
 
+## 2026-10-14 — Claude (Opus 5.5) with Shaan — v1.0.15: commit activity from GitHub's contribution data
+
+**Slice:** v1.0.15, with spec [`2026-10-14-v1.0.15-commit-activity-design.md`](./superpowers/specs/2026-10-14-v1.0.15-commit-activity-design.md) and plan [`2026-10-14-v1.0.15-commit-activity.md`](./superpowers/plans/2026-10-14-v1.0.15-commit-activity.md). It fixes S18 from the v1.0.14 audit.
+
+**Done:**
+- **Process:** brainstorm (four questions, four design sections approved), then the written spec (approved), then an 8-task plan executed inline, test-first.
+- **A new `app/ingestion/activity.py` owns commit activity.**
+  - One GraphQL query (`CommitActivity`, cost 1) reads two windows of whole UTC days: the last year, and the year before. Only public repositories count.
+  - A cut-off page of 100 days maps onto `commit_history_complete_since`, so the existing truncation-aware Consistency rules apply unchanged.
+  - When GitHub can't answer the query (not a rate limit), commit days come from a 5-repo REST commit sample, and Consistency adds a weight-0 note saying so.
+- **Ingestion** reads root listings, languages and the commit sample from the most recently *pushed* repos, within the update-ordered list. It no longer makes the ten REST commit lists or the older-commit probes.
+- **Staff+ cross-repo breadth** comes from the same data; the `ContributionRepos` query is gone, along with its private-repo leak.
+- **Evidence** says "across public repositories" and "most recently pushed". The report cache schema moves to v3.
+- **Live impact**, back to back on one token (spec §6):
+  - gaearon 73 → 76 (Consistency 0 → 3); torvalds 70 → 73 (Consistency 7 → 10, his kernel tree's cut-off page no longer read as a gap);
+  - the other six totals are unchanged;
+  - Polyglot moves from Shaan-alpha to tj (languages now come from recently pushed repos);
+  - 0–5 fewer GitHub calls per analysis; accounts with six or fewer repos make the same number or one more.
+- **Verification:**
+  - backend 875 passed against a throwaway Postgres 18 (no skips);
+  - frontend drift guard and production build pass;
+  - `/u/gaearon` checked in Chrome at 1440/1024/768/390: all six evidence panels open, no overflow, baseline console only.
+- **Final review.** A 3-agent workflow (backend and docs reviewers on Opus, then a skeptic) gave "With fixes". The skeptic confirmed 12 findings and refuted 1. After re-grading by effect, one fix pass handled three, each test-first except the docs:
+  - an alertable Sentry event whenever commit activity falls back, as the narrator's fallback has;
+  - a fallback when contribution data is hidden (no public days while the user's own repos show commits, as with a private profile);
+  - a `[1.0.15]` changelog that says exactly what changes.
+
+  Six minors are deferred for Shaan (listed under Blocked / open).
+
+**Rulings made during execution** (each is in the ledger with its cost if wrong):
+- A type-only import moved under `TYPE_CHECKING` (ruff).
+- Two plan tests were strengthened because they passed before the code existed: the same-day cache test now requires a `CommitActivity` request, and the e2e happy path now asserts the main-path wording.
+- A stale `commit_subjects` comment was fixed.
+- The `[1.0.15]` changelog entry is dated today rather than given a placeholder.
+- The changelog's call-savings line was corrected to the measured numbers.
+
+**Learned / surprises:**
+- **A test helper's "fail loudly" assertion can be swallowed by production code's fail-soft path.** The GraphQL router raised `AssertionError` for the unrouted `CommitActivity`, and `contribution_activity`'s `except Exception` turned it into a silent fallback. The suites stayed green for the wrong reason until the end-to-end test asserted the main-path wording.
+- **GitHub buckets contribution days at Pacific midnight** (`occurredAt` `T07:00:00Z`), and a repo's `contributions.totalCount` is its commit count, not its day count.
+- **The ~15-call saving in the plan was the worst case.** Typical analyses never fired the older-commit probes.
+
+**Blocked / open:**
+- Shaan approves the §6 table; then merge, production smoke, and the pause before the `v1.0.15` tag.
+- Carried over: O2 (the double `/me` session request) and U5 (the tier bar's "N/100" sub-rank label).
+- Deferred review minors, for Shaan to rule on:
+  - the fallback path no longer probes for prior-year commits, which Learning Trajectory needs;
+  - the fallback note always says "5" repositories, even when fewer were sampled;
+  - the test GraphQL router's assertion is swallowed by the fallback;
+  - "most recently pushed" overclaims for capped (100+) repo lists;
+  - "at least N" when a 100-day page is cut off;
+  - the README's 1.0.14 health example and missing v1.0.15 release row.
+
+**Next:** v1.0.16, the toolchain majors. See PLAN's notes on the Sentry 11 data-collection defaults and Partial Prefetching.
+
+---
+
 ## 2026-10-14 — Claude (Opus 5.5) with Shaan — v1.0.14 released
 
 **Slice:** v1.0.14 closeout.

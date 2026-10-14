@@ -1102,9 +1102,9 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 **Rulings:** public commits only, unchanged Consistency thresholds and hybrid sampling (all Shaan, 2026-10-14). This slice is v1.0.15, and the toolchain majors move to v1.0.16.
 
 **Exit criteria:**
-- [x] Every change test-first; the backend suite is green against a real Postgres (870, no skips).
+- [x] Every change test-first; the backend suite is green against a real Postgres (875, no skips).
 - [ ] Live before/after table in the spec, approved by Shaan before merge.
-- [ ] Evidence wording checked in Chrome at 1440/1024/768/390.
+- [x] Evidence wording checked in Chrome at 1440/1024/768/390.
 - [ ] Fresh-context review; PR checks green and merged. Prod smoke: `/health` 1.0.15, a live analysis shows commit days across public repositories, the narrator streams.
 - [ ] `CHANGELOG.md` `[1.0.15]`; tag `v1.0.15`; GitHub Release published.
 
