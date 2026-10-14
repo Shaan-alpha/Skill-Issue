@@ -16,10 +16,7 @@ export function RefreshButton({ target, onRefreshed }: RefreshButtonProps) {
   const [status, setStatus] = useState<Status>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  async function handleClick(e: React.MouseEvent) {
-    // The button lives inside <Link href="/u/..."> — don't navigate.
-    e.preventDefault();
-    e.stopPropagation();
+  async function handleClick() {
     if (status === "pending") return;
 
     setStatus("pending");

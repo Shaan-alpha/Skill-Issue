@@ -22,27 +22,18 @@ export function HistoryCard({
   onDelete?: (id: number) => void;
 }) {
   const run = analysis.latest_run;
+  // The link stretches over the whole card (its ::after), so the card stays
+  // one click target while the buttons sit above it, never inside it. Delete
+  // comes last in the markup so keyboard focus meets the report link first.
   return (
-    <Link
-      href={`/u/${analysis.target_login}`}
-      className="relative block rounded-2xl border border-border bg-card/40 p-5 hover:bg-card/60 transition-colors"
-    >
-      {onDelete && (
-        <button
-          type="button"
-          aria-label={`Delete @${analysis.target_login}`}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onDelete(analysis.id);
-          }}
-          className="absolute right-2 top-2 rounded-full p-1 text-muted-foreground/60 hover:bg-white/5 hover:text-foreground"
-        >
-          <X className="h-3.5 w-3.5" aria-hidden="true" />
-        </button>
-      )}
+    <div className="relative rounded-2xl border border-border bg-card/40 p-5 hover:bg-card/60 transition-colors">
       <div className="flex items-center justify-between mb-3 pr-6">
-        <span className="text-sm font-medium text-foreground">@{analysis.target_login}</span>
+        <Link
+          href={`/u/${analysis.target_login}`}
+          className="text-sm font-medium text-foreground outline-none after:absolute after:inset-0 after:rounded-2xl focus-visible:after:outline focus-visible:after:outline-2 focus-visible:after:outline-accent"
+        >
+          @{analysis.target_login}
+        </Link>
         {analysis.is_public ? (
           <span className="text-[10px] uppercase tracking-wider text-accent">Public</span>
         ) : (
@@ -59,12 +50,24 @@ export function HistoryCard({
             <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
               Updated {relativeTime(run.completed_at)}
             </span>
-            <RefreshButton target={analysis.target_login} />
+            <div className="relative z-10">
+              <RefreshButton target={analysis.target_login} />
+            </div>
           </div>
         </>
       ) : (
         <div className="text-xs text-muted-foreground">No run yet</div>
       )}
-    </Link>
+      {onDelete && (
+        <button
+          type="button"
+          aria-label={`Delete @${analysis.target_login}`}
+          onClick={() => onDelete(analysis.id)}
+          className="absolute right-2 top-2 z-10 rounded-full p-1 text-muted-foreground/60 hover:bg-white/5 hover:text-foreground"
+        >
+          <X className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+      )}
+    </div>
   );
 }
