@@ -21,8 +21,27 @@ import sys
 import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import TYPE_CHECKING, BinaryIO
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 _ITEM_HEADER_KEYS = {"type", "length", "content_type", "filename", "attachment_type", "item_count"}
+
+
+def read_body(stream: BinaryIO, headers: Mapping[str, str]) -> bytes:
+    """The request body, sized or chunked. The Node SDK sends envelopes with
+    Transfer-Encoding: chunked and no Content-Length."""
+    if (headers.get("Transfer-Encoding") or "").lower() == "chunked":
+        body = bytearray()
+        while True:
+            size = int(stream.readline().split(b";", 1)[0].strip(), 16)
+            if size == 0:
+                stream.readline()  # the blank line that ends the body
+                return bytes(body)
+            body += stream.read(size)
+            stream.readline()  # the CRLF after each chunk
+    return stream.read(int(headers.get("Content-Length") or 0))
 
 
 def decode_body(body: bytes, encoding: str | None) -> bytes:
@@ -60,7 +79,7 @@ def serve(port: int, out: Path) -> None:
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self) -> None:
-            body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+            body = read_body(self.rfile, self.headers)
             envelope = decode_body(body, self.headers.get("Content-Encoding"))
             (out / f"{next(counter):04d}.envelope").write_bytes(envelope)
             self.send_response(200)

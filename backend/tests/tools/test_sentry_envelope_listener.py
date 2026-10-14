@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import gzip
+import io
 import json
 import zlib
 
 import pytest
 
-from tools.sentry_envelope_listener import decode_body, find_canaries, item_types
+from tools.sentry_envelope_listener import decode_body, find_canaries, item_types, read_body
 
 _ENVELOPE = b"\n".join(
     [
@@ -36,3 +37,14 @@ def test_canaries_are_found_anywhere_in_an_envelope() -> None:
 
 def test_item_types_come_from_item_headers_only() -> None:
     assert item_types(_ENVELOPE) == ["event", "transaction"]
+
+
+def test_a_chunked_body_is_read_whole() -> None:
+    """The Node SDK sends envelopes with Transfer-Encoding: chunked and no
+    Content-Length; reading only Content-Length bytes recorded them empty."""
+    chunked = b"5\r\nhello\r\n6;ext=1\r\n world\r\n0\r\n\r\n"
+    assert read_body(io.BytesIO(chunked), {"Transfer-Encoding": "chunked"}) == b"hello world"
+
+
+def test_a_sized_body_is_read_by_its_length() -> None:
+    assert read_body(io.BytesIO(b"abcdef"), {"Content-Length": "3"}) == b"abc"
