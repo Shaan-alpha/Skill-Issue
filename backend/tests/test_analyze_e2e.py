@@ -56,6 +56,7 @@ def _repo_payload(name: str, *, language: str, days_since_push: int = 5) -> dict
         "size": 512,
         "pushed_at": pushed,
         "created_at": "2021-06-01T00:00:00Z",
+        "license": {"key": "mit", "spdx_id": "MIT"},
     }
 
 
@@ -65,7 +66,9 @@ def _commit_payload(days_ago: int) -> dict[str, Any]:
 
 
 def _mock_github_for_testuser(
-    repos: list[dict[str, Any]], commits_by_repo: dict[str, list[dict[str, Any]]]
+    repos: list[dict[str, Any]],
+    commits_by_repo: dict[str, list[dict[str, Any]]],
+    graphql_overrides: dict[str, Any] | None = None,
 ) -> None:
     respx.get("https://api.github.com/users/testuser").mock(
         return_value=Response(200, json=_user_payload())
@@ -97,10 +100,6 @@ def _mock_github_for_testuser(
                     {"name": "Dockerfile", "type": "file"},
                 ],
             )
-        )
-        # Pro+ depth endpoints (Professional Developer tier and above)
-        respx.get(f"https://api.github.com/repos/{owner}/{name}/license").mock(
-            return_value=Response(200, json={"license": {"spdx_id": "MIT"}})
         )
         respx.get(f"https://api.github.com/repos/{owner}/{name}/readme").mock(
             return_value=Response(
@@ -155,6 +154,7 @@ def _mock_github_for_testuser(
                         "user": {"contributionsCollection": {"commitContributionsByRepository": []}}
                     }
                 },
+                **(graphql_overrides or {}),
             }
         )
     )
@@ -234,15 +234,16 @@ _RATE_LIMITED = Response(
 )
 
 
-def _senior_tier_testuser() -> None:
+def _senior_tier_testuser(graphql_overrides: dict[str, Any] | None = None) -> None:
     """Mocks for a profile whose base score clears Senior Engineer, so the
-    tier-gated depth enrichment runs after ingestion."""
+    tier-gated depth enrichment queries GitHub after ingestion."""
     repos = [
         _repo_payload("alpha", language="TypeScript"),
         _repo_payload("beta", language="Python"),
     ]
     commits = [_commit_payload(days_ago=i * 2) for i in range(35)]
-    _mock_github_for_testuser(repos, {"alpha": commits, "beta": commits[:5]})
+    last_year = [*commits[:5], _commit_payload(days_ago=400)]
+    _mock_github_for_testuser(repos, {"alpha": commits, "beta": last_year}, graphql_overrides)
 
 
 async def _get_analyze(path: str = "/analyze/testuser") -> Any:
@@ -271,10 +272,7 @@ async def test_rate_limited_ingest_is_service_busy(_settings_with_token: None) -
 async def test_rate_limit_during_depth_enrichment_is_service_busy_not_a_crash(
     _settings_with_token: None,
 ) -> None:
-    _senior_tier_testuser()
-    respx.get("https://api.github.com/repos/testuser/alpha/license").mock(
-        return_value=_RATE_LIMITED
-    )
+    _senior_tier_testuser(graphql_overrides={"ReviewDepth": _RATE_LIMITED})
 
     resp = await _get_analyze()
 

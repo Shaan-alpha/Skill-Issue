@@ -8,6 +8,25 @@ from app.models import Profile, Repo
 from app.scoring.depth import enrich_for_tier
 
 
+def _repo(name: str, *, has_license: bool = False) -> Repo:
+    return Repo(
+        name=name,
+        full_name=f"alice/{name}",
+        primary_language="Python",
+        stars=10,
+        forks=0,
+        is_fork=False,
+        has_readme=True,
+        has_tests=False,
+        has_ci=True,
+        has_license=has_license,
+        deployment_hints=[],
+        size_kb=100,
+        last_commit_at=None,
+        created_at=datetime.now(UTC),
+    )
+
+
 def _bare_profile() -> Profile:
     return Profile(
         username="alice",
@@ -16,23 +35,7 @@ def _bare_profile() -> Profile:
         followers=0,
         public_repos=2,
         languages={},
-        repos=[
-            Repo(
-                name="a",
-                full_name="alice/a",
-                primary_language="Python",
-                stars=10,
-                forks=0,
-                is_fork=False,
-                has_readme=True,
-                has_tests=False,
-                has_ci=True,
-                deployment_hints=[],
-                size_kb=100,
-                last_commit_at=None,
-                created_at=datetime.now(UTC),
-            ),
-        ],
+        repos=[_repo("a", has_license=True)],
         external_prs_merged=0,
         external_reviews=0,
         commit_dates=[],
@@ -48,21 +51,31 @@ async def test_hobbyist_tier_does_no_enrichment() -> None:
     assert profile.licensed_repos == []
     assert profile.workflow_counts == {}
     assert profile.review_avg_comments is None
-    gh.get_license.assert_not_called()
-    gh.list_workflow_files.assert_not_called()
+    assert gh.mock_calls == []
 
 
 @pytest.mark.asyncio
-async def test_professional_tier_reads_licenses() -> None:
+async def test_professional_tier_credits_licences_without_asking_github() -> None:
+    """Licences arrive with the repo list, so unlocking them costs no request."""
     profile = _bare_profile()
     gh = AsyncMock()
-    gh.get_license.return_value = "MIT"
 
     await enrich_for_tier(profile, "Professional Developer", gh)
 
     assert profile.licensed_repos == ["alice/a"]
-    gh.get_review_depth.assert_not_called()
-    gh.get_contribution_repo_count.assert_not_called()
+    assert gh.mock_calls == []
+
+
+@pytest.mark.asyncio
+async def test_licence_credit_covers_every_repo_not_only_the_top_ten() -> None:
+    """Repo Quality divides licensed repos by every non-fork repo. Checking only
+    the top ten made a majority unreachable past twenty repos."""
+    profile = _bare_profile()
+    profile.repos = [_repo(f"r{i}", has_license=i % 4 != 0) for i in range(30)]
+
+    await enrich_for_tier(profile, "Professional Developer", AsyncMock())
+
+    assert len(profile.licensed_repos) == 22
 
 
 @pytest.mark.asyncio
@@ -73,7 +86,6 @@ async def test_depth_keeps_the_workflow_counts_ingestion_already_found() -> None
     profile = _bare_profile()
     profile.workflow_counts = {"alice/a": 2}
     gh = AsyncMock()
-    gh.get_license.return_value = None
 
     await enrich_for_tier(profile, "Staff Engineer", gh)
 
@@ -85,7 +97,6 @@ async def test_depth_keeps_the_workflow_counts_ingestion_already_found() -> None
 async def test_senior_tier_adds_review_depth() -> None:
     profile = _bare_profile()
     gh = AsyncMock()
-    gh.get_license.return_value = None
     gh.get_review_depth.return_value = 250
 
     await enrich_for_tier(profile, "Senior Engineer", gh)
@@ -98,7 +109,6 @@ async def test_senior_tier_adds_review_depth() -> None:
 async def test_staff_tier_adds_cross_repo_breadth() -> None:
     profile = _bare_profile()
     gh = AsyncMock()
-    gh.get_license.return_value = None
     gh.get_review_depth.return_value = None
     gh.get_contribution_repo_count.return_value = 12
 
@@ -126,9 +136,6 @@ class _OverlapFake:
     def ran_together(self, a: str, b: str) -> bool:
         return frozenset((a, b)) in self.pairs
 
-    async def get_license(self, owner: str, name: str) -> object:
-        return await self._call("license", None)
-
     async def get_review_depth(self, username: str) -> object:
         return await self._call("review_depth", None)
 
@@ -139,16 +146,13 @@ class _OverlapFake:
 @pytest.mark.asyncio
 async def test_unlocked_tiers_enrich_concurrently() -> None:
     """Each tier's reads are independent of the others', so a Staff-tier
-    profile shouldn't wait for the Professional reads before starting the
-    Senior and Staff ones."""
+    profile shouldn't wait for the Senior read before starting the Staff one."""
     profile = _bare_profile()
     gh = _OverlapFake()
 
     await enrich_for_tier(profile, "Staff Engineer", gh)
 
-    assert gh.ran_together("license", "review_depth")
     assert gh.ran_together("review_depth", "contribution_repos")
-    assert gh.ran_together("license", "contribution_repos")
 
 
 @pytest.mark.asyncio
@@ -158,7 +162,6 @@ async def test_depth_spends_no_calls_on_data_ingestion_already_has() -> None:
     samples per Staff-tier analysis were spent on nothing."""
     profile = _bare_profile()
     gh = AsyncMock()
-    gh.get_license.return_value = None
     gh.get_review_depth.return_value = None
     gh.get_contribution_repo_count.return_value = 0
 

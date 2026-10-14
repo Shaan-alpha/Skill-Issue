@@ -184,7 +184,6 @@ async def test_unavailable_repository_reads_as_absent(status: int, body: dict[st
         assert await gh.list_languages("owner", "blocked") == {}
         assert await gh.get_repo_root_contents("owner", "blocked") == []
         assert await gh.list_commits("owner", "blocked", "owner", "2024-01-01") == []
-        assert await gh.get_license("owner", "blocked") is None
 
 
 @pytest.mark.asyncio
@@ -252,36 +251,6 @@ async def test_client_concurrency_defaults_to_the_ingest_setting(
             await asyncio.gather(*(gh.list_languages("o", f"r{i}") for i in range(6)))
 
     assert tracker.peak == 2
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_get_license_returns_spdx_id() -> None:
-    respx.get("https://api.github.com/repos/o/r/license").mock(
-        return_value=Response(200, json={"license": {"spdx_id": "MIT"}})
-    )
-    async with GitHubClient(token="ghs_test") as gh:
-        assert await gh.get_license("o", "r") == "MIT"
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_get_license_returns_none_on_404() -> None:
-    respx.get("https://api.github.com/repos/o/r/license").mock(
-        return_value=Response(404, json={"message": "Not Found"})
-    )
-    async with GitHubClient(token="ghs_test") as gh:
-        assert await gh.get_license("o", "r") is None
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_get_license_treats_noassertion_as_none() -> None:
-    respx.get("https://api.github.com/repos/o/r/license").mock(
-        return_value=Response(200, json={"license": {"spdx_id": "NOASSERTION"}})
-    )
-    async with GitHubClient(token="ghs_test") as gh:
-        assert await gh.get_license("o", "r") is None
 
 
 @pytest.mark.asyncio

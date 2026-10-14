@@ -297,6 +297,34 @@ def _fake_repo(name: str, *, language: str | None = None) -> dict[str, object]:
 
 @pytest.mark.asyncio
 @respx.mock
+async def test_repo_licences_come_with_the_repo_list() -> None:
+    """The repo list already carries each repo's detected licence, so no
+    request per repo is needed. NOASSERTION is GitHub's "a licence file we
+    couldn't identify", which is not a recognised SPDX licence."""
+    repos_payload = [_fake_repo("mit"), _fake_repo("unclear"), _fake_repo("bare")]
+    repos_payload[0]["license"] = {"key": "mit", "spdx_id": "MIT"}
+    repos_payload[1]["license"] = {"key": "other", "spdx_id": "NOASSERTION"}
+    repos_payload[2]["license"] = None
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_commits(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql()
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert [(r.name, r.has_license) for r in profile.repos] == [
+        ("mit", True),
+        ("unclear", False),
+        ("bare", False),
+    ]
+
+
+@pytest.mark.asyncio
+@respx.mock
 async def test_ingest_profile_maps_to_domain() -> None:
     _mock_user()
     repos_payload = _mock_repos()

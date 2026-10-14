@@ -62,6 +62,7 @@ class Repo(BaseModel):
     has_readme: bool
     has_tests: bool
     has_ci: bool
+    has_license: bool = False  # a recognised SPDX licence, as the repo list reports it
     deployment_hints: list[str]  # e.g. ["dockerfile", "vercel"]; deployment artifacts only
     size_kb: int = 0
     readme_bytes: int = 0  # size of the root README file, 0 when there is none

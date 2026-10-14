@@ -22,21 +22,21 @@ async def test_engine_returns_tier_and_badges_for_student() -> None:
     assert report.tier.name in {"Hobbyist", "Student Builder"}
     assert isinstance(report.badges, list)
     assert report.total == report.breakdown.total()
-    gh.get_license.assert_not_called()
+    assert gh.mock_calls == []
 
 
 @pytest.mark.asyncio
 async def test_engine_runs_depth_for_high_scorer() -> None:
     profile = _profile("profile_senior.json")
+    profile.repos[0].has_license = True
     gh = AsyncMock()
-    gh.get_license.return_value = "MIT"
     gh.get_review_depth.return_value = 200
     gh.get_contribution_repo_count.return_value = 10
 
     report = await run_scoring_engine(profile, gh)
 
     assert report.tier.name in {"Professional Developer", "Senior Engineer", "Staff Engineer"}
-    gh.get_license.assert_called()
+    assert profile.licensed_repos == [profile.repos[0].full_name]
     assert report.total == (
         report.breakdown.repo_quality.points
         + report.breakdown.engineering_maturity.points
@@ -45,3 +45,23 @@ async def test_engine_runs_depth_for_high_scorer() -> None:
         + report.breakdown.recruiter_signal.points
         + report.breakdown.learning_trajectory.points
     )
+
+
+@pytest.mark.asyncio
+async def test_a_prolific_licensed_portfolio_earns_licence_majority() -> None:
+    """Thirty repos, all licensed: the licence rule must see all thirty."""
+    profile = _profile("profile_senior.json")
+    template = profile.repos[0]
+    profile.repos = [
+        template.model_copy(update={"name": f"r{i}", "full_name": f"x/r{i}", "has_license": True})
+        for i in range(30)
+    ]
+    gh = AsyncMock()
+    gh.get_review_depth.return_value = None
+    gh.get_contribution_repo_count.return_value = 0
+
+    report = await run_scoring_engine(profile, gh)
+
+    assert report.tier.name in {"Professional Developer", "Senior Engineer", "Staff Engineer"}
+    signals = [e.signal for e in report.breakdown.repo_quality.evidence]
+    assert "license_majority" in signals

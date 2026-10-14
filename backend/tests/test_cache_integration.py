@@ -53,6 +53,7 @@ def _repo_payload(name: str, *, language: str = "Python") -> dict[str, Any]:
         "size": 512,
         "pushed_at": pushed,
         "created_at": "2021-06-01T00:00:00Z",
+        "license": {"key": "mit", "spdx_id": "MIT"},
     }
 
 
@@ -91,9 +92,6 @@ def _mock_github_for_testuser() -> None:
                     {"name": "tests", "type": "dir"},
                 ],
             )
-        )
-        respx.get(f"https://api.github.com/repos/{owner}/{name}/license").mock(
-            return_value=Response(200, json={"license": {"spdx_id": "MIT"}})
         )
         respx.get(f"https://api.github.com/repos/{owner}/{name}/readme").mock(
             return_value=Response(

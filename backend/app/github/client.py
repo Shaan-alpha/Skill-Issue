@@ -400,21 +400,6 @@ class GitHubClient:
             for entry in data
         ]
 
-    async def get_license(self, owner: str, repo: str) -> str | None:
-        """Return the repo's SPDX licence id, or None if absent / NOASSERTION.
-
-        404 = no detected license. 409 = repo is empty (no commits / no detectable
-        license). Both map to None.
-        """
-        resp = await self._request("GET", f"{API_BASE}/repos/{owner}/{repo}/license")
-        if _repo_unavailable(resp):
-            return None
-        resp.raise_for_status()
-        spdx = (resp.json().get("license") or {}).get("spdx_id")
-        if not spdx or spdx == "NOASSERTION":
-            return None
-        return str(spdx)
-
     async def get_review_depth(self, username: str) -> int | None:
         """Return the avg bodyText length across the 25 most-recent reviews, or None.
 

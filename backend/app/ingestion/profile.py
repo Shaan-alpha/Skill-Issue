@@ -326,6 +326,8 @@ def _parse_dt(value: str | None) -> datetime | None:
 
 
 def _repo_from_rest(raw: dict[str, Any]) -> Repo:
+    # NOASSERTION: a licence file GitHub couldn't match to an SPDX licence.
+    spdx_id = (raw.get("license") or {}).get("spdx_id")
     return Repo(
         name=raw["name"],
         full_name=raw["full_name"],
@@ -336,6 +338,7 @@ def _repo_from_rest(raw: dict[str, Any]) -> Repo:
         has_readme=False,
         has_tests=False,
         has_ci=False,
+        has_license=bool(spdx_id) and spdx_id != "NOASSERTION",
         deployment_hints=[],
         size_kb=raw.get("size", 0),
         last_commit_at=_parse_dt(raw.get("pushed_at")),
