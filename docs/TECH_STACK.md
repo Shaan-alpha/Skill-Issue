@@ -8,23 +8,23 @@
 
 | Tool | Pinned (as of 2026-10-14) | Why |
 | --- | --- | --- |
-| **Next.js** | `16.3.8` | App Router, partial prerendering, streaming, Vercel-native. v16 dropped some conventions; check `frontend/AGENTS.md` before assuming v13/v14 patterns. |
-| **Cache Components** | enabled v0.8.6 (`cacheComponents: true` in `next.config.ts`) | Powers `/share/[slug]` PPR via `'use cache'` + `cacheTag('share:<slug>')` + `cacheLife({ revalidate: 3600 })`. Incompatible with `export const dynamic = "force-dynamic"` (had to be dropped from `/me` and `/u/[username]/card`). Helpers from `next/cache`: `cacheTag`, `cacheLife`, `revalidateTag(tag, { expire: 0 })`. Stubbed in vitest setup since they throw outside the Next runtime. |
+| **Next.js** | `16.4.0` | App Router, partial prerendering, streaming, Vercel-native. v16 dropped some conventions; check `frontend/AGENTS.md` before assuming v13/v14 patterns. |
+| **Cache Components** | enabled v0.8.6 (`cacheComponents: true` in `next.config.ts`); `partialPrefetching: false` since Next 16.4 | Powers `/share/[slug]` PPR via `'use cache'` + `cacheTag('share:<slug>')` + `cacheLife({ revalidate: 3600 })`. Incompatible with `export const dynamic = "force-dynamic"` (had to be dropped from `/me` and `/u/[username]/card`). Helpers from `next/cache`: `cacheTag`, `cacheLife`, `revalidateTag(tag, { expire: 0 })`. Stubbed in vitest setup since they throw outside the Next runtime. |
 | **React** | `19.3.0` | Server Components, Actions, the modern data flow |
 | **TypeScript** | `^5` | Sane component contracts |
 | **TailwindCSS** | `^4` | Utility-first; `@tailwindcss/postcss` is the v4 pipeline. No tailwind.config — config lives in `globals.css` via `@theme`. |
 | **tw-animate-css** | `^1.4` | v4-compatible replacement for `tailwindcss-animate` |
 | **shadcn/ui** | `^4.21` (devDependency, CLI only) | Component baseline; we own the source. The package is a CLI scaffolder — *do not* import from it at runtime. Style: `base-nova` (Base UI primitives, not Radix). |
 | **Framer Motion** | `^12.43` | Animation; prefer spring physics over linear easings. Use `LazyMotion` + `m.*` namespace, not `motion.*`, to keep the initial bundle lean. |
-| **@base-ui/react** | `^1.8` | Headless primitives (Progress, Tooltip) — accessible and unstyled; we own the visual layer. Used for the v0.3.0 position-bar Progress and badge-row Tooltip. |
-| **lucide-react** | `^1.49` | Icon set. **Branded icons (`Github`, `Twitter`, etc.) were removed in 1.x** — substitute generic equivalents (`ExternalLink`) or inline an SVG. |
+| **@base-ui/react** | `^1.9` | Headless primitives (Progress, Tooltip) — accessible and unstyled; we own the visual layer. Used for the v0.3.0 position-bar Progress and badge-row Tooltip. |
+| **lucide-react** | `^1.57` | Icon set. **Branded icons (`Github`, `Twitter`, etc.) were removed in 1.x** — substitute generic equivalents (`ExternalLink`) or inline an SVG. |
 | **`next/og` (`ImageResponse`)** | bundled with Next 16 | OG card generation (v0.6.0). File-convention routes `opengraph-image.tsx` + `twitter-image.tsx` at the route segment auto-wire meta tags. Satori-based — strict about explicit `display: flex` on every multi-child div. |
 | **Inter font** | OFL 1.1, bundled under `public/fonts/` | Medium + Bold TTF bundled because satori reads font bytes per request — fetching remotely would add cold-start latency. |
 | **Vitest** | `^4.1` + `happy-dom@^20` + `@testing-library/react@^16` + `@testing-library/jest-dom@^6` | First frontend test framework, added in v0.6.0. Picked over node:test for native TS/JSX, picked happy-dom over jsdom for speed. happy-dom bumped from `^15` to `^20` on 2026-05-22 to clear GHSA-37j7-fg3j-429f (VM Context Escape RCE — dev-only impact, but AGENTS.md rule 1). |
 
 **Bundler:** Turbopack (Next.js default in 16+).
 
-**Linting / formatting:** **ESLint** via `eslint-config-next` 16.3.8. Decision logged 2026-05-15 — chosen because the Next.js codemods and recommended rules ship through this config. Decision kept through v0.8.0; revisit Biome at v0.9.0 or v1.0 if perf/DX warrants.
+**Linting / formatting:** **ESLint** via `eslint-config-next` 16.4.0. Decision logged 2026-05-15 — chosen because the Next.js codemods and recommended rules ship through this config. Decision kept through v0.8.0; revisit Biome at v0.9.0 or v1.0 if perf/DX warrants.
 
 ---
 
@@ -33,9 +33,9 @@
 | Tool | Pinned (as of 2026-10-14) | Why |
 | --- | --- | --- |
 | **Python** | `3.12+` | Modern type system, performance, structural pattern matching |
-| **FastAPI** | `0.142` | Async-native, Pydantic-integrated, OpenAPI for free. Bumped 0.136→0.139 in the v1.0.x security slice to pull patched Starlette; 0.140 came with the 2026-07-28 dependency refresh, 0.142 with v1.0.13. Since 0.141 an included router's routes sit behind a wrapper instead of being copied into `app.routes`. |
+| **FastAPI** | `0.143` | Async-native, Pydantic-integrated, OpenAPI for free. Bumped 0.136→0.139 in the v1.0.x security slice to pull patched Starlette; 0.140 came with the 2026-07-28 dependency refresh, 0.142 with v1.0.13. Since 0.141 an included router's routes sit behind a wrapper instead of being copied into `app.routes`. |
 | **Starlette** | `1.3.1+` | ASGI toolkit under FastAPI; imported directly in `main.py`. Pinned at the CVE-patched floor (PYSEC-2026-248/249, CVE-2026-48817/48818). |
-| **Pydantic** | `2.13` | Models for every API boundary and every scorer output |
+| **Pydantic** | `2.14` | Models for every API boundary and every scorer output |
 | **pydantic-settings** | `2.15` | `.env` + env-var loading for `Settings` |
 | **httpx** | `0.28` (with `h2`) | Async HTTP client with HTTP/2 multiplexing |
 | **SQLAlchemy** | `2.0.x` (async) + `asyncpg>=0.31` | Async ORM + Postgres driver for Neon. Statement cache disabled for pgBouncer transaction-mode pooling. |
@@ -47,7 +47,7 @@
 | **pytest** | `9.x` | Test runner with async support |
 | **pytest-asyncio** | `1.4` | `asyncio_mode = "auto"` so async tests don't need decorators |
 | **respx** | `0.23` | httpx mocking for GitHub client + e2e tests |
-| **ruff** | `0.16` | Linter + formatter — one tool for both. Configured in `backend/ruff.toml` (py312, line 100, E/F/I/UP/B/SIM/TCH/RUF). Note: `ruff check` and `ruff format` are independent passes — run both, not just one. v0.8.0 post-ship audit caught 51 format-drifted files because only `ruff check` was being enforced. |
+| **ruff** | `0.17` | Linter + formatter — one tool for both. Configured in `backend/ruff.toml` (py312, line 100, E/F/I/UP/B/SIM/TCH/RUF). Note: `ruff check` and `ruff format` are independent passes — run both, not just one. v0.8.0 post-ship audit caught 51 format-drifted files because only `ruff check` was being enforced. |
 | Static typing | deferred — ruff covers the lint surface | The mypy/pyright pick was punted past v0.1.0; revisit when payoff justifies the maintenance |
 
 **Package manager:** `uv` (not pip, not poetry). Faster, simpler, lockfile-first.
