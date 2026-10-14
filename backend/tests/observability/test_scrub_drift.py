@@ -13,9 +13,7 @@ import pytest
 
 from app.observability import sentry as backend
 
-_SCRUB_TS = (
-    Path(__file__).resolve().parents[3] / "frontend" / "src" / "observability" / "scrub.ts"
-)
+_SCRUB_TS = Path(__file__).resolve().parents[3] / "frontend" / "src" / "observability" / "scrub.ts"
 
 
 def _frontend_list(name: str) -> list[str]:
