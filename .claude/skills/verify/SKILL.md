@@ -50,6 +50,11 @@ Useful targets:
   declaring the page dead; poll with `Runtime.evaluate` every 2s.
 - Backend caches analyses 6h in-process; without Upstash env every cold
   process re-analyzes (GitHub API calls) — keep target users small.
+- To check a backend change, stop the backend and start it again; don't
+  rely on `--reload`. On Windows a reload can log `Reloading...` and never
+  start a new worker, leaving the old code serving (a held keep-alive
+  connection from `next dev` is the likely cause). Each new process logs
+  `Started server process [pid]`; check that the pid changed.
 - Signed-in and `/share/{slug}` variants are NOT drivable locally (no
   DATABASE_URL / OAuth credentials in `backend/.env`) — say so in the
   report instead of faking them.

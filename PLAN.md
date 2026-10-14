@@ -1094,18 +1094,19 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 **Delivered:**
 - **The `CommitActivity` GraphQL query.** It covers two windows of whole UTC days at a cost of 1 point, counting public repositories only: what a token can see of private ones varies, and the report cache is keyed by username. A cut-off page maps onto `commit_history_complete_since`. Staff+ cross-repo breadth comes from the same data, so its own query is gone.
-- **Fallback:** when GitHub can't answer the query, commit days come from a 5-repo commit sample, and Consistency names that scope.
+- **Fallback:** when GitHub can't answer the query, commit days come from a commit sample of up to 5 repos (keeping the older-commit probe Learning Trajectory needs), and Consistency names the repos it counted.
 - **Push-recency sampling:** root listings, languages and the commit sample follow push recency within the update-ordered repo list.
-- **Evidence:** Consistency's volume row names public repositories; the README row names the most recently pushed repos.
+- **Evidence:** Consistency's volume row names public repositories and says "at least" after a cut-off page; the README row names the most recently pushed repos, of the most recently updated on a capped list.
 - **Cost and cache:** worst-case GitHub calls per analysis drop from ~69 to ~54. The report cache schema moves to v3.
 
 **Rulings:** public commits only, unchanged Consistency thresholds and hybrid sampling (all Shaan, 2026-10-14). This slice is v1.0.15, and the toolchain majors move to v1.0.16.
 
 **Exit criteria:**
-- [x] Every change test-first; the backend suite is green against a real Postgres (875, no skips).
-- [ ] Live before/after table in the spec, approved by Shaan before merge.
+- [x] Every change test-first; the backend suite is green against a real Postgres (888, no skips).
+- [x] Live before/after table in the spec, approved by Shaan before merge (2026-10-14).
 - [x] Evidence wording checked in Chrome at 1440/1024/768/390.
-- [ ] Fresh-context review; PR checks green and merged. Prod smoke: `/health` 1.0.15, a live analysis shows commit days across public repositories, the narrator streams.
+- [x] Fresh-context review: "With fixes"; three findings fixed, then the six minors, each test-first, at Shaan's request (spec §9).
+- [ ] PR checks green and merged. Prod smoke: `/health` 1.0.15, a live analysis shows commit days across public repositories, the narrator streams.
 - [ ] `CHANGELOG.md` `[1.0.15]`; tag `v1.0.15`; GitHub Release published.
 
 ---

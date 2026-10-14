@@ -41,7 +41,7 @@ Drop in a username. Skill Issue analyzes repositories, engineering maturity, OSS
 | 💯 **Engineering score** | 100 points across six weighted signals: every point traceable to evidence, shown on each score card |
 | 🪜 **7-tier ladder** | Hobbyist → Student Builder → Entry-Level → Professional → Senior → Staff → Principal, with intra-tier sub-rank |
 | 🏅 **Stackable badges** | OSS Contributor, PR Master, Maintainer, Star Magnet, Polyglot, Long-haul, Indie Hacker, Toolmaker: deterministic and multi-earnable |
-| 🔓 **Tier-gated depth** | Higher tiers unlock licence credit (Professional+), PR review depth (Senior+) and cross-repo breadth (Staff+). Licences, README depth, dependency manifests and commit-message quality come from data every analysis already reads; CI workflows cost one batched query |
+| 🔓 **Tier-gated depth** | Higher tiers unlock licence credit (Professional+), PR review depth (Senior+) and cross-repo breadth (Staff+). Licences, cross-repo breadth, README depth, dependency manifests and commit-message quality come from data every analysis already reads; CI workflows cost one batched query |
 | 🔥 **Two voices** | **Roast Mode** for what a blunt senior would say · **Mentor Mode** for how to fix it |
 | 🧾 **GitHub Receipts™** | Shareable 1200×630 scorecards for LinkedIn, X, Discord, portfolios |
 | ⚡ **Fast on repeat** | Warm `/analyze/{user}` is served from an Upstash Redis report cache, designed for a p95 of at most 200 ms; the live measurement is still pending |
@@ -113,10 +113,11 @@ Green is the part that must be right, and is pure: same GitHub data in, same sco
 
 **v1.0.15: live** at [skillissue.tech](https://skillissue.tech), with GitHub OAuth sign-in, Neon Postgres persistence, `/me` history, and opt-in `/share/[slug]` public links.
 
-Following the v1.0.0 stable launch, a security-hardening line ran from a full internal audit through v1.0.8, and CI-integrity work through v1.0.10. v1.0.11 closed a navigation-state bug sweep that traced four separate reports back to one root cause. v1.0.14 reworked scoring after a full audit against how developers work in 2026.
+Following the v1.0.0 stable launch, a security-hardening line ran from a full internal audit through v1.0.8, and CI-integrity work through v1.0.10. v1.0.11 closed a navigation-state bug sweep that traced four separate reports back to one root cause. v1.0.14 reworked scoring after a full audit against how developers work in 2026, and v1.0.15 reads commit activity from GitHub's contribution data, so work in organisations' and other people's repositories counts.
 
 | Release | What shipped |
 | --- | --- |
+| **v1.0.15** | Commit activity from GitHub's contribution data: public commits in organisations' and other people's repos count toward Consistency, the repos you push to get inspected first, and a fallback that says what it counted |
 | **v1.0.14** | Scoring audit: open-source credit only for PRs merged into other people's repos, a rebuilt Recruiter Signal, licence and README checks that no longer penalise large portfolios, evidence on every score card, fresh analyses in about half the time |
 | **v1.0.13** | Maintenance: two critical Next.js advisories closed, sign-ins and saves confirmed before the server answers, history refresh reads fresh GitHub data |
 | **v1.0.12** | Narrator back online on Groq's `openai/gpt-oss-120b` after the old model's retirement, with an alert when it falls back |
@@ -198,7 +199,7 @@ Verify:
 
 ```bash
 curl http://localhost:8000/health
-# {"status":"ok","version":"1.0.14","db":"up","cache":"unconfigured"}
+# {"status":"ok","version":"1.0.15","db":"up","cache":"unconfigured"}
 
 curl http://localhost:8000/analyze/octocat
 ```

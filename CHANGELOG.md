@@ -15,8 +15,9 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 A release that reads your commit activity from GitHub's contribution data, across your organisations' and other people's repositories as well as your own. **Some scores change**: Consistency most of all, and a few badges move.
 
 ### Changed: how scores are calculated
-- **Consistency counts the public commits GitHub credits to you, wherever they land.** Commits in your organisations' and other people's repositories now count, not only those in ten of your own; private repositories never do. Learning Trajectory's two-year check and the Long-haul badge read the same activity. If GitHub can't report it, or reports none while your own repositories show commits, scoring falls back to your most recently pushed repositories (up to five) and says so.
+- **Consistency counts the public commits GitHub credits to you, wherever they land.** Commits in your organisations' and other people's repositories now count, not only those in ten of your own; private repositories never do. Learning Trajectory's two-year check and the Long-haul badge read the same activity. If GitHub can't report it, or reports none while your own repositories show commits, scoring falls back to your most recently pushed repositories (up to five), says which ones it counted, and still checks the year before for Learning Trajectory.
 - **The repositories you work on get inspected first.** README, tests, CI, deployment files, dependency manifests and your languages come from your 20 most recently pushed repositories, rather than the ones most recently starred or otherwise updated. This is why the Polyglot badge can change.
+- **Evidence says when a count is partial.** A commit-day count that couldn't read a busy repository's whole year says "at least", and for accounts with more than 100 repositories the README row says which repositories it covered.
 
 ### Changed: reliability and operations
 - **Fewer GitHub requests for larger accounts:** analyses of accounts with more than six repositories make a few fewer.
@@ -25,6 +26,7 @@ A release that reads your commit activity from GitHub's contribution data, acros
 
 ### Internal
 - The planned major upgrades (TypeScript 6, Vitest 5, jest-dom 7, Sentry SDK 11, framer-motion 13, openai 3, SQLAlchemy 2.1) move to v1.0.16.
+- Backend tests now fail on any GitHub query they don't mock, even when the code under test recovers from the failure.
 
 ## [1.0.14] — 2026-10-13
 
