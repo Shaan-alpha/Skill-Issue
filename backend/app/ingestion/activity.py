@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 
 import sentry_sdk
 
+from app.concurrency import gather_all
 from app.github.client import GitHubCallCapExceeded, GitHubRateLimited
 from app.github.queries import COMMIT_ACTIVITY
 
@@ -148,27 +149,72 @@ def commit_day(commit: dict[str, Any], role: str = "author") -> datetime | None:
     return datetime.strptime(date_str[:10], "%Y-%m-%d").replace(tzinfo=UTC)
 
 
+def _author_days(pages: list[list[dict[str, Any]]]) -> set[datetime]:
+    return {
+        day
+        for page in pages
+        for c in page
+        if (day := commit_day(c.get("commit") or {})) is not None
+    }
+
+
+def _reach(page: list[dict[str, Any]]) -> datetime | None:
+    """The oldest committer day of a full page, where its coverage ends; None
+    for a page that wasn't full, which holds every commit in its window.
+
+    GitHub filters and orders the list by committer date. A rebased commit
+    keeps an older author date, which would claim coverage further back."""
+    if len(page) < COMMITS_PER_REPO:
+        return None
+    committed = (
+        commit_day(commit, "committer") or commit_day(commit)
+        for commit in (c.get("commit") or {} for c in page)
+    )
+    return min((day for day in committed if day is not None), default=None)
+
+
 def sample_activity(pages: list[list[dict[str, Any]]]) -> CommitActivity:
     """Commit days from the REST sample of the user's own repos: the stand-in
     when GitHub can't report contribution data."""
-    days: set[datetime] = set()
-    complete_since: datetime | None = None
-    for page in pages:
-        committed_days: list[datetime] = []
-        for c in page:
-            commit = c.get("commit") or {}
-            day = commit_day(commit)
-            if day is not None:
-                days.add(day)
-            if (committed := commit_day(commit, "committer") or day) is not None:
-                committed_days.append(committed)
-        # GitHub filters and orders the list by committer date, so a full
-        # page's coverage ends at its oldest committer date. A rebased commit
-        # keeps an older author date, which would claim coverage further back.
-        if len(page) >= COMMITS_PER_REPO and committed_days:
-            oldest = min(committed_days)
-            complete_since = oldest if complete_since is None else max(complete_since, oldest)
-    return CommitActivity(frozenset(days), complete_since, None, "own_recent_repos")
+    reached = [day for day in map(_reach, pages) if day is not None]
+    return CommitActivity(
+        frozenset(_author_days(pages)), max(reached, default=None), None, "own_recent_repos"
+    )
+
+
+async def prior_year_days(
+    login: str,
+    gh: GitHubClient,
+    repos: list[str],
+    pages: list[list[dict[str, Any]]],
+    windows: dict[str, str],
+) -> set[datetime]:
+    """Learning Trajectory credits commits in each of the last two years. A
+    full sample page that ends inside the last year hides the year before, so
+    when the sample shows nothing from it, each such repo (`repos` are full
+    names, one per page) is asked for one commit from it. Only the fallback
+    needs this: the contribution data reads both years whole."""
+    year_start = datetime.fromisoformat(windows["from"])
+    prior_start = datetime.fromisoformat(windows["priorFrom"])
+    if any(prior_start <= day < year_start for day in _author_days(pages)):
+        return set()
+    cut = [
+        name
+        for name, page in zip(repos, pages, strict=True)
+        if (reach := _reach(page)) is not None and reach >= year_start
+    ]
+    # Commit days count whole: the year before ends a second before the last
+    # year's first day.
+    until = (year_start - timedelta(seconds=1)).isoformat()
+    older = await gather_all(
+        *(
+            gh.list_commits(
+                *name.split("/", 1), login, windows["priorFrom"], per_page=1, until=until
+            )
+            for name in cut
+        )
+    )
+    return _author_days(older)
 
 
 def commit_subjects(pages: list[list[dict[str, Any]]]) -> list[str]:

@@ -4,7 +4,7 @@ import contextlib
 import copy
 import json
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -16,7 +16,7 @@ from httpx import Response
 from app.github.client import GitHubCallCapExceeded, GitHubClient, GitHubRateLimited
 from app.ingestion import profile as profile_module
 from app.ingestion.profile import ROOT_CONTENT_LIMIT, ingest_profile
-from app.scoring import engineering_maturity
+from app.scoring import engineering_maturity, learning_trajectory
 from tests.clock import frozen_at
 from tests.graphql_router import graphql_router
 
@@ -728,6 +728,72 @@ async def test_no_public_commits_anywhere_reads_as_none() -> None:
     assert profile.commit_dates == []
     assert profile.commit_activity_scope == "all_public_repos"
     assert sdk.capture_message.call_count == 0
+
+
+def _rest_commit(day: datetime) -> dict[str, object]:
+    stamp = day.strftime("%Y-%m-%dT12:00:00Z")
+    return {"commit": {"author": {"date": stamp}, "committer": {"date": stamp}, "message": "Fix"}}
+
+
+def _a_full_page_of_recent_commits() -> list[dict[str, object]]:
+    today = datetime.now(UTC)
+    return [_rest_commit(today - timedelta(days=i + 1)) for i in range(100)]
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_the_fallback_still_sees_the_year_before_past_a_full_page() -> None:
+    """A busy repo's page of 100 commits can end inside the last year, hiding
+    the year before, and Learning Trajectory would read a two-year contributor
+    as new. The contribution data reads both years; the fallback asks for one
+    older commit."""
+    older = datetime.now(UTC) - timedelta(days=400)
+    repos_payload = [_fake_repo("alpha", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql(commit_activity=_ACTIVITY_UNAVAILABLE)
+    recent = _a_full_page_of_recent_commits()
+    commits = respx.get(url__startswith="https://api.github.com/repos/octocat/alpha/commits").mock(
+        side_effect=lambda request: Response(
+            200,
+            json=[_rest_commit(older)] if request.url.params.get("per_page") == "1" else recent,
+        )
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert commits.call_count == 2
+    assert older.date() in {d.date() for d in profile.commit_dates}
+    assert "yoy_activity" in {e.signal for e in learning_trajectory.score(profile).evidence}
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_contribution_data_needs_no_older_commit() -> None:
+    repos_payload = [_fake_repo("alpha", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql(
+        commit_activity=_activity_payload(
+            (datetime.now(UTC) - timedelta(days=3)).date().isoformat()
+        )
+    )
+    commits = respx.get(url__startswith="https://api.github.com/repos/octocat/alpha/commits").mock(
+        return_value=Response(200, json=_a_full_page_of_recent_commits())
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert commits.call_count == 1
+    assert profile.commit_activity_scope == "all_public_repos"
 
 
 @pytest.mark.asyncio

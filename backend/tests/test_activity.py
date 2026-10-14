@@ -9,6 +9,7 @@ from app.ingestion.activity import (
     activity_windows,
     commit_subjects,
     contribution_activity,
+    prior_year_days,
     sample_activity,
 )
 
@@ -262,6 +263,71 @@ def test_short_sample_pages_mean_the_history_is_complete() -> None:
     assert activity.complete_since is None
     assert activity.days == {_day("2026-09-01")}
     assert (activity.scope, activity.substantial_repo_count) == ("own_recent_repos", None)
+
+
+class _Commits:
+    """A GitHubClient stand-in that answers every commit list with one page."""
+
+    def __init__(self, page: list[dict[str, object]]) -> None:
+        self.page = page
+        self.calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    async def list_commits(self, *args: object, **kwargs: object) -> list[dict[str, object]]:
+        self.calls.append((args, kwargs))
+        return self.page
+
+
+def _full_page_inside_the_year() -> list[dict[str, object]]:
+    return [_commit(f"2026-{m:02d}-{d:02d}") for m in (5, 6, 7, 8) for d in range(1, 26)]
+
+
+@pytest.mark.asyncio
+async def test_a_page_cut_inside_the_year_is_asked_for_one_older_commit() -> None:
+    """Learning Trajectory credits commits in each of the last two years. A
+    full page that ends inside the last year hides the year before."""
+    gh = _Commits([_commit("2025-03-02")])
+
+    days = await prior_year_days(
+        "octocat",
+        gh,
+        ["octocat/alpha", "octocat/beta"],
+        [_full_page_inside_the_year(), [_commit("2026-09-01")]],
+        WINDOWS,
+    )
+
+    assert days == {_day("2025-03-02")}
+    assert gh.calls == [
+        (
+            ("octocat", "alpha", "octocat", WINDOWS["priorFrom"]),
+            {"per_page": 1, "until": "2025-10-14T23:59:59+00:00"},
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_no_older_commit_is_asked_for_when_the_year_before_was_seen() -> None:
+    gh = _Commits([_commit("2025-03-02")])
+
+    days = await prior_year_days(
+        "octocat",
+        gh,
+        ["octocat/alpha", "octocat/beta"],
+        [_full_page_inside_the_year(), [_commit("2025-01-10")]],
+        WINDOWS,
+    )
+
+    assert (days, gh.calls) == (set(), [])
+
+
+@pytest.mark.asyncio
+async def test_short_pages_need_no_older_commit() -> None:
+    gh = _Commits([_commit("2025-03-02")])
+
+    days = await prior_year_days(
+        "octocat", gh, ["octocat/alpha"], [[_commit("2026-09-01")]], WINDOWS
+    )
+
+    assert (days, gh.calls) == (set(), [])
 
 
 def test_commit_subjects_are_bounded_first_lines() -> None:
