@@ -63,6 +63,9 @@ class Repo(BaseModel):
     has_tests: bool
     has_ci: bool
     has_license: bool = False  # a recognised SPDX licence, as the repo list reports it
+    # False for repos past ingestion's root-listing limit: their README, tests,
+    # CI and deployment flags are unknown, not absent.
+    root_inspected: bool = True
     deployment_hints: list[str]  # e.g. ["dockerfile", "vercel"]; deployment artifacts only
     size_kb: int = 0
     readme_bytes: int = 0  # size of the root README file, 0 when there is none

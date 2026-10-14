@@ -339,6 +339,7 @@ def _repo_from_rest(raw: dict[str, Any]) -> Repo:
         has_tests=False,
         has_ci=False,
         has_license=bool(spdx_id) and spdx_id != "NOASSERTION",
+        root_inspected=False,
         deployment_hints=[],
         size_kb=raw.get("size", 0),
         last_commit_at=_parse_dt(raw.get("pushed_at")),
@@ -365,6 +366,7 @@ async def _enrich_repo_signals(repo: Repo, gh: GitHubClient) -> tuple[str, ...]:
         default=0,
     )
     repo.manifests = _manifests(names)
+    repo.root_inspected = True
     repo.has_readme = signals.has_readme
     repo.has_tests = signals.has_tests
     repo.has_ci = signals.has_ci

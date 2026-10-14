@@ -105,3 +105,42 @@ def test_readme_depth_is_shown_as_evidence() -> None:
     rows = [(e.detail, e.weight) for e in score(profile).evidence if e.signal == "readme_depth"]
     assert rows == [("READMEs average 3.0 KB across 2 repos", 0)]
     assert score(profile).points == before
+
+
+def test_readme_majority_counts_only_repos_whose_roots_were_read() -> None:
+    """Ingestion reads root listings for the 20 most recently updated repos;
+    past those a README is unknown, not missing. Dividing by every repo made a
+    majority unreachable past forty repos."""
+    profile = _load("profile_oss.json")
+    template = profile.repos[0]
+    profile.repos = [
+        template.model_copy(
+            update={
+                "name": f"r{i}",
+                "full_name": f"x/r{i}",
+                "is_fork": False,
+                "has_readme": i < 15,
+                "root_inspected": i < 20,
+            }
+        )
+        for i in range(50)
+    ]
+
+    rows = [(e.detail, e.weight) for e in score(profile).evidence if e.signal == "readme_majority"]
+
+    assert rows == [("75% of the 20 most recently updated non-fork repos have READMEs", 6)]
+
+
+def test_readme_majority_speaks_for_every_repo_when_all_were_read() -> None:
+    profile = _load("profile_oss.json")
+    template = profile.repos[0]
+    profile.repos = [
+        template.model_copy(
+            update={"name": f"r{i}", "full_name": f"x/r{i}", "is_fork": False, "has_readme": i < 3}
+        )
+        for i in range(4)
+    ]
+
+    rows = [e.detail for e in score(profile).evidence if e.signal == "readme_majority"]
+
+    assert rows == ["75% of non-fork repos have READMEs"]

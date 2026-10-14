@@ -12,13 +12,20 @@ def score(profile: Profile) -> ScoreResult:
     evidence: list[Evidence] = []
     points = 0
 
-    if non_fork:
-        readme_ratio = sum(1 for repo in non_fork if repo.has_readme) / len(non_fork)
+    # READMEs are known only where ingestion read the root listing.
+    inspected = [repo for repo in non_fork if repo.root_inspected]
+    if inspected:
+        readme_ratio = sum(1 for repo in inspected if repo.has_readme) / len(inspected)
         if readme_ratio >= 0.5:
+            scope = (
+                "non-fork repos"
+                if len(inspected) == len(non_fork)
+                else f"the {len(inspected)} most recently updated non-fork repos"
+            )
             evidence.append(
                 Evidence(
                     signal="readme_majority",
-                    detail=f"{readme_ratio:.0%} of non-fork repos have READMEs",
+                    detail=f"{readme_ratio:.0%} of {scope} have READMEs",
                     weight=6,
                 )
             )

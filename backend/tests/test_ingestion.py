@@ -14,7 +14,7 @@ from httpx import Response
 
 from app.github.client import GitHubCallCapExceeded, GitHubClient, GitHubRateLimited
 from app.ingestion import profile as profile_module
-from app.ingestion.profile import ingest_profile
+from app.ingestion.profile import ROOT_CONTENT_LIMIT, ingest_profile
 from app.scoring import engineering_maturity
 from tests.clock import frozen_at
 from tests.graphql_router import graphql_router
@@ -321,6 +321,27 @@ async def test_repo_licences_come_with_the_repo_list() -> None:
         ("unclear", False),
         ("bare", False),
     ]
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_repos_past_the_root_listing_limit_are_marked_uninspected() -> None:
+    """Root listings are read for the most recently updated repos only. The
+    rest have unknown README/tests/CI flags, not absent ones, and say so."""
+    repos_payload = [_fake_repo(f"r{i}") for i in range(ROOT_CONTENT_LIMIT + 2)]
+    inspected = repos_payload[:ROOT_CONTENT_LIMIT]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(inspected)
+    _mock_commits(repos_payload[:10])
+    _mock_contents(inspected)
+    _mock_profile_readme()
+    _mock_graphql()
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert [r.root_inspected for r in profile.repos] == [True] * ROOT_CONTENT_LIMIT + [False] * 2
 
 
 @pytest.mark.asyncio
