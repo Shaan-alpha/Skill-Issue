@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -274,3 +275,35 @@ def test_commit_subjects_are_bounded_first_lines() -> None:
     ]
 
     assert commit_subjects(pages) == ["Add retry budget", "x" * 500]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("gh", "capture"),
+    [
+        (
+            _GraphQL(error=RuntimeError("GraphQL error: RESOURCE_LIMITS_EXCEEDED")),
+            "capture_exception",
+        ),
+        (_GraphQL({"user": {"lastYear": None}}), "capture_message"),
+    ],
+    ids=["error", "empty"],
+)
+async def test_a_fallback_raises_one_alertable_sentry_event(gh: _GraphQL, capture: str) -> None:
+    """Falling back is right for the reader and wrong for the operator: a
+    GitHub change that broke the query would quietly narrow every analysis to
+    the commit sample. One stable fingerprint makes that alertable."""
+    with patch("app.ingestion.activity.sentry_sdk") as sdk:
+        assert await contribution_activity("alice", gh, WINDOWS) is None
+
+    call = getattr(sdk, capture)
+    assert call.call_count == 1
+    assert call.call_args.kwargs["fingerprint"] == ["commit-activity-fallback"]
+
+
+@pytest.mark.asyncio
+async def test_a_good_answer_raises_no_event() -> None:
+    with patch("app.ingestion.activity.sentry_sdk") as sdk:
+        await contribution_activity("alice", _GraphQL(_payload([_repo("2026-09-03")])), WINDOWS)
+
+    assert sdk.capture_message.call_count == sdk.capture_exception.call_count == 0

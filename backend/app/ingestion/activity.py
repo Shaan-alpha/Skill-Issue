@@ -13,6 +13,8 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, NamedTuple
 
+import sentry_sdk
+
 from app.github.client import GitHubCallCapExceeded, GitHubRateLimited
 from app.github.queries import COMMIT_ACTIVITY
 
@@ -24,6 +26,8 @@ logger = logging.getLogger(__name__)
 
 # Commits in a repository for it to count toward cross-repo breadth (Staff+).
 SUBSTANTIAL_COMMITS = 10
+# Every fallback groups into one Sentry issue, so one alert rule covers it.
+_FALLBACK_FINGERPRINT = ["commit-activity-fallback"]
 
 
 class CommitActivity(NamedTuple):
@@ -32,6 +36,29 @@ class CommitActivity(NamedTuple):
     complete_since: datetime | None
     substantial_repo_count: int | None
     scope: CommitActivityScope
+
+
+def record_activity_fallback(login: str, reason: str, exc: BaseException | None = None) -> None:
+    """Record that commit days came from the commit sample instead of GitHub's
+    contribution data. Right for the reader, whose evidence says so; wrong for
+    the operator if it keeps happening, so it raises one alertable event.
+    Telemetry fails open: reporting must never break the analysis."""
+    logger.warning("commit_activity.fallback reason=%s user=%s", reason, login, exc_info=exc)
+    try:
+        with sentry_sdk.new_scope() as scope:
+            # Low-cardinality tag; the username goes in context, not a tag.
+            scope.set_tag("commit_activity.fallback_reason", reason)
+            scope.set_context("commit_activity", {"username": login, "reason": reason})
+            if exc is not None:
+                sentry_sdk.capture_exception(exc, level="error", fingerprint=_FALLBACK_FINGERPRINT)
+            else:
+                sentry_sdk.capture_message(
+                    "Commit activity fell back to the commit sample",
+                    level="error",
+                    fingerprint=_FALLBACK_FINGERPRINT,
+                )
+    except Exception:  # pragma: no cover - telemetry never breaks an analysis
+        logger.exception("commit_activity.fallback: failed to report to Sentry")
 
 
 def activity_windows(now: datetime) -> dict[str, str]:
@@ -79,15 +106,13 @@ async def contribution_activity(
         data = await gh.graphql(COMMIT_ACTIVITY, {"login": login, **windows})
     except (GitHubRateLimited, GitHubCallCapExceeded):
         raise
-    except Exception:
-        logger.warning(
-            "Commit activity unavailable for %s; using the commit sample", login, exc_info=True
-        )
+    except Exception as exc:
+        record_activity_fallback(login, "error", exc)
         return None
     user = (data or {}).get("user") or {}
     last_year = user.get("lastYear")
     if not last_year:
-        logger.warning("Commit activity for %s came back empty; using the commit sample", login)
+        record_activity_fallback(login, "empty")
         return None
 
     days: set[datetime] = set()
