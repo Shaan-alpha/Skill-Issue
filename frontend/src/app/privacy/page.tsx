@@ -104,8 +104,10 @@ export default function PrivacyPage() {
 
       <LegalSection heading="Cookies">
         <p>
-          We use a session cookie to keep you signed in and a short-lived cookie during the GitHub
-          sign-in flow. We do not use advertising or cross-site tracking cookies.
+          We use a session cookie to keep you signed in, a short-lived cookie during the GitHub
+          sign-in flow, and an analytics cookie (<code>ph_&lt;project&gt;_posthog</code>) that
+          PostHog uses to count visits without storing your IP address. We do not use advertising or
+          cross-site tracking cookies.
         </p>
       </LegalSection>
 

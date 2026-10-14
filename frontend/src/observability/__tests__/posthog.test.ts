@@ -43,6 +43,14 @@ describe("posthog adapter — fail-open behaviour", () => {
     expect(opts.api_host).toBe("https://us.i.posthog.com");
   });
 
+  it("never records sessions (Sentry Replay is the app's masked replay)", async () => {
+    process.env.NEXT_PUBLIC_POSTHOG_KEY = "phc_test";
+    const { initPostHog } = await import("../posthog");
+    initPostHog();
+    const [, opts] = initMock.mock.calls[0];
+    expect(opts.disable_session_recording).toBe(true);
+  });
+
   it("track() is a no-op when posthog wasn't initialised", async () => {
     delete process.env.NEXT_PUBLIC_POSTHOG_KEY;
     const { track } = await import("../posthog");

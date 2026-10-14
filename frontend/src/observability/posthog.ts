@@ -19,6 +19,9 @@ export function initPostHog(): void {
     capture_pageleave: true,
     capture_performance: true,
     autocapture: false,
+    // Session replay is Sentry's job, masked by default; PostHog's default
+    // recording would capture unmasked page text.
+    disable_session_recording: true,
     // person_profiles defaults to "identified_only" — no need to set.
   });
   // Set eagerly so calls fired between init() and the loaded-callback don't

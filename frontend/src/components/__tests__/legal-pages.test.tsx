@@ -13,6 +13,11 @@ describe("legal pages", () => {
     expect(screen.getByText("shaansatsangi.cse@gmail.com")).toBeInTheDocument();
   });
 
+  it("privacy page lists the analytics cookie", () => {
+    render(<PrivacyPage />);
+    expect(screen.getByText(/analytics cookie/i)).toBeInTheDocument();
+  });
+
   it("terms page shows its heading and the governing law", () => {
     render(<TermsPage />);
     expect(
