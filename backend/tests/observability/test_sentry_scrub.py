@@ -151,8 +151,25 @@ def test_init_sentry_calls_sdk_when_dsn_set(monkeypatch):
     assert captured["environment"] == "production"
     assert captured["traces_sample_rate"] == 0.25
     assert captured["release"] == "0.8.0"
-    assert captured["send_default_pii"] is False
     assert callable(captured["before_send"])
+
+
+def test_init_sentry_keeps_the_sdk_default_of_no_pii(monkeypatch):
+    """sentry-sdk 2.72 deprecates send_default_pii, even passed as False, and
+    its replacement, data_collection, opts into more permissive defaults the
+    moment it is passed. Passing neither keeps the SDK's conservative default."""
+    captured: dict = {}
+    monkeypatch.setattr("sentry_sdk.init", lambda **kwargs: captured.update(kwargs))
+
+    init_sentry(
+        dsn="https://abc@o123.ingest.sentry.io/456",
+        environment="production",
+        traces_sample_rate=0.25,
+        release="0.8.0",
+    )
+
+    assert "send_default_pii" not in captured
+    assert "data_collection" not in captured
 
 
 def test_init_sentry_skips_when_already_initialised(monkeypatch):
