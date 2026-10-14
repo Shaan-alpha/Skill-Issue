@@ -2,7 +2,7 @@
 
 import * as Sentry from "@sentry/nextjs";
 import { APP_VERSION } from "@/lib/site";
-import { scrubEvent } from "./scrub";
+import { SENTRY_DATA_COLLECTION, scrubEvent } from "./scrub";
 
 const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
 
@@ -37,7 +37,10 @@ if (dsn) {
     replaysOnErrorSampleRate: Number(
       process.env.NEXT_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE || 1.0,
     ),
-    sendDefaultPii: false,
+    // The privacy contract (scrub.ts): collected at the source, then
+    // scrubbed on every error and transaction.
+    dataCollection: SENTRY_DATA_COLLECTION,
     beforeSend: scrubEvent,
+    beforeSendTransaction: scrubEvent,
   });
 }

@@ -1,6 +1,6 @@
 {
   "name": "frontend",
-  "version": "1.0.15",
+  "version": "1.0.16",
   "private": true,
   "engines": {
     "node": "24.x"
@@ -40,7 +40,6 @@
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.4.0",
     "happy-dom": "^20.14.6",
-    "shadcn": "^4.21.4",
     "tailwindcss": "^4.3.3",
     "typescript": "^5",
     "vitest": "^4.1.11"

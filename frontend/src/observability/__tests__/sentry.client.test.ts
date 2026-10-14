@@ -107,4 +107,14 @@ describe("sentry.client release and noise filters", () => {
     // An injected executor script, not this app's bundle.
     expect((options.denyUrls ?? []).some((pattern) => pattern.test("app:///executors/200.js"))).toBe(true);
   });
+
+  it("collects no PII at the source and scrubs errors and transactions alike", async () => {
+    const { SENTRY_DATA_COLLECTION, scrubEvent } = await import("../scrub");
+    await import("../sentry.client");
+    const options = lastInitOptions() as InitOptions & Record<string, unknown>;
+    expect(options).not.toHaveProperty("sendDefaultPii");
+    expect(options.dataCollection).toBe(SENTRY_DATA_COLLECTION);
+    expect(options.beforeSend).toBe(scrubEvent);
+    expect(options.beforeSendTransaction).toBe(scrubEvent);
+  });
 });

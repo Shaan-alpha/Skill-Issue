@@ -111,7 +111,7 @@ After the first migration: every subsequent push that includes a new migration r
 ```bash
 # Health — should report db=up and cache=up after Upstash is provisioned
 curl https://<your-vercel-host>/_/backend/health
-# -> {"status":"ok","version":"1.0.15","db":"up","cache":"up"}
+# -> {"status":"ok","version":"1.0.16","db":"up","cache":"up"}
 
 # Anonymous analyze
 curl https://<your-vercel-host>/_/backend/analyze/octocat
@@ -149,13 +149,14 @@ time curl -s -o /dev/null https://<your-vercel-host>/_/backend/analyze/octocat
 
 Cold call: ~5-8s. Warm call (cached): ≤200ms p95 target. If the warm call isn't fast, check `/health` for `cache: "up"` and verify the env vars survived the deploy.
 
-## Known limits as of v1.0.15
+## Known limits as of v1.0.16
 
 - **Sentry source-map upload not wired.** Frontend stack traces in Sentry show minified function names — runtime capture still works, only symbolication is degraded. Re-add the `withSentryConfig` wrapper once `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` / `SENTRY_PROJECT` are provisioned.
 - **Sentry alert rules not wired.** The integration ships without thresholds; needs ~1 week of baseline data first.
 - **CSP is Report-Only.** `frontend/next.config.ts` ships the Content-Security-Policy in report-only mode with `unsafe-inline`. v1.0.8 (SI-31) added the backend origin to `connect-src`, so the policy is now **promotable**; flipping it to enforcing (nonce-based) remains a deferred slice.
 - **SBOM not published.** The remaining piece of audit SI-37; `security.txt` and the PR dependency-review gate shipped in v1.0.8.
-- **Majors held back on purpose.** ESLint 10 and TypeScript 7 are blocked upstream (`eslint-plugin-react` still calls the `context.getFilename()` that ESLint 10 removed; `typescript-eslint` supports TypeScript < 6.1), so Dependabot ignores them. The other majors (TypeScript 6, Vitest 5, jest-dom 7, Sentry SDK 11, framer-motion 13, openai 3, SQLAlchemy 2.1) are scoped as v1.0.16. The CI `npm audit` gate has been back at `high` since v1.0.13.
+- **Majors held back on purpose.** ESLint 10 and TypeScript 7 are blocked upstream (`eslint-plugin-react` still calls the `context.getFilename()` that ESLint 10 removed; `typescript-eslint` supports TypeScript < 6.1), so Dependabot ignores them. The other majors are scheduled: the test toolchain (TypeScript 6, Vitest 5, jest-dom 7, happy-dom 21) as v1.0.17, and the runtime majors (Sentry SDK 11, framer-motion 14, openai 3, SQLAlchemy 2.1) as v1.0.18. The CI `npm audit` gate has been back at `high` since v1.0.13.
+- **One dev-only advisory without a fix:** `braces` (GHSA-vfj7-8cjw-p6xm) through `eslint-config-next` → `@next/eslint-plugin-next` → `fast-glob` → `micromatch`. It never ships, and the production audit gate stays green.
 
 _(Resolved since earlier: global rate limiting shipped in v0.9.2 and was hardened in v1.0.4–v1.0.6; session ids are hashed at rest and mutations carry an Origin check as of v1.0.8; `/share/[slug]` gained on-demand ISR in v0.8.6; the custom domain — skillissue.tech — went live in v1.0.1.)_
 

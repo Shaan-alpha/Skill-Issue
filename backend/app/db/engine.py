@@ -85,6 +85,8 @@ def _build_engine(url: str) -> AsyncEngine:
         max_overflow=settings_module.settings.db_max_overflow,
         pool_pre_ping=True,
         pool_recycle=1800,
+        # Bound values stay out of error messages (Sentry, logs).
+        hide_parameters=True,
     )
 
 

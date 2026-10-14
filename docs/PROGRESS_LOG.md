@@ -19,6 +19,76 @@ Format:
 
 ---
 
+## 2026-10-14 — Claude (Opus 5.5) with Shaan — v1.0.16: the privacy patch (Sentry and PostHog)
+
+**Slice:** v1.0.16, with spec [`2026-10-14-v1.0.16-sentry-privacy-design.md`](./superpowers/specs/2026-10-14-v1.0.16-sentry-privacy-design.md) and plan [`2026-10-14-v1.0.16-sentry-privacy.md`](./superpowers/plans/2026-10-14-v1.0.16-sentry-privacy.md). It began as the toolchain-majors slice and became a privacy patch when the research found the PII contract broken.
+
+**Done:**
+- **Research first.** A read-only workflow (four researchers and a critic; 55 claims checked, 1 corrected) checked every deferred major against the repo. It found that the SDKs running today break the PII contract:
+  - **Frontend:** server errors and transactions carried the raw `si_session` cookie. `sendDefaultPii: false` resolves cookies to a deny list that RequestData's event path never applies, and `beforeSend` never runs on transactions. They also carried Vercel's location and OIDC headers, raw query strings in `http.target` and `request_path`, and request bodies.
+  - **Backend:** frame locals carried request headers inside Starlette/ASGI objects, along with tokens and the session key.
+  - **PostHog:** it stored visitor IPs.
+- **Slicing (Shaan):** v1.0.16 is this patch, v1.0.17 the test toolchain, v1.0.18 the runtime majors.
+- **One contract in both apps, on the SDKs already running:**
+  - a header allow-list;
+  - no cookies, bodies, IP or frame locals;
+  - sensitive query values `[Filtered]` everywhere a URL appears;
+  - span header attributes outside the allow-list dropped.
+
+  It is enforced at the source (`dataCollection`, `include_local_variables=False`, no body capture) and by a fail-closed scrubber on errors and transactions. Also: `hide_parameters`, sentry-sdk capped below 3, PostHog recording off, the PostHog cookie listed on the privacy page, and the shadcn CLI removed (it carried alerts #83 and #84).
+- **Proof:**
+  - A canary test drives a failing signed-in request through the real app: 10 canaries leaked before, none after.
+  - A second canary covers an Upstash outage.
+  - A frontend test runs the SDK's own request pipeline, then `scrubEvent`.
+  - A drift test holds the two apps' lists equal.
+  - A live envelope smoke on both servers found no canary: 3 errors and 4 transactions from the backend, 2 errors and 3 transactions from the frontend.
+- **Verification:**
+  - backend 929 passed against Postgres 18 (no skips);
+  - frontend 153 tests, tsc, lint, build and the production audit gate;
+  - Chrome over `/`, `/u/octocat` and `/privacy` at 1440/1024/768/390.
+- **Final review:** two reviewers on Opus, then a skeptic, gave "With fixes". The skeptic confirmed all four Important findings and re-graded them to minor; I held them, and four of the reviewers' minors, at Important by effect. One fix pass:
+  - visitor IPs in cache-failure log lines, which became breadcrumbs on the narrative alert (masked at the source, with a canary);
+  - the privacy page's date;
+  - release notes that described the exposure response as done;
+  - the contract crediting code with PostHog's IP discard;
+  - the shadcn wording, the dropped Partial Prefetching note;
+  - a Dependabot hold on `@sentry/nextjs` majors so the open Sentry 11 PR can't land as a routine bump.
+
+**Decisions (Shaan, 2026-10-14):**
+- three releases;
+- a header allow-list;
+- frame locals off (revised from a name-based rule once the spec review showed secrets inside header lists and tuples);
+- the full exposure response;
+- PostHog included;
+- shadcn removed;
+- Native execution.
+
+**Rulings made during execution** (each is in the ledger with its cost if wrong):
+- No unused `json` import in the scrub tests.
+- The listener was fixed to read the chunked envelopes the Node SDK sends: the first frontend smoke had recorded 25 empty files, which a canary check would have passed.
+- The profile page streams a 200 before it throws, so the smoke expected 200.
+- The revalidate route made no transaction, so the body canary went through a POST to the page.
+- A drift test committed unformatted was caught by the whole-branch check.
+- The final reviewers ran on Opus.
+- The re-grades and the declined items, as listed above.
+
+**Learned / surprises:**
+- **`sendDefaultPii: false` doesn't mean "no cookies" in Sentry JS 10.** It maps cookies to a deny list that the event path never applies. Transactions skip `beforeSend` entirely, so a scrubber on errors alone covered half the traffic.
+- **Name-based scrubbing can't protect frame locals.** Starlette's `Request` and the ASGI scope serialize headers as lists of byte pairs, where no key exists to match.
+- **A canary check over empty envelopes passes.** The Node SDK sends chunked bodies, and a listener that reads `Content-Length` records nothing.
+- **Log lines are an event channel too.** LoggingIntegration turns every INFO+ line into a breadcrumb, so a key that embeds `ip:<addr>` leaks through text no scrubber parses.
+
+**Blocked / open:**
+- §4.4 provider settings (Sentry and PostHog) to confirm before the merge, recording whether Use Default Scrubbers was already on.
+- The exposure response after the deploy.
+- 10 deferred review minors (ledger), among them hardening for wrong-typed values and an ARCHITECTURE `request_id` sentence.
+- Follow-ups to raise: historical PostHog IPs until retention, and the privacy page's wording on replay and identified profiles.
+- Carried over: O2 and U5.
+
+**Next:** merge, the production smoke and §6, then the `v1.0.16` tag. After that, v1.0.17, the test toolchain.
+
+---
+
 ## 2026-10-14 — Claude (Opus 5.5) with Shaan — v1.0.15 released
 
 **Slice:** v1.0.15 closeout.

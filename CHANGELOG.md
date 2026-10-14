@@ -10,6 +10,24 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ## [Unreleased]
 
+## [1.0.16] — 2026-10-14
+
+A privacy release. Error and performance reports sent to Sentry could carry more than the privacy policy allows: the session cookie, Vercel's location headers, an internal secret, OAuth values, request bodies and, on the server, the values of variables at the point of an error. This release stops all of that, and makes PostHog stop storing visitor IPs. **No scores change.**
+
+### Security
+- **Sentry receives no cookies, tokens, secrets, IP addresses, location headers, OAuth values or request bodies,** from errors or from performance traces. Both apps share one contract: a short allow-list of request headers, sensitive query values replaced with `[Filtered]`, no variable values from stack frames, and no request bodies. Tests send fake secrets through the real app and check that none arrives.
+- **This release resets every signed-in session** and rotates the app's internal secrets and GitHub token, so anything captured before the fix stops working. You will need to sign in again.
+- **Database errors no longer include the parameters bound to the failing statement.**
+
+### Changed
+- **PostHog stores no IP address** and records no sessions; the privacy page now lists its analytics cookie.
+- **The shadcn CLI is no longer a dependency.** It carried both open security alerts (dev-only); components are added with a pinned `npx shadcn` when needed.
+
+### Internal
+- **The toolchain majors are re-planned** as v1.0.17 (TypeScript 6, Vitest 5, jest-dom 7, happy-dom 21) and v1.0.18 (Sentry SDK 11, framer-motion 14, openai 3, SQLAlchemy 2.1).
+- **sentry-sdk is capped below 3,** whose defaults collect personal data.
+- **A local Sentry stand-in** (`backend/tools/sentry_envelope_listener.py`) checks real servers for leaks without a real DSN.
+
 ## [1.0.15] — 2026-10-14
 
 A release that reads your commit activity from GitHub's contribution data, across your organisations' and other people's repositories as well as your own. **Some scores change**: Consistency most of all, and a few badges move.

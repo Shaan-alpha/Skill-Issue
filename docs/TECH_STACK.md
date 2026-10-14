@@ -14,7 +14,7 @@
 | **TypeScript** | `^5` | Sane component contracts |
 | **TailwindCSS** | `^4` | Utility-first; `@tailwindcss/postcss` is the v4 pipeline. No tailwind.config — config lives in `globals.css` via `@theme`. |
 | **tw-animate-css** | `^1.4` | v4-compatible replacement for `tailwindcss-animate` |
-| **shadcn/ui** | `^4.21` (devDependency, CLI only) | Component baseline; we own the source. The package is a CLI scaffolder — *do not* import from it at runtime. Style: `base-nova` (Base UI primitives, not Radix). |
+| **shadcn/ui** | not installed (CLI via `npx`) | Component baseline; we own the source in `src/components/ui/`. Add a component with a pinned CLI, `npx shadcn@4.21.5 add <name>`, against `components.json`; v1.0.16 removed the devDependency, whose MCP/express subtree carried both open Dependabot alerts (#83, #84). Style: `base-nova` (Base UI primitives, not Radix). |
 | **Framer Motion** | `^12.43` | Animation; prefer spring physics over linear easings. Use `LazyMotion` + `m.*` namespace, not `motion.*`, to keep the initial bundle lean. |
 | **@base-ui/react** | `^1.9` | Headless primitives (Progress, Tooltip) — accessible and unstyled; we own the visual layer. Used for the v0.3.0 position-bar Progress and badge-row Tooltip. |
 | **lucide-react** | `^1.57` | Icon set. **Branded icons (`Github`, `Twitter`, etc.) were removed in 1.x** — substitute generic equivalents (`ExternalLink`) or inline an SVG. |
@@ -104,8 +104,8 @@
 
 | Tool | Role | Slice |
 | --- | --- | --- |
-| **Sentry (`@sentry/nextjs` + `sentry-sdk[fastapi]`)** | Error tracking (frontend + backend). Permanent free tier — 5K errors/mo + 50 replays/mo. PII scrubbed via `before_send` hook (GitHub tokens, OAuth secrets, encrypted session bytes, Cookie/Authorization headers). | v0.8.0 |
-| **PostHog (`posthog-js` + `posthog-python` if needed)** | Product analytics + real-user web vitals (LCP / CLS / INP capture via SDK autocapture). Permanent free tier — 1M events/mo + 5K replays/mo + 12-month retention. Picked over Vercel Speed Insights specifically for the 12-month retention. | v0.8.0 |
+| **Sentry (`@sentry/nextjs` + `sentry-sdk[fastapi]`)** | Error tracking (frontend + backend). Permanent free tier — 5K errors/mo + 50 replays/mo. PII contract enforced at the source (`dataCollection`, no frame locals, no bodies) and by a scrub on every error and transaction; see `docs/OBSERVABILITY.md` (v1.0.16). | v0.8.0 |
+| **PostHog (`posthog-js` + `posthog-python` if needed)** | Product analytics + real-user web vitals (LCP / CLS / INP capture via SDK autocapture). Session recording off in code; client IPs discarded and GeoIP off in the project (v1.0.16). Permanent free tier — 1M events/mo + 5K replays/mo + 12-month retention. Picked over Vercel Speed Insights specifically for the 12-month retention. | v0.8.0 |
 | **structlog** | Backend JSON logging with `request_id` contextvar binding. Pairs with Sentry's logging integration to tag every event with the same `request_id` that appears in the structured log. | v0.8.0 |
 | **`@axe-core/cli`** | Accessibility audit baseline + regression tool. Run against the deployed preview URL. Free OSS. | v0.8.0 |
 | Sentry alert rules | Triggered alerting on critical error rate. Deferred to a v0.8.x patch once a week of real-error baselines exist. | v0.8.x |

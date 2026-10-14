@@ -10,7 +10,7 @@ const EMAIL = "shaansatsangi.cse@gmail.com";
 
 export default function PrivacyPage() {
   return (
-    <LegalProse title="Privacy Policy" lastUpdated="2026-05-28">
+    <LegalProse title="Privacy Policy" lastUpdated="2026-10-14">
       <p>
         Skill Issue is operated by Shaan Satsangi (&ldquo;we&rdquo;). This policy explains, in plain
         language, what we collect, why, and the choices you have. We collect as little as we need to
@@ -104,8 +104,10 @@ export default function PrivacyPage() {
 
       <LegalSection heading="Cookies">
         <p>
-          We use a session cookie to keep you signed in and a short-lived cookie during the GitHub
-          sign-in flow. We do not use advertising or cross-site tracking cookies.
+          We use a session cookie to keep you signed in, a short-lived cookie during the GitHub
+          sign-in flow, and an analytics cookie (<code>ph_&lt;project&gt;_posthog</code>) that
+          PostHog uses to count visits without storing your IP address. We do not use advertising or
+          cross-site tracking cookies.
         </p>
       </LegalSection>
 
