@@ -138,3 +138,33 @@ async def test_a_graphql_body_with_errors_is_not_cached(fake_cache: RedisCache) 
             data = await gh.graphql("query Probe { viewer { login } }", {})
 
     assert data == {"viewer": {"login": "octocat"}}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("body", "raised"),
+    [
+        ({"message": "You have exceeded a secondary rate limit."}, GitHubRateLimited),
+        ({}, RuntimeError),
+    ],
+    ids=["rate-limit-message", "no-data"],
+)
+async def test_a_graphql_body_without_data_is_not_cached(
+    fake_cache: RedisCache, body: dict[str, object], raised: type[Exception]
+) -> None:
+    """graphql() rejects a 200 that carries no data. Cached, that rejection
+    would answer every analysis of the user for 15 minutes, whatever GitHub
+    said next."""
+    with respx.mock:
+        respx.post("https://api.github.com/graphql").mock(
+            side_effect=[
+                Response(200, json=body),
+                Response(200, json={"data": {"viewer": {"login": "octocat"}}}),
+            ]
+        )
+        async with GitHubClient(token="t", cache=fake_cache) as gh:
+            with pytest.raises(raised):
+                await gh.graphql("query Probe { viewer { login } }", {})
+            data = await gh.graphql("query Probe { viewer { login } }", {})
+
+    assert data == {"viewer": {"login": "octocat"}}

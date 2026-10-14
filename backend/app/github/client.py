@@ -313,12 +313,15 @@ class GitHubClient:
                     body_json: Any = resp.json()
                 except ValueError:
                     body_json = None
-                # GraphQL errors ride on a 200: a rate limit, or a query GitHub
-                # couldn't resolve this time. Neither is an answer to keep.
-                graphql_errors = (
-                    url == GRAPHQL_URL and isinstance(body_json, dict) and body_json.get("errors")
+                # GraphQL failures ride on a 200: a rate limit, a query GitHub
+                # couldn't resolve this time, or a body with no data at all.
+                # graphql() rejects them all; only a clean answer is kept.
+                graphql_failure = url == GRAPHQL_URL and not (
+                    isinstance(body_json, dict)
+                    and body_json.get("data") is not None
+                    and not body_json.get("errors")
                 )
-                if not graphql_errors:
+                if not graphql_failure:
                     await self._cache.set_json(
                         NAMESPACE_GH,
                         cache_key,
