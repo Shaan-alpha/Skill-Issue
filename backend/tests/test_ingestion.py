@@ -6,6 +6,7 @@ import json
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import patch
 
 import httpx
 import pytest
@@ -679,6 +680,53 @@ async def test_unavailable_contributions_fall_back_to_the_commit_sample() -> Non
     assert [d.date().isoformat() for d in profile.commit_dates] == ["2026-10-01"]
     assert profile.commit_activity_scope == "own_recent_repos"
     assert profile.substantial_repo_count is None
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_hidden_contributions_fall_back_to_the_commit_sample() -> None:
+    """A private profile hides its contribution data from other viewers, so the
+    query answers with nothing while the user's own repos hold commits it would
+    count. Reading that as no activity would score a busy developer zero."""
+    repos_payload = [_fake_repo("alpha", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql()  # CommitActivity answers with no repositories at all
+    respx.get(url__startswith="https://api.github.com/repos/octocat/alpha/commits").mock(
+        return_value=Response(200, json=[{"commit": {"author": {"date": "2026-10-01T10:00:00Z"}}}])
+    )
+
+    with patch("app.ingestion.activity.sentry_sdk") as sdk:
+        async with GitHubClient(token="ghs_test") as gh:
+            profile = await ingest_profile("octocat", gh)
+
+    assert [d.date().isoformat() for d in profile.commit_dates] == ["2026-10-01"]
+    assert profile.commit_activity_scope == "own_recent_repos"
+    assert sdk.capture_message.call_count == 1
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_no_public_commits_anywhere_reads_as_none() -> None:
+    repos_payload = [_fake_repo("alpha", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_commits(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql()
+
+    with patch("app.ingestion.activity.sentry_sdk") as sdk:
+        async with GitHubClient(token="ghs_test") as gh:
+            profile = await ingest_profile("octocat", gh)
+
+    assert profile.commit_dates == []
+    assert profile.commit_activity_scope == "all_public_repos"
+    assert sdk.capture_message.call_count == 0
 
 
 @pytest.mark.asyncio

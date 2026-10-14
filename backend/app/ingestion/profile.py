@@ -22,6 +22,7 @@ from app.ingestion.activity import (
     activity_windows,
     commit_subjects,
     contribution_activity,
+    record_activity_fallback,
     sample_activity,
 )
 from app.models import Profile, Repo
@@ -558,8 +559,15 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
         ),
         contribution_activity(username, gh, windows),
     )
+    sample = sample_activity(commit_pages)
     if activity is None:
-        activity = sample_activity(commit_pages)
+        activity = sample
+    elif not activity.days and sample.days:
+        # GitHub reported no public commit days, yet the user's own repos hold
+        # commits it would count: the contribution data is hidden (a private
+        # profile, say), not empty.
+        record_activity_fallback(username, "hidden")
+        activity = sample
 
     languages: dict[str, int] = {}
     for repo_languages in language_maps:
