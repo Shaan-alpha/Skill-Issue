@@ -31,3 +31,10 @@ def test_engine_pool_reads_env_override(monkeypatch):
     kwargs = mock_create.call_args.kwargs
     assert kwargs["pool_size"] == 10
     assert kwargs["max_overflow"] == 20
+
+
+def test_database_errors_carry_no_bound_values():
+    """SQLAlchemy puts bound parameters (an email, say) into exception
+    messages, and those messages reach Sentry and the logs."""
+    engine = _build_engine(_URL)
+    assert engine.sync_engine.hide_parameters is True
