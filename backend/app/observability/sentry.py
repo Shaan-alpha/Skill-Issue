@@ -1,14 +1,16 @@
 """Sentry init + PII scrub hook for the FastAPI backend.
 
-Scrubbing happens in `before_send`. The full PII contract lives in the v0.8.0
-design spec §6. Anything new added there must be added here too — this is the
-single point where PII can leak out of the process.
+The PII contract lives in docs/OBSERVABILITY.md ("PII contract"). Scrubbing
+happens in `scrub_event`, which runs on errors (`before_send`) and on
+transactions (`before_send_transaction`). The contract lists mirror
+frontend/src/observability/scrub.ts; tests/observability/test_scrub_drift.py
+fails if the two diverge.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import sentry_sdk
 from sentry_sdk.integrations import DidNotEnable, Integration
@@ -17,13 +19,38 @@ from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.httpx import HttpxIntegration
 from sentry_sdk.integrations.logging import LoggingIntegration
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+# Request headers that may reach Sentry; every other header is dropped.
+_HEADER_ALLOWLIST = ["user-agent", "referer", "content-type", "accept", "host"]
+# A query parameter whose name contains one of these keeps its name, and its
+# value becomes [Filtered]: OAuth code and state, tokens, keys, sessions.
+_QUERY_DENY_TERMS = [
+    "code",
+    "state",
+    "token",
+    "key",
+    "secret",
+    "session",
+    "sid",
+    "passw",
+    "pwd",
+    "credential",
+    "csrf",
+    "xsrf",
+    "jwt",
+    "bearer",
+]
+_FILTERED = "[Filtered]"
+
+# Header-like keys dropped wherever they appear in `extra` and `contexts`
+# (request headers themselves go through the allow-list above).
 _SCRUB_HEADER_NAMES = {
     "cookie",
     "set-cookie",
     "authorization",
     "x-vercel-id",
-    # v1.0.4 SI-11 — app-specific secrets forwarded on the /analyze hop, plus
-    # visitor-IP headers (PII) that Sentry's default filter doesn't cover.
     "x-internal-secret",
     "x-revalidate-secret",
     "x-client-ip",
@@ -39,11 +66,125 @@ _SCRUB_EXTRA_KEYS = {
     "email",
 }
 
+_ALLOWED_HEADERS = frozenset(_HEADER_ALLOWLIST)
+# Span attributes carry headers as http.request.header.user_agent and so on.
+_ALLOWED_SPAN_HEADER_KEYS = frozenset(
+    f"http.{direction}.header.{name.replace('-', '_')}"
+    for direction in ("request", "response")
+    for name in _HEADER_ALLOWLIST
+)
+_URL_DATA_KEYS = frozenset({"http.target", "http.url", "url.full", "url"})
+_QUERY_DATA_KEYS = frozenset({"url.query", "http.query"})
 
-def _scrub_headers(headers: dict[str, Any] | None) -> dict[str, Any]:
-    if not headers:
-        return headers or {}
-    return {k: v for k, v in headers.items() if k.lower() not in _SCRUB_HEADER_NAMES}
+
+def _sensitive_param(name: str) -> bool:
+    lowered = name.lower()
+    return any(term in lowered for term in _QUERY_DENY_TERMS)
+
+
+def _filter_query(query: str) -> str:
+    """Blank the values of sensitive parameters. A plain split, never URL
+    encoding, so the result matches the frontend's byte for byte."""
+    prefix = "?" if query.startswith("?") else ""
+    pairs = []
+    for pair in query[len(prefix) :].split("&"):
+        name, sep, _value = pair.partition("=")
+        pairs.append(f"{name}={_FILTERED}" if sep and _sensitive_param(name) else pair)
+    return prefix + "&".join(pairs)
+
+
+def _filter_url(url: str) -> str:
+    """Filter the query part of a URL or path; the rest is untouched."""
+    base, sep, rest = url.partition("?")
+    if not sep:
+        return url
+    query, hash_sep, fragment = rest.partition("#")
+    return f"{base}?{_filter_query(query)}{hash_sep}{fragment}"
+
+
+def _replace(owner: dict[str, Any], key: str, scrub: Callable[[Any], Any]) -> None:
+    """Replace owner[key] with its scrubbed value, or drop it if scrubbing
+    fails. Fails closed: a part we can't read is a part we don't send. The
+    hook itself must never raise, because the SDK would drop the whole event,
+    alert events included."""
+    if key not in owner:
+        return
+    try:
+        owner[key] = scrub(owner[key])
+    except Exception:
+        owner.pop(key, None)
+
+
+def _allowed_headers(headers: Any) -> dict[str, Any]:
+    if not isinstance(headers, dict):
+        raise TypeError("request headers")
+    out: dict[str, Any] = {}
+    for name, value in headers.items():
+        lowered = str(name).lower()
+        if lowered not in _ALLOWED_HEADERS:
+            continue
+        out[name] = _filter_url(value) if lowered == "referer" and isinstance(value, str) else value
+    return out
+
+
+def _filtered_query_string(value: Any) -> Any:
+    if isinstance(value, str):
+        return _filter_query(value)
+    if isinstance(value, dict):
+        return {k: _FILTERED if _sensitive_param(str(k)) else v for k, v in value.items()}
+    if isinstance(value, list):
+        return [
+            [pair[0], _FILTERED]
+            if isinstance(pair, list | tuple) and len(pair) == 2 and _sensitive_param(str(pair[0]))
+            else pair
+            for pair in value
+        ]
+    raise TypeError("query_string")
+
+
+def _filtered_url_value(value: Any) -> str:
+    if not isinstance(value, str):
+        raise TypeError("url")
+    return _filter_url(value)
+
+
+def _scrub_request(request: Any) -> dict[str, Any]:
+    if not isinstance(request, dict):
+        raise TypeError("request")
+    for key in ("cookies", "data", "env"):
+        request.pop(key, None)
+    _replace(request, "headers", _allowed_headers)
+    _replace(request, "query_string", _filtered_query_string)
+    _replace(request, "url", _filtered_url_value)
+    return request
+
+
+def _scrub_user(user: Any) -> dict[str, Any]:
+    if not isinstance(user, dict):
+        raise TypeError("user")
+    user.pop("ip_address", None)
+    user.pop("email", None)
+    return user
+
+
+def _scrubbed_span_data(data: Any) -> dict[str, Any]:
+    if not isinstance(data, dict):
+        raise TypeError("span data")
+    out: dict[str, Any] = {}
+    for key, value in data.items():
+        if key.startswith(("http.request.header.", "http.response.header.")):
+            if key in _ALLOWED_SPAN_HEADER_KEYS:
+                referer = key.endswith(".referer") and isinstance(value, str)
+                out[key] = _filter_url(value) if referer else value
+        elif key == "http.request.body.data":
+            continue
+        elif key in _URL_DATA_KEYS and isinstance(value, str):
+            out[key] = _filter_url(value)
+        elif key in _QUERY_DATA_KEYS and isinstance(value, str):
+            out[key] = _filter_query(value)
+        else:
+            out[key] = value
+    return out
 
 
 def _scrub_dict_recursive(value: Any) -> Any:
@@ -58,26 +199,56 @@ def _scrub_dict_recursive(value: Any) -> Any:
     return value
 
 
+def _scrub_contexts(contexts: Any) -> dict[str, Any]:
+    if not isinstance(contexts, dict):
+        raise TypeError("contexts")
+    trace = contexts.get("trace")
+    if isinstance(trace, dict):
+        _replace(trace, "data", _scrubbed_span_data)
+    return _scrub_dict_recursive(contexts)
+
+
+def _scrub_spans(spans: Any) -> list[Any]:
+    if not isinstance(spans, list):
+        raise TypeError("spans")
+    for span in spans:
+        if isinstance(span, dict):
+            _replace(span, "data", _scrubbed_span_data)
+    return spans
+
+
+def _scrubbed_breadcrumb_data(data: Any) -> dict[str, Any]:
+    if not isinstance(data, dict):
+        raise TypeError("breadcrumb data")
+    for key in ("url", "from", "to"):
+        if isinstance(data.get(key), str):
+            data[key] = _filter_url(data[key])
+    if isinstance(data.get("http.query"), str):
+        data["http.query"] = _filter_query(data["http.query"])
+    return data
+
+
+def _scrub_breadcrumbs(breadcrumbs: Any) -> Any:
+    # Serialized events hold {"values": [...]}; accept a bare list too.
+    values = breadcrumbs.get("values") if isinstance(breadcrumbs, dict) else breadcrumbs
+    if not isinstance(values, list):
+        raise TypeError("breadcrumbs")
+    for crumb in values:
+        if isinstance(crumb, dict):
+            _replace(crumb, "data", _scrubbed_breadcrumb_data)
+    return breadcrumbs
+
+
 def scrub_event(event: dict[str, Any], _hint: dict[str, Any]) -> dict[str, Any]:
-    """`before_send` hook — strips known PII from the outgoing event.
-
-    Tolerates missing sections (real events vary in shape). Recursive on
-    `extra` / `contexts` because tokens sometimes nest one level deep when a
-    library auto-captures local variables.
-    """
-    request = event.get("request")
-    if isinstance(request, dict):
-        request["headers"] = _scrub_headers(request.get("headers"))
-
-    user = event.get("user")
-    if isinstance(user, dict) and "email" in user:
-        del user["email"]
-
-    for section in ("extra", "contexts"):
-        bucket = event.get(section)
-        if isinstance(bucket, dict):
-            event[section] = _scrub_dict_recursive(bucket)
-
+    """`before_send` and `before_send_transaction`: enforces the PII contract
+    on every error and transaction. Each part is scrubbed on its own and
+    dropped if it can't be."""
+    _replace(event, "request", _scrub_request)
+    _replace(event, "user", _scrub_user)
+    _replace(event, "contexts", _scrub_contexts)
+    _replace(event, "spans", _scrub_spans)
+    _replace(event, "breadcrumbs", _scrub_breadcrumbs)
+    _replace(event, "extra", _scrub_dict_recursive)
     return event
 
 

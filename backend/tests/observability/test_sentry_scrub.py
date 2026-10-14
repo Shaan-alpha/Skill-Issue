@@ -5,6 +5,8 @@ from __future__ import annotations
 import copy
 import sys
 
+import pytest
+
 from app.observability.sentry import init_sentry, scrub_event
 
 
@@ -222,3 +224,192 @@ def test_sentry_still_starts_when_the_openai_integration_cannot_load(monkeypatch
     )
 
     assert captured["disabled_integrations"] == []
+
+
+_FILTERED = "[Filtered]"
+
+
+def test_only_allowlisted_request_headers_survive():
+    event = {
+        "request": {
+            "headers": {
+                "user-agent": "pytest",
+                "referer": "https://skillissue.tech/me?code=abc&mode=roast",
+                "content-type": "application/json",
+                "accept": "*/*",
+                "host": "skillissue.tech",
+                "cookie": "si_session=s",
+                "x-internal-secret": "s",
+                "x-vercel-forwarded-for": "203.0.113.7",
+                "x-vercel-ip-city": "Delhi",
+                "x-vercel-oidc-token": "eyJ",
+                "x-forwarded-host": "evil.test",
+                "accept-language": "en",
+            }
+        }
+    }
+    headers = scrub_event(event, {})["request"]["headers"]
+    assert headers == {
+        "user-agent": "pytest",
+        "referer": f"https://skillissue.tech/me?code={_FILTERED}&mode=roast",
+        "content-type": "application/json",
+        "accept": "*/*",
+        "host": "skillissue.tech",
+    }
+
+
+def test_header_names_are_matched_in_any_case():
+    event = {"request": {"headers": {"User-Agent": "pytest", "COOKIE": "s", "Accept": ["a", "b"]}}}
+    assert scrub_event(event, {})["request"]["headers"] == {
+        "User-Agent": "pytest",
+        "Accept": ["a", "b"],
+    }
+
+
+def test_cookies_bodies_env_and_ip_never_leave():
+    event = {
+        "request": {
+            "cookies": {"si_session": "s"},
+            "data": {"a": 1},
+            "env": {"REMOTE_ADDR": "203.0.113.7"},
+        },
+        "user": {"id": "u1", "ip_address": "203.0.113.7", "email": "x@example.com"},
+    }
+    out = scrub_event(event, {})
+    assert out["request"] == {}
+    assert out["user"] == {"id": "u1"}
+
+
+@pytest.mark.parametrize(
+    ("query", "expected"),
+    [
+        ("mode=roast&code=abc&state=xyz", f"mode=roast&code={_FILTERED}&state={_FILTERED}"),
+        ("auth=failed&sort=new&page=2", "auth=failed&sort=new&page=2"),
+        ("access_token=t&x=1", f"access_token={_FILTERED}&x=1"),
+    ],
+)
+def test_sensitive_query_values_are_filtered(query, expected):
+    event = {"request": {"query_string": query, "url": f"https://api.test/auth/callback?{query}"}}
+    out = scrub_event(event, {})["request"]
+    assert out["query_string"] == expected
+    assert out["url"] == f"https://api.test/auth/callback?{expected}"
+
+
+def test_query_strings_in_other_shapes_are_filtered():
+    as_dict = scrub_event({"request": {"query_string": {"code": "a", "mode": "roast"}}}, {})
+    as_pairs = scrub_event({"request": {"query_string": [["state", "a"], ["page", "2"]]}}, {})
+    assert as_dict["request"]["query_string"] == {"code": _FILTERED, "mode": "roast"}
+    assert as_pairs["request"]["query_string"] == [["state", _FILTERED], ["page", "2"]]
+
+
+def test_url_edge_cases_are_left_intact():
+    cases = {
+        "https://api.test/x?code=a#frag": f"https://api.test/x?code={_FILTERED}#frag",
+        "https://api.test/x?code&mode=roast": "https://api.test/x?code&mode=roast",
+        "https://api.test/x?": "https://api.test/x?",
+        "https://api.test/x": "https://api.test/x",
+        "/me?state=s": f"/me?state={_FILTERED}",
+    }
+    for url, expected in cases.items():
+        assert scrub_event({"request": {"url": url}}, {})["request"]["url"] == expected
+
+
+def test_encoded_values_are_filtered_whole():
+    out = scrub_event({"request": {"query_string": "code=a%2Fb%3D&mode=r%C3%B6ast"}}, {})
+    assert out["request"]["query_string"] == f"code={_FILTERED}&mode=r%C3%B6ast"
+
+
+def test_transaction_trace_and_span_data_keep_only_safe_values():
+    data = {
+        "http.request.header.user_agent": "pytest",
+        "http.request.header.referer": "https://skillissue.tech/me?state=s",
+        "http.request.header.x_internal_secret": _FILTERED,
+        "http.request.header.cookie.si_session": "s",
+        "http.response.header.set_cookie": "s",
+        "http.request.body.data": "{}",
+        "http.target": "/auth/callback?code=abc&mode=roast",
+        "http.query": "state=xyz",
+        "url.full": "https://api.test/x?token=t",
+        "http.request.method": "GET",
+    }
+    event = {
+        "type": "transaction",
+        "contexts": {"trace": {"data": dict(data)}},
+        "spans": [{"data": dict(data)}],
+    }
+    out = scrub_event(event, {})
+    expected = {
+        "http.request.header.user_agent": "pytest",
+        "http.request.header.referer": f"https://skillissue.tech/me?state={_FILTERED}",
+        "http.target": f"/auth/callback?code={_FILTERED}&mode=roast",
+        "http.query": f"state={_FILTERED}",
+        "url.full": f"https://api.test/x?token={_FILTERED}",
+        "http.request.method": "GET",
+    }
+    assert out["contexts"]["trace"]["data"] == expected
+    assert out["spans"][0]["data"] == expected
+
+
+def test_breadcrumb_urls_are_filtered():
+    event = {
+        "breadcrumbs": {
+            "values": [
+                {
+                    "category": "httplib",
+                    "data": {"url": "https://api.test/x?token=t", "http.query": "code=c"},
+                },
+                {"category": "navigation", "data": {"from": "/a?state=s", "to": "/b"}},
+            ]
+        }
+    }
+    values = scrub_event(event, {})["breadcrumbs"]["values"]
+    assert values[0]["data"] == {
+        "url": f"https://api.test/x?token={_FILTERED}",
+        "http.query": f"code={_FILTERED}",
+    }
+    assert values[1]["data"] == {"from": f"/a?state={_FILTERED}", "to": "/b"}
+
+
+@pytest.mark.parametrize(
+    ("event", "expected"),
+    [
+        ({"request": None}, {}),
+        ({"request": "x"}, {}),
+        ({"request": {"headers": [("cookie", "s")]}}, {"request": {}}),
+        ({"request": {"query_string": 3}}, {"request": {}}),
+        ({"request": {"url": 7}}, {"request": {}}),
+        ({"user": "x"}, {}),
+        ({"contexts": 1}, {}),
+        ({"contexts": {"trace": {"data": "x"}}}, {"contexts": {"trace": {}}}),
+        ({"spans": "x"}, {}),
+        ({"spans": [{"data": 1}]}, {"spans": [{}]}),
+        ({"breadcrumbs": 5}, {}),
+        ({"breadcrumbs": {"values": [{"data": None}]}}, {"breadcrumbs": {"values": [{}]}}),
+    ],
+)
+def test_unreadable_parts_are_dropped_not_sent(event, expected):
+    assert scrub_event(copy.deepcopy(event), {}) == expected
+
+
+def test_one_bad_part_does_not_cost_the_rest():
+    event = {
+        "request": {"headers": "not-a-dict", "url": "https://api.test/x?code=c"},
+        "contexts": {"auth": {"access_token": "t", "kept": "yes"}},
+        "message": "boom",
+    }
+    out = scrub_event(event, {})
+    assert out == {
+        "request": {"url": f"https://api.test/x?code={_FILTERED}"},
+        "contexts": {"auth": {"kept": "yes"}},
+        "message": "boom",
+    }
+
+
+def test_an_event_without_request_details_is_unchanged():
+    event = {
+        "message": "hi",
+        "level": "error",
+        "tags": {"request_id": "r"},
+        "request": {"method": "GET"},
+    }
+    assert scrub_event(copy.deepcopy(event), {}) == event
