@@ -21,7 +21,7 @@ def score(profile: Profile) -> ScoreResult:
             scope = (
                 "non-fork repos"
                 if len(inspected) == len(non_fork) and not profile.repo_list_capped
-                else f"the {len(inspected)} most recently updated non-fork repos"
+                else f"the {len(inspected)} most recently pushed non-fork repos"
             )
             evidence.append(
                 Evidence(

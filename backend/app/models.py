@@ -91,7 +91,7 @@ class Profile(BaseModel):
     external_reviews: int
     external_orgs: set[str] = Field(default_factory=set)
     commit_dates: list[datetime]
-    # First lines of the user's own commits (the same fetch as commit_dates).
+    # First lines of the user's own commits, from the commit sample.
     commit_subjects: list[str] = Field(default_factory=list)
     # Set when a repo's commit page came back full: its older commits went
     # unseen, so the history is complete only from this day on.

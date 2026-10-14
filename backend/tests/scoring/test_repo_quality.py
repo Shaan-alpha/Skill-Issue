@@ -128,7 +128,7 @@ def test_readme_majority_counts_only_repos_whose_roots_were_read() -> None:
 
     rows = [(e.detail, e.weight) for e in score(profile).evidence if e.signal == "readme_majority"]
 
-    assert rows == [("75% of the 20 most recently updated non-fork repos have READMEs", 6)]
+    assert rows == [("75% of the 20 most recently pushed non-fork repos have READMEs", 6)]
 
 
 def test_readme_majority_speaks_for_every_repo_when_all_were_read() -> None:
@@ -172,5 +172,5 @@ def test_evidence_names_its_scope_when_the_repo_list_was_capped() -> None:
         "9/12 of the most recently updated non-fork repos carry a recognised SPDX license"
     )
     assert details["readme_majority"] == (
-        "100% of the 12 most recently updated non-fork repos have READMEs"
+        "100% of the 12 most recently pushed non-fork repos have READMEs"
     )
