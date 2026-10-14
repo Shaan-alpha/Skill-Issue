@@ -13,8 +13,10 @@ import respx
 from httpx import Response
 
 from app.github.client import GitHubClient, GitHubRateLimited
+from app.ingestion import profile as profile_module
 from app.ingestion.profile import ingest_profile
 from app.scoring import engineering_maturity
+from tests.clock import frozen_at
 from tests.graphql_router import graphql_router
 
 FIXTURES = Path(__file__).parent / "fixtures" / "github_responses"
@@ -963,6 +965,36 @@ async def test_short_commit_pages_mean_the_history_is_complete() -> None:
         profile = await ingest_profile("octocat", gh)
 
     assert profile.commit_history_complete_since is None
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_repeating_an_analysis_the_same_day_reuses_the_cached_commit_pages(
+    fake_cache, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Commit lists are the most numerous GitHub reads. Their windows start at
+    a UTC midnight, so the same analysis repeated later that day (a retry after
+    a timeout, say) asks the same questions and the cache answers them.
+    Microsecond bounds made every request new, so the cache never did."""
+    repos_payload = [_fake_repo("busy", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql()
+    morning = datetime.now(UTC).replace(hour=8, minute=15, second=42, microsecond=123456)
+    commits = respx.get(url__startswith="https://api.github.com/repos/octocat/busy/commits").mock(
+        side_effect=_busy_repo_commits(morning - timedelta(days=500))
+    )
+
+    for moment in (morning, morning.replace(hour=19, minute=3, second=7, microsecond=654321)):
+        monkeypatch.setattr(profile_module, "datetime", frozen_at(moment))
+        async with GitHubClient(token="ghs_test", cache=fake_cache) as gh:
+            await ingest_profile("octocat", gh)
+
+    # The page and the check for older commits, each asked once.
+    assert commits.call_count == 2
 
 
 @pytest.mark.asyncio

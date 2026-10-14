@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from typing import TYPE_CHECKING, Any, NamedTuple, Self
 
@@ -453,19 +453,21 @@ class GitHubClient:
         GitHub can't resolve this `contributionsCollection` query (the same
         RESOURCE_LIMITS_EXCEEDED rejection hyper-active accounts trigger). A rate
         limit still fails the analysis.
-        """
-        from datetime import UTC, datetime, timedelta
 
+        The year is the 365 UTC days up to tonight's midnight. Whole days keep
+        the query, and so its cache key, the same all day.
+        """
         from app.github.queries import CONTRIBUTION_REPOS
 
-        now = datetime.now(UTC)
+        today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+        midnight = today + timedelta(days=1)
         try:
             data = await self.graphql(
                 CONTRIBUTION_REPOS,
                 {
                     "login": username,
-                    "from": (now - timedelta(days=365)).isoformat(),
-                    "to": now.isoformat(),
+                    "from": (midnight - timedelta(days=365)).isoformat(),
+                    "to": midnight.isoformat(),
                 },
             )
         except GitHubRateLimited:

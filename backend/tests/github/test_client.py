@@ -1,5 +1,6 @@
 import asyncio
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -7,7 +8,9 @@ import pytest
 import respx
 from httpx import Response
 
+from app.github import client as client_module
 from app.github.client import GitHubClient, GitHubRateLimited, RootEntry
+from tests.clock import frozen_at
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "github_responses"
 
@@ -360,6 +363,40 @@ async def test_get_contribution_repos_filters_low_volume() -> None:
     async with GitHubClient(token="ghs_test") as gh:
         count = await gh.get_contribution_repo_count("alice", min_commits=10)
     assert count == 2
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_contribution_count_asks_for_whole_utc_days(
+    fake_cache, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The window is the 365 UTC days up to tonight's midnight. In whole days
+    the query, and so its cache key, stays the same all day; microsecond
+    bounds made every request new, so the cache never answered one."""
+    route = respx.post("https://api.github.com/graphql").mock(
+        return_value=Response(
+            200,
+            json={
+                "data": {
+                    "user": {"contributionsCollection": {"commitContributionsByRepository": []}}
+                }
+            },
+        )
+    )
+    morning = datetime.now(UTC).replace(hour=8, minute=15, second=42, microsecond=123456)
+
+    for moment in (morning, morning.replace(hour=19, minute=3, second=7, microsecond=654321)):
+        monkeypatch.setattr(client_module, "datetime", frozen_at(moment))
+        async with GitHubClient(token="ghs_test", cache=fake_cache) as gh:
+            await gh.get_contribution_repo_count("alice", min_commits=10)
+
+    assert route.call_count == 1
+    midnight = morning.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    variables = json.loads(route.calls[0].request.content)["variables"]
+    assert (variables["from"], variables["to"]) == (
+        (midnight - timedelta(days=365)).isoformat(),
+        midnight.isoformat(),
+    )
 
 
 @pytest.mark.asyncio
