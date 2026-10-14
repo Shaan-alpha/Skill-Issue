@@ -91,6 +91,9 @@ class Profile(BaseModel):
     # Set when a repo's commit page came back full: its older commits went
     # unseen, so the history is complete only from this day on.
     commit_history_complete_since: datetime | None = None
+    # True when the repo list came back as a full page: `repos` is then the
+    # most recently updated slice of the account, not all of it.
+    repo_list_capped: bool = False
     account_created_at: datetime
     # Recruiter Signal fields
     pinned_count: int = 0

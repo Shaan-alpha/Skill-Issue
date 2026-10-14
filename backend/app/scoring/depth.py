@@ -49,7 +49,7 @@ async def enrich_for_tier(profile: Profile, base_tier: TierName, gh: "GitHubClie
     client bounds how many requests are in flight.
     """
     if _at_least(base_tier, "Professional Developer"):
-        # Every non-fork repo, the set Repo Quality divides by.
+        # Every listed non-fork repo, the set Repo Quality divides by.
         profile.licensed_repos = [
             r.full_name for r in profile.repos if not r.is_fork and r.has_license
         ]

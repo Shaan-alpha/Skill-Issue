@@ -325,6 +325,28 @@ async def test_repo_licences_come_with_the_repo_list() -> None:
 
 @pytest.mark.asyncio
 @respx.mock
+@pytest.mark.parametrize(("listed", "capped"), [(100, True), (99, False)])
+async def test_a_full_repo_list_page_marks_the_list_capped(listed: int, capped: bool) -> None:
+    """The repo list is one page of the 100 most recently updated repos. A
+    full page may hide older ones, so evidence must not read as the whole
+    account's repos."""
+    repos_payload = [_fake_repo(f"r{i}") for i in range(listed)]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload[:ROOT_CONTENT_LIMIT])
+    _mock_commits(repos_payload[:10])
+    _mock_contents(repos_payload[:ROOT_CONTENT_LIMIT])
+    _mock_profile_readme()
+    _mock_graphql()
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert profile.repo_list_capped is capped
+
+
+@pytest.mark.asyncio
+@respx.mock
 async def test_repos_past_the_root_listing_limit_are_marked_uninspected() -> None:
     """Root listings are read for the most recently updated repos only. The
     rest have unknown README/tests/CI flags, not absent ones, and say so."""

@@ -12,14 +12,15 @@ def score(profile: Profile) -> ScoreResult:
     evidence: list[Evidence] = []
     points = 0
 
-    # READMEs are known only where ingestion read the root listing.
+    # READMEs are known only where ingestion read the root listing, and a
+    # capped repo list holds only the most recently updated repos.
     inspected = [repo for repo in non_fork if repo.root_inspected]
     if inspected:
         readme_ratio = sum(1 for repo in inspected if repo.has_readme) / len(inspected)
         if readme_ratio >= 0.5:
             scope = (
                 "non-fork repos"
-                if len(inspected) == len(non_fork)
+                if len(inspected) == len(non_fork) and not profile.repo_list_capped
                 else f"the {len(inspected)} most recently updated non-fork repos"
             )
             evidence.append(
@@ -68,10 +69,15 @@ def score(profile: Profile) -> ScoreResult:
     if non_fork:
         licensed = sum(1 for r in non_fork if r.full_name in profile.licensed_repos)
         if licensed / len(non_fork) >= 0.5:
+            listed = (
+                "of the most recently updated non-fork repos"
+                if profile.repo_list_capped
+                else "non-fork repos"
+            )
             evidence.append(
                 Evidence(
                     signal="license_majority",
-                    detail=f"{licensed}/{len(non_fork)} non-fork repos carry a recognised SPDX license",
+                    detail=f"{licensed}/{len(non_fork)} {listed} carry a recognised SPDX license",
                     weight=4,
                 )
             )

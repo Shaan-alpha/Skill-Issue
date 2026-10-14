@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 import httpx
 
 from app.concurrency import gather_all
-from app.github.client import GitHubCallCapExceeded, GitHubRateLimited
+from app.github.client import REPO_LIST_PAGE_SIZE, GitHubCallCapExceeded, GitHubRateLimited
 from app.github.queries import (
     EXTERNAL_PRS,
     EXTERNAL_REVIEW_COUNT,
@@ -632,6 +632,7 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
         commit_dates=sorted(commit_dates_set),
         commit_subjects=commit_subjects,
         commit_history_complete_since=complete_since,
+        repo_list_capped=len(repos_raw) >= REPO_LIST_PAGE_SIZE,
         workflow_counts=workflow_counts,
         account_created_at=_parse_dt(user["created_at"]) or datetime.now(UTC),
         company=user.get("company"),

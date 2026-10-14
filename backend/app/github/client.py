@@ -26,6 +26,8 @@ logger = logging.getLogger(__name__)
 
 API_BASE = "https://api.github.com"
 GRAPHQL_URL = "https://api.github.com/graphql"
+# The repo list is one page: the account's most recently updated repos.
+REPO_LIST_PAGE_SIZE = 100
 
 # Status codes whose response bodies are safe to cache. 5xx and 429 are
 # transient and should always retry against the live API.
@@ -338,7 +340,9 @@ class GitHubClient:
         resp.raise_for_status()
         return resp.json()
 
-    async def list_repos(self, username: str, *, per_page: int = 100) -> list[dict[str, Any]]:
+    async def list_repos(
+        self, username: str, *, per_page: int = REPO_LIST_PAGE_SIZE
+    ) -> list[dict[str, Any]]:
         resp = await self._request(
             "GET",
             f"{API_BASE}/users/{username}/repos",
