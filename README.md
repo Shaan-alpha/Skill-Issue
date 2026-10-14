@@ -41,7 +41,7 @@ Drop in a username. Skill Issue analyzes repositories, engineering maturity, OSS
 | 💯 **Engineering score** | 100 points across six weighted signals: every point traceable to evidence, shown on each score card |
 | 🪜 **7-tier ladder** | Hobbyist → Student Builder → Entry-Level → Professional → Senior → Staff → Principal, with intra-tier sub-rank |
 | 🏅 **Stackable badges** | OSS Contributor, PR Master, Maintainer, Star Magnet, Polyglot, Long-haul, Indie Hacker, Toolmaker: deterministic and multi-earnable |
-| 🔓 **Tier-gated depth** | Higher tiers unlock licence credit (Professional+), PR review depth (Senior+) and cross-repo breadth (Staff+). README depth, dependency manifests and commit-message quality come from data every analysis already reads; CI workflows cost one batched query |
+| 🔓 **Tier-gated depth** | Higher tiers unlock licence credit (Professional+), PR review depth (Senior+) and cross-repo breadth (Staff+). Licences, README depth, dependency manifests and commit-message quality come from data every analysis already reads; CI workflows cost one batched query |
 | 🔥 **Two voices** | **Roast Mode** for what a blunt senior would say · **Mentor Mode** for how to fix it |
 | 🧾 **GitHub Receipts™** | Shareable 1200×630 scorecards for LinkedIn, X, Discord, portfolios |
 | ⚡ **Fast on repeat** | Warm `/analyze/{user}` is served from an Upstash Redis report cache, designed for a p95 of at most 200 ms; the live measurement is still pending |
@@ -70,7 +70,7 @@ flowchart TD
 
     subgraph BE ["FastAPI backend — Python 3.12, async end to end"]
         direction TB
-        ING["<b>Ingestion</b> · httpx + GraphQL<br/>profile · pinned · repos · commits<br/>PRs · issues · languages · contributions<br/><i>parallel, rate-limit aware, bounded fan-out</i>"]
+        ING["<b>Ingestion</b> · httpx + GraphQL<br/>profile · pinned · repos · commits<br/>PRs · reviews · languages · contributions<br/><i>parallel, rate-limit aware, bounded fan-out</i>"]
         P1["<b>Pass 1 — deterministic scoring</b><br/>repo quality 30 · maturity 20 · OSS 15<br/>recruiter signal 15 · consistency 10 · trajectory 10<br/>→ base total → tier"]
         P2["<b>Pass 2 — tier-gated depth</b><br/>SPDX licence · PR review depth<br/>cross-repo breadth → re-score"]
         LADDER["<b>Ladder &amp; badges</b><br/>7 tiers, Hobbyist → Principal, with sub-rank<br/>8 stackable badges, no priority ordering"]
@@ -84,12 +84,12 @@ flowchart TD
     end
 
     GH[("GitHub REST + GraphQL")]
-    PG[("Neon Postgres<br/>users · sessions<br/>analyses · narratives")]
+    PG[("Neon Postgres<br/>users · sessions<br/>analyses + runs · narratives")]
     OAUTH["GitHub OAuth<br/>sign-in + higher rate limits"]
     OG["1200×630 GitHub Receipt<br/>/u/[user]/card · /share/[slug]"]
 
     U --> FE -->|"HTTP"| ING
-    GH -.->|"conditional requests · ETags"| ING
+    GH -.->|"REST + GraphQL · cached per endpoint"| ING
     ING <--> CACHE
     P1 --> CACHE
     NARR -->|"SSE stream"| FE
@@ -113,10 +113,13 @@ Green is the part that must be right, and is pure: same GitHub data in, same sco
 
 **v1.0.14: live** at [skillissue.tech](https://skillissue.tech), with GitHub OAuth sign-in, Neon Postgres persistence, `/me` history, and opt-in `/share/[slug]` public links.
 
-Following the v1.0.0 stable launch, a security-hardening line ran from a full internal audit through v1.0.8, and CI-integrity work through v1.0.10. v1.0.11 closed a navigation-state bug sweep that traced four separate reports back to one root cause.
+Following the v1.0.0 stable launch, a security-hardening line ran from a full internal audit through v1.0.8, and CI-integrity work through v1.0.10. v1.0.11 closed a navigation-state bug sweep that traced four separate reports back to one root cause. v1.0.14 reworked scoring after a full audit against how developers work in 2026.
 
 | Release | What shipped |
 | --- | --- |
+| **v1.0.14** | Scoring audit: open-source credit only for PRs merged into other people's repos, a rebuilt Recruiter Signal, licence and README checks that no longer penalise large portfolios, evidence on every score card, fresh analyses in about half the time |
+| **v1.0.13** | Maintenance: two critical Next.js advisories closed, sign-ins and saves confirmed before the server answers, history refresh reads fresh GitHub data |
+| **v1.0.12** | Narrator back online on Groq's `openai/gpt-oss-120b` after the old model's retirement, with an alert when it falls back |
 | **v1.0.11** | Navigation-state bug sweep: the narrative no longer duplicates on back-nav, `/me` reflects saves immediately, badge evidence is reachable by screen reader, and a version-drift guard now fails the build |
 | **v1.0.10** | Dependency-manifest drift guard: CI fails if `pyproject.toml` / `uv.lock` / `requirements.txt` disagree |
 | **v1.0.9** | Audit-gate resilience: an advisory-registry outage warns instead of hard-blocking every PR |
@@ -217,10 +220,10 @@ The frontend reads `NEXT_PUBLIC_BACKEND_URL` from `frontend/.env.local` (default
 ### Tests + lint
 
 ```bash
-# backend — 359 tests; DB-fixture tests skip without TEST_DATABASE_URL
+# backend: DB-fixture tests skip without TEST_DATABASE_URL
 cd backend && uv run ruff check . && uv run ruff format --check . && uv run pytest -q
 
-# frontend — 73 tests
+# frontend
 cd frontend && npm run lint && npx tsc --noEmit && npm run test:run && npm run build
 ```
 

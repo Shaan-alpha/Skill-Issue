@@ -23,6 +23,7 @@ A release from a full review of how scores are calculated, checked against how d
 - **Deployment detection is up to date:** `compose.yaml`, `vercel.ts`, Cloudflare's `wrangler.jsonc`, Railway, Firebase, Amplify, SST, AWS SAM, CDK and CodeDeploy, Pulumi, Terraform, Helm, Kustomize, Kamal and more.
 - **36 more statically typed languages earn the typed-language signal**, including Dart, Scala, Haskell, Zig, OCaml, F#, Elm and Gleam.
 - **A pinned repository is no longer mistaken for a deployed one.**
+- **Licence and README credit now see all your repositories.** The licence check read only your ten most recently updated repositories but compared them with all of them, so past twenty repositories it could never pass; the README check had the same flaw past forty. Licences are now read for every repository, and README coverage is judged on the twenty most recently updated repositories we look inside, as the evidence now says.
 - **Learning Trajectory looks for older commits before deciding you weren't active the year before.** Very active developers whose latest 100 commits per repository all fell inside the last year used to lose the two-year-activity points.
 
 ### Added
@@ -31,11 +32,11 @@ A release from a full review of how scores are calculated, checked against how d
 - **A failed sign-in brings you back to the site with a message** instead of leaving you on an error page.
 
 ### Fixed
-- **Fresh analyses take roughly half as long.** GitHub data is now fetched in parallel, and about 20 redundant GitHub requests per high-tier analysis are gone.
+- **Fresh analyses take roughly half as long.** GitHub data is now fetched in parallel, and about 30 redundant GitHub requests per high-tier analysis are gone.
 - **A moment of GitHub rate-limiting no longer leaves a wrongly low score for six hours.** The analysis now says GitHub is busy instead of scoring repositories as if they had no README, tests or CI, or you as if you had no open-source contributions.
 - **One unavailable repository no longer breaks the whole analysis**, whether it was taken down or blocked, and neither does an empty profile-README repository.
 - **Refreshing an analysis from your history now shows the new score.**
-- **Deeper checks for higher tiers return a clear "busy" response** when they hit GitHub's limits, instead of a server error.
+- **Deeper checks for higher tiers return a clear "busy" response** when they hit GitHub's limits, instead of a server error. An analysis that reaches its own request limit now stops with a clear response too, instead of finishing with some checks quietly skipped.
 - **Your history records how long an analysis really took**, and viewing the same report again no longer stores another copy of it or moves it to the top of your Recent list. A fresh analysis or a refresh still does.
 
 ### Security
@@ -47,6 +48,7 @@ A release from a full review of how scores are calculated, checked against how d
 - **An AI narrator outage raises one alert carrying the provider's error**, instead of up to three separate ones.
 - **Server-side error reports name the release they came from.**
 - **Analyses no longer hold a database connection while they wait on GitHub**, including with an expired sign-in cookie and during a forced refresh.
+- **Retrying an analysis reuses the commit history GitHub already sent** for a few minutes, instead of requesting all of it again.
 
 ### Internal
 - The planned major upgrades (TypeScript 6, Vitest 5, jest-dom 7, Sentry SDK 11, framer-motion 13, openai 3, SQLAlchemy 2.1) move to v1.0.15.

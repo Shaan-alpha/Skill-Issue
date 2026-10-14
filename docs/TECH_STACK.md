@@ -6,7 +6,7 @@
 
 ## Frontend — `frontend/`
 
-| Tool | Pinned (as of 2026-07-13) | Why |
+| Tool | Pinned (as of 2026-10-14) | Why |
 | --- | --- | --- |
 | **Next.js** | `16.3.8` | App Router, partial prerendering, streaming, Vercel-native. v16 dropped some conventions; check `frontend/AGENTS.md` before assuming v13/v14 patterns. |
 | **Cache Components** | enabled v0.8.6 (`cacheComponents: true` in `next.config.ts`) | Powers `/share/[slug]` PPR via `'use cache'` + `cacheTag('share:<slug>')` + `cacheLife({ revalidate: 3600 })`. Incompatible with `export const dynamic = "force-dynamic"` (had to be dropped from `/me` and `/u/[username]/card`). Helpers from `next/cache`: `cacheTag`, `cacheLife`, `revalidateTag(tag, { expire: 0 })`. Stubbed in vitest setup since they throw outside the Next runtime. |
@@ -14,10 +14,10 @@
 | **TypeScript** | `^5` | Sane component contracts |
 | **TailwindCSS** | `^4` | Utility-first; `@tailwindcss/postcss` is the v4 pipeline. No tailwind.config — config lives in `globals.css` via `@theme`. |
 | **tw-animate-css** | `^1.4` | v4-compatible replacement for `tailwindcss-animate` |
-| **shadcn/ui** | `^4.13` (devDependency, CLI only) | Component baseline; we own the source. The package is a CLI scaffolder — *do not* import from it at runtime. Style: `base-nova` (Base UI primitives, not Radix). |
-| **Framer Motion** | `^12.42` | Animation; prefer spring physics over linear easings. Use `LazyMotion` + `m.*` namespace, not `motion.*`, to keep the initial bundle lean. |
-| **@base-ui/react** | `^1.6` | Headless primitives (Progress, Tooltip) — accessible and unstyled; we own the visual layer. Used for the v0.3.0 position-bar Progress and badge-row Tooltip. |
-| **lucide-react** | `^1.27` | Icon set. **Branded icons (`Github`, `Twitter`, etc.) were removed in 1.x** — substitute generic equivalents (`ExternalLink`) or inline an SVG. |
+| **shadcn/ui** | `^4.21` (devDependency, CLI only) | Component baseline; we own the source. The package is a CLI scaffolder — *do not* import from it at runtime. Style: `base-nova` (Base UI primitives, not Radix). |
+| **Framer Motion** | `^12.43` | Animation; prefer spring physics over linear easings. Use `LazyMotion` + `m.*` namespace, not `motion.*`, to keep the initial bundle lean. |
+| **@base-ui/react** | `^1.8` | Headless primitives (Progress, Tooltip) — accessible and unstyled; we own the visual layer. Used for the v0.3.0 position-bar Progress and badge-row Tooltip. |
+| **lucide-react** | `^1.49` | Icon set. **Branded icons (`Github`, `Twitter`, etc.) were removed in 1.x** — substitute generic equivalents (`ExternalLink`) or inline an SVG. |
 | **`next/og` (`ImageResponse`)** | bundled with Next 16 | OG card generation (v0.6.0). File-convention routes `opengraph-image.tsx` + `twitter-image.tsx` at the route segment auto-wire meta tags. Satori-based — strict about explicit `display: flex` on every multi-child div. |
 | **Inter font** | OFL 1.1, bundled under `public/fonts/` | Medium + Bold TTF bundled because satori reads font bytes per request — fetching remotely would add cold-start latency. |
 | **Vitest** | `^4.1` + `happy-dom@^20` + `@testing-library/react@^16` + `@testing-library/jest-dom@^6` | First frontend test framework, added in v0.6.0. Picked over node:test for native TS/JSX, picked happy-dom over jsdom for speed. happy-dom bumped from `^15` to `^20` on 2026-05-22 to clear GHSA-37j7-fg3j-429f (VM Context Escape RCE — dev-only impact, but AGENTS.md rule 1). |
@@ -30,7 +30,7 @@
 
 ## Backend — `backend/`
 
-| Tool | Pinned (as of 2026-07-13) | Why |
+| Tool | Pinned (as of 2026-10-14) | Why |
 | --- | --- | --- |
 | **Python** | `3.12+` | Modern type system, performance, structural pattern matching |
 | **FastAPI** | `0.142` | Async-native, Pydantic-integrated, OpenAPI for free. Bumped 0.136→0.139 in the v1.0.x security slice to pull patched Starlette; 0.140 came with the 2026-07-28 dependency refresh, 0.142 with v1.0.13. Since 0.141 an included router's routes sit behind a wrapper instead of being copied into `app.routes`. |
@@ -41,13 +41,13 @@
 | **SQLAlchemy** | `2.0.x` (async) + `asyncpg>=0.31` | Async ORM + Postgres driver for Neon. Statement cache disabled for pgBouncer transaction-mode pooling. |
 | **Alembic** | `1.18+` | Hand-authored migrations; reversibility tested in pytest. |
 | **upstash-redis** | `>=1.2` | Async REST-API client for Upstash. HTTP-based, Fluid-Compute-friendly. Added in v0.7.0. |
-| **cryptography** | `48.0.1+` | AES-GCM for at-rest GitHub-token encryption (v0.5.0). CVE floor raised (GHSA-537c-gmf6-5ccf) in the v1.0.x security slice. |
+| **cryptography** | `50.0.0+` | AES-GCM for at-rest GitHub-token encryption (v0.5.0). CVE floor raised for GHSA-537c-gmf6-5ccf in the v1.0.x security slice, then to 50.0.0 for CVE-2026-69247 (PKCS#7 Bleichenbacher oracle). |
 | **uvicorn[standard]** | `0.51` | ASGI server in dev; Vercel Functions for production |
 | **uv** | `0.11.12+` | Package + venv management — significantly faster than pip |
 | **pytest** | `9.x` | Test runner with async support |
-| **pytest-asyncio** | `1.3` | `asyncio_mode = "auto"` so async tests don't need decorators |
+| **pytest-asyncio** | `1.4` | `asyncio_mode = "auto"` so async tests don't need decorators |
 | **respx** | `0.23` | httpx mocking for GitHub client + e2e tests |
-| **ruff** | `0.15.14` | Linter + formatter — one tool for both. Configured in `backend/ruff.toml` (py312, line 100, E/F/I/UP/B/SIM/TCH/RUF). Note: `ruff check` and `ruff format` are independent passes — run both, not just one. v0.8.0 post-ship audit caught 51 format-drifted files because only `ruff check` was being enforced. |
+| **ruff** | `0.16` | Linter + formatter — one tool for both. Configured in `backend/ruff.toml` (py312, line 100, E/F/I/UP/B/SIM/TCH/RUF). Note: `ruff check` and `ruff format` are independent passes — run both, not just one. v0.8.0 post-ship audit caught 51 format-drifted files because only `ruff check` was being enforced. |
 | Static typing | deferred — ruff covers the lint surface | The mypy/pyright pick was punted past v0.1.0; revisit when payoff justifies the maintenance |
 
 **Package manager:** `uv` (not pip, not poetry). Faster, simpler, lockfile-first.
@@ -58,7 +58,7 @@
 
 | Tool | Role |
 | --- | --- |
-| **Neon Postgres** | Primary store (users, analyses, narratives, share tokens). Branch-per-PR for migrations. Pooled host (port 6543, `statement_cache_size=0`) at runtime; direct host (5432) for Alembic. |
+| **Neon Postgres** | Primary store (users, sessions, analyses + runs, narratives; a share is a slug on its analysis). Branch-per-PR for migrations. Pooled (`-pooler`) host at runtime, with `statement_cache_size=0` for PgBouncer transaction mode; direct host for Alembic. |
 | **Upstash Redis** | Backend cache across four fail-open layers (full Report, GitHub API responses, narrative + daily budget, singleflight locks). REST API via `upstash-redis`. User-provisioned account, env vars pasted into Vercel manually. |
 | **Alembic** | Migrations — chosen v0.5.0. Hand-authored, reversibility tested. |
 
@@ -82,7 +82,7 @@
 | **Groq + `openai/gpt-oss-120b`** | Production default since 2026-08-19, replacing `llama-3.3-70b-versatile` (Groq decommissioned it 2026-08-16). Free tier: 30 RPM / 1K RPD / 8K TPM / 200K TPD, 131k context, ~500 tok/s. Configured via `NARRATIVE_BASE_URL=https://api.groq.com/openai/v1` + `NARRATIVE_MODEL=openai/gpt-oss-120b`. |
 | Provider abstraction | `NarrativeLLM` in [`backend/app/narrative/llm.py`](../backend/app/narrative/llm.py) accepts `base_url`. Pointing at any OpenAI-compatible endpoint (Groq, OpenRouter, Cerebras, vLLM/Ollama, OpenAI itself) requires only env-var changes — no code. |
 
-**Cost guardrails:** per-request `max_tokens` cap, per-day per-instance request budget (`NARRATIVE_DAILY_LIMIT`, default 50). Groq's free tier means out-of-pocket cost stays at $0 for v0.5.0; the in-process budget is conservative defence against runaway loops, not a billing guard.
+**Cost guardrails:** a per-request output cap (`max_completion_tokens`, from `NARRATIVE_MAX_OUTPUT_TOKENS`); a daily request budget shared across instances through Upstash (`NARRATIVE_DAILY_LIMIT`, default 55, just under what Groq's free tier allows at ~3.2K tokens a narrative); and per-IP and per-user daily caps so one caller can't drain it. Groq's free tier keeps out-of-pocket cost at $0.
 
 **Model comparison tool:** [`backend/tools/compare_narratives.py`](../backend/tools/compare_narratives.py) runs ingestion + scoring + both narrative modes against a configurable list of Groq models and dumps the outputs side-by-side. Re-run when picking a new default model.
 
@@ -96,7 +96,7 @@
 | Compute | **Vercel Functions (Fluid Compute)** | Function instances reused across concurrent requests, ~300s default timeout. Native marketplace integration with Neon. |
 | DB | **Neon** | Vercel Marketplace integration. Auto-injects `DATABASE_URL` + variants. |
 | Cache | **Upstash Redis** | User-provisioned account (not Marketplace). `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` pasted into Vercel env manually. |
-| DNS / domain | Vercel-managed | Custom domain decided pre-v1.0 |
+| DNS / domain | Vercel-managed | `skillissue.tech` since v1.0.1 |
 
 ---
 
