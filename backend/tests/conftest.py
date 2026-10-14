@@ -13,6 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.db.models import Base
+from tests.graphql_router import take_unrouted
 
 
 class FakeRedis:
@@ -114,6 +115,17 @@ def fake_cache(fake_redis: FakeRedis):
     from app.cache.client import RedisCache
 
     return RedisCache(redis=fake_redis)
+
+
+@pytest.fixture(autouse=True)
+def _fail_on_unrouted_graphql():
+    """A mocked GraphQL operation with no answer fails its test. The router
+    raises too, but a fail-soft path in the code under test can swallow that
+    and leave the test green for the wrong reason."""
+    take_unrouted()
+    yield
+    unrouted = take_unrouted()
+    assert not unrouted, f"GraphQL operations with no mocked answer: {unrouted}"
 
 
 @pytest.fixture(autouse=True)
