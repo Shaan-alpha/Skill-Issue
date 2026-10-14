@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 
 
@@ -101,3 +103,33 @@ async def test_delete_if_equals_only_on_match(fake_cache) -> None:
     assert await fake_cache.delete_if_equals("lock", "k", "holderZ") is False  # mismatch
     assert await fake_cache.delete_if_equals("lock", "k", "holderA") is True  # match
     assert await fake_cache.delete_if_equals("lock", "k", "holderA") is False  # already gone
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("address", ["198.51.100.23", "2001:db8::1"])
+async def test_cache_logs_never_carry_a_visitor_ip(fake_cache, fake_redis, caplog, address) -> None:
+    """Rate-limit and narrative-budget keys embed an anonymous caller as
+    ip:<addr>. A cache log line becomes a Sentry breadcrumb (LoggingIntegration,
+    INFO and up) and a Vercel log line; neither may carry the visitor's IP."""
+    key = f"narrative:ip:{address}:2026-10-14-17"
+    failing_calls = (
+        lambda: fake_cache.get_json("rate_limit", key),
+        lambda: fake_cache.set_json("rate_limit", key, 1),
+        lambda: fake_cache.set_nx("rate_limit", key, "1", ttl_seconds=60),
+        lambda: fake_cache.delete("rate_limit", key),
+        lambda: fake_cache.delete_if_equals("rate_limit", key, "1"),
+        lambda: fake_cache.incr("rate_limit", key),
+        lambda: fake_cache.decr("rate_limit", key),
+        lambda: fake_cache.expire("rate_limit", key, 60),
+    )
+    caplog.set_level(logging.WARNING, logger="app.cache.client")
+    for call in failing_calls:
+        fake_redis.fail_next = 1
+        await call()
+    fake_redis._store[f"si:v1:rate_limit:{key}"] = "not json"
+    await fake_cache.get_json("rate_limit", key)
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert len(messages) == 9
+    assert [message for message in messages if address in message] == []
+    assert all("si:v1:rate_limit:narrative:ip:[Filtered]" in message for message in messages)

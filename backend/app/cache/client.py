@@ -2,11 +2,22 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
 
 KEY_PREFIX = "si:v1:"
+
+# Rate-limit and budget keys embed an anonymous caller as ip:<addr>, and an
+# IPv6 address holds colons too, so a logged key is masked from there on.
+_IP_SUBJECT = re.compile(r"(?<=:ip:).*")
+
+
+def _loggable(key: str) -> str:
+    """The key with any visitor IP masked. Cache log lines become Sentry
+    breadcrumbs and Vercel log lines, and neither may carry an IP."""
+    return _IP_SUBJECT.sub("[Filtered]", key)
 
 
 class _AsyncRedisProtocol(Protocol):
@@ -47,14 +58,14 @@ class RedisCache:
         try:
             raw = await self._redis.get(full)
         except Exception:
-            logger.warning("cache GET failed for %s", full, exc_info=True)
+            logger.warning("cache GET failed for %s", _loggable(full), exc_info=True)
             return None
         if raw is None:
             return None
         try:
             return json.loads(raw)
         except (TypeError, json.JSONDecodeError):
-            logger.warning("cache value at %s is not JSON; ignoring", full)
+            logger.warning("cache value at %s is not JSON; ignoring", _loggable(full))
             return None
 
     async def set_json(
@@ -69,7 +80,7 @@ class RedisCache:
         try:
             await self._redis.set(full, json.dumps(value), ex=ttl_seconds)
         except Exception:
-            logger.warning("cache SET failed for %s", full, exc_info=True)
+            logger.warning("cache SET failed for %s", _loggable(full), exc_info=True)
 
     async def set_nx(
         self,
@@ -86,7 +97,7 @@ class RedisCache:
         try:
             result = await self._redis.set(full, value, ex=ttl_seconds, nx=True)
         except Exception:
-            logger.warning("cache SETNX failed for %s", full, exc_info=True)
+            logger.warning("cache SETNX failed for %s", _loggable(full), exc_info=True)
             return None
         # upstash-redis returns True/"OK" on success, None on NX-failure.
         return result is True or result == "OK"
@@ -96,7 +107,7 @@ class RedisCache:
         try:
             return await self._redis.delete(full)
         except Exception:
-            logger.warning("cache DEL failed for %s", full, exc_info=True)
+            logger.warning("cache DEL failed for %s", _loggable(full), exc_info=True)
             return 0
 
     async def delete_if_equals(self, namespace: str, key: str, expected: str) -> bool:
@@ -113,7 +124,7 @@ class RedisCache:
             await self._redis.delete(full)
             return True
         except Exception:
-            logger.warning("cache CAS-DEL failed for %s", full, exc_info=True)
+            logger.warning("cache CAS-DEL failed for %s", _loggable(full), exc_info=True)
             return False
 
     async def incr(self, namespace: str, key: str) -> int:
@@ -123,7 +134,7 @@ class RedisCache:
         try:
             return await self._redis.incr(full)
         except Exception:
-            logger.warning("cache INCR failed for %s", full, exc_info=True)
+            logger.warning("cache INCR failed for %s", _loggable(full), exc_info=True)
             return 0
 
     async def decr(self, namespace: str, key: str) -> int:
@@ -134,7 +145,7 @@ class RedisCache:
         try:
             return await self._redis.decr(full)
         except Exception:
-            logger.warning("cache DECR failed for %s", full, exc_info=True)
+            logger.warning("cache DECR failed for %s", _loggable(full), exc_info=True)
             return 0
 
     async def expire(self, namespace: str, key: str, seconds: int) -> bool:
@@ -142,7 +153,7 @@ class RedisCache:
         try:
             return await self._redis.expire(full, seconds)
         except Exception:
-            logger.warning("cache EXPIRE failed for %s", full, exc_info=True)
+            logger.warning("cache EXPIRE failed for %s", _loggable(full), exc_info=True)
             return False
 
     async def ping(self) -> bool:
