@@ -16,6 +16,18 @@ _OPERATION = re.compile(r"\bquery\s+(\w+)")
 
 Payload = dict[str, object] | Response
 
+# Operations asked for with no answer. Raising alone isn't enough: fail-soft
+# code under test can swallow the error, so conftest also fails the test on
+# anything recorded here.
+_unrouted: list[str] = []
+
+
+def take_unrouted() -> list[str]:
+    """The operations no router could answer since the last call."""
+    names = list(_unrouted)
+    _unrouted.clear()
+    return names
+
 
 def graphql_router(
     responses: Mapping[str, Payload | list[Payload]],
@@ -24,7 +36,8 @@ def graphql_router(
 
     A value is a JSON payload, an `httpx.Response`, or a list of either served
     in order on repeated calls (the last one repeats once the list runs out).
-    An operation with no entry fails the test loudly.
+    An operation with no entry fails the test, even if the code under test
+    swallows the error.
     """
     served: dict[str, int] = {}
 
@@ -33,6 +46,7 @@ def graphql_router(
         match = _OPERATION.search(query)
         name = match.group(1) if match else "<anonymous>"
         if name not in responses:
+            _unrouted.append(name)
             raise AssertionError(f"unexpected GraphQL operation {name!r}")
         value = responses[name]
         if isinstance(value, list):

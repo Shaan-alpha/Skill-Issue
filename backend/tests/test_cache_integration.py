@@ -141,9 +141,30 @@ def _mock_github_for_testuser() -> None:
                         for i in range(3)
                     }
                 },
-                "ContributionRepos": {
+                "CommitActivity": {
                     "data": {
-                        "user": {"contributionsCollection": {"commitContributionsByRepository": []}}
+                        "user": {
+                            "lastYear": {
+                                "commitContributionsByRepository": [
+                                    {
+                                        "repository": {"isPrivate": False},
+                                        "contributions": {
+                                            "totalCount": 5,
+                                            "pageInfo": {"hasNextPage": False},
+                                            "nodes": [
+                                                {
+                                                    "occurredAt": (
+                                                        datetime.now(UTC) - timedelta(days=i)
+                                                    ).strftime("%Y-%m-%dT07:00:00Z")
+                                                }
+                                                for i in range(5)
+                                            ],
+                                        },
+                                    }
+                                ]
+                            },
+                            "priorYear": {"commitContributionsByRepository": []},
+                        }
                     }
                 },
             }

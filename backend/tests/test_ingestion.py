@@ -3,9 +3,10 @@ import base64
 import contextlib
 import copy
 import json
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 import httpx
 import pytest
@@ -15,7 +16,7 @@ from httpx import Response
 from app.github.client import GitHubCallCapExceeded, GitHubClient, GitHubRateLimited
 from app.ingestion import profile as profile_module
 from app.ingestion.profile import ROOT_CONTENT_LIMIT, ingest_profile
-from app.scoring import engineering_maturity
+from app.scoring import engineering_maturity, learning_trajectory
 from tests.clock import frozen_at
 from tests.graphql_router import graphql_router
 
@@ -140,6 +141,41 @@ def _review_count_payload(total: int = 0) -> dict[str, object]:
     }
 
 
+def _activity_payload(*last_year: str, prior_year: tuple[str, ...] = ()) -> dict[str, object]:
+    """CommitActivity: one public repo holding `last_year` days, one holding `prior_year`."""
+
+    def repo(days: tuple[str, ...]) -> list[dict[str, object]]:
+        if not days:
+            return []
+        nodes = [{"occurredAt": f"{d}T07:00:00Z"} for d in sorted(days, reverse=True)]
+        return [
+            {
+                "repository": {"isPrivate": False},
+                "contributions": {
+                    "totalCount": len(days),
+                    "pageInfo": {"hasNextPage": False},
+                    "nodes": nodes,
+                },
+            }
+        ]
+
+    return {
+        "data": {
+            "user": {
+                "lastYear": {"commitContributionsByRepository": repo(last_year)},
+                "priorYear": {"commitContributionsByRepository": repo(prior_year)},
+            }
+        }
+    }
+
+
+# GitHub could not resolve the query (not a rate limit): ingestion falls back.
+_ACTIVITY_UNAVAILABLE = {
+    "data": None,
+    "errors": [{"type": "RESOURCE_LIMITS_EXCEEDED", "message": "Resource limits exceeded."}],
+}
+
+
 def _workflow_files_payload(
     repos: dict[str, dict[str, list[tuple[str, str]]]],
 ) -> dict[str, object]:
@@ -161,11 +197,13 @@ def _mock_graphql(
     external_prs: int = 0,
     external_reviews: int = 0,
     workflow_files: dict[str, object] | Response | None = None,
+    commit_activity: dict[str, object] | Response | None = None,
 ) -> respx.Route:
     responses: dict[str, object] = {
         "PinnedRepos": _pinned_payload(pinned_count),
         "ExternalPRs": _external_prs_payload(external_prs=external_prs),
         "ExternalReviewCount": _review_count_payload(external_reviews),
+        "CommitActivity": _activity_payload() if commit_activity is None else commit_activity,
     }
     if workflow_files is not None:
         responses["WorkflowFiles"] = workflow_files
@@ -463,6 +501,7 @@ async def test_merged_prs_into_own_repositories_are_not_external() -> None:
         side_effect=graphql_router(
             {
                 "PinnedRepos": _pinned_payload(),
+                "CommitActivity": _activity_payload(),
                 "ExternalPRs": _external_prs_payload(
                     external_prs=8,
                     own_repo_prs=133,
@@ -595,6 +634,208 @@ Here are some ideas to get you started:
 
 @pytest.mark.asyncio
 @respx.mock
+async def test_commit_days_come_from_contributions_across_every_repository() -> None:
+    """Consistency used to see only the user's own repos; work in other
+    people's and organisations' repositories counts now."""
+    repos_payload = [_fake_repo("alpha", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_commits(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql(
+        commit_activity=_activity_payload("2026-09-03", "2026-08-23", prior_year=("2025-06-01",))
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert [d.date().isoformat() for d in profile.commit_dates] == [
+        "2025-06-01",
+        "2026-08-23",
+        "2026-09-03",
+    ]
+    assert profile.commit_activity_scope == "all_public_repos"
+    assert profile.substantial_repo_count == 0
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_unavailable_contributions_fall_back_to_the_commit_sample() -> None:
+    repos_payload = [_fake_repo("alpha", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql(commit_activity=_ACTIVITY_UNAVAILABLE)
+    respx.get(url__startswith="https://api.github.com/repos/octocat/alpha/commits").mock(
+        return_value=Response(200, json=[{"commit": {"author": {"date": "2026-10-01T10:00:00Z"}}}])
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert [d.date().isoformat() for d in profile.commit_dates] == ["2026-10-01"]
+    assert profile.commit_activity_scope == "own_recent_repos"
+    assert profile.substantial_repo_count is None
+    assert profile.commit_sample_repo_count == 1
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_hidden_contributions_fall_back_to_the_commit_sample() -> None:
+    """A private profile hides its contribution data from other viewers, so the
+    query answers with nothing while the user's own repos hold commits it would
+    count. Reading that as no activity would score a busy developer zero."""
+    repos_payload = [_fake_repo("alpha", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql()  # CommitActivity answers with no repositories at all
+    respx.get(url__startswith="https://api.github.com/repos/octocat/alpha/commits").mock(
+        return_value=Response(200, json=[{"commit": {"author": {"date": "2026-10-01T10:00:00Z"}}}])
+    )
+
+    with patch("app.ingestion.activity.sentry_sdk") as sdk:
+        async with GitHubClient(token="ghs_test") as gh:
+            profile = await ingest_profile("octocat", gh)
+
+    assert [d.date().isoformat() for d in profile.commit_dates] == ["2026-10-01"]
+    assert profile.commit_activity_scope == "own_recent_repos"
+    assert sdk.capture_message.call_count == 1
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_no_public_commits_anywhere_reads_as_none() -> None:
+    repos_payload = [_fake_repo("alpha", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_commits(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql()
+
+    with patch("app.ingestion.activity.sentry_sdk") as sdk:
+        async with GitHubClient(token="ghs_test") as gh:
+            profile = await ingest_profile("octocat", gh)
+
+    assert profile.commit_dates == []
+    assert profile.commit_activity_scope == "all_public_repos"
+    assert sdk.capture_message.call_count == 0
+
+
+def _rest_commit(day: datetime) -> dict[str, object]:
+    stamp = day.strftime("%Y-%m-%dT12:00:00Z")
+    return {"commit": {"author": {"date": stamp}, "committer": {"date": stamp}, "message": "Fix"}}
+
+
+def _a_full_page_of_recent_commits() -> list[dict[str, object]]:
+    today = datetime.now(UTC)
+    return [_rest_commit(today - timedelta(days=i + 1)) for i in range(100)]
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_the_fallback_still_sees_the_year_before_past_a_full_page() -> None:
+    """A busy repo's page of 100 commits can end inside the last year, hiding
+    the year before, and Learning Trajectory would read a two-year contributor
+    as new. The contribution data reads both years; the fallback asks for one
+    older commit."""
+    older = datetime.now(UTC) - timedelta(days=400)
+    repos_payload = [_fake_repo("alpha", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql(commit_activity=_ACTIVITY_UNAVAILABLE)
+    recent = _a_full_page_of_recent_commits()
+    commits = respx.get(url__startswith="https://api.github.com/repos/octocat/alpha/commits").mock(
+        side_effect=lambda request: Response(
+            200,
+            json=[_rest_commit(older)] if request.url.params.get("per_page") == "1" else recent,
+        )
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert commits.call_count == 2
+    assert older.date() in {d.date() for d in profile.commit_dates}
+    assert "yoy_activity" in {e.signal for e in learning_trajectory.score(profile).evidence}
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_contribution_data_needs_no_older_commit() -> None:
+    repos_payload = [_fake_repo("alpha", language="Python")]
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_languages(repos_payload)
+    _mock_contents(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql(
+        commit_activity=_activity_payload(
+            (datetime.now(UTC) - timedelta(days=3)).date().isoformat()
+        )
+    )
+    commits = respx.get(url__startswith="https://api.github.com/repos/octocat/alpha/commits").mock(
+        return_value=Response(200, json=_a_full_page_of_recent_commits())
+    )
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert commits.call_count == 1
+    assert profile.commit_activity_scope == "all_public_repos"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_inspection_and_the_commit_sample_follow_push_recency() -> None:
+    """The repo list comes ordered by updated_at, which stars move too. Root
+    listings and the commit sample go to the most recently pushed repos."""
+    repos_payload = [_fake_repo(f"r{i}") for i in range(25)]
+    for i, raw in enumerate(repos_payload):
+        raw["pushed_at"] = f"2026-09-{i + 1:02d}T00:00:00Z"  # r24 pushed last
+    repos_payload.append(_fake_repo("never-pushed"))
+    repos_payload[-1]["pushed_at"] = None
+    _mock_user()
+    _mock_repos(repos_payload)
+    _mock_profile_readme()
+    _mock_graphql()
+    _mock_languages(repos_payload)
+    names = [str(raw["name"]) for raw in repos_payload]
+    contents = {
+        n: respx.get(f"https://api.github.com/repos/octocat/{n}/contents").mock(
+            return_value=Response(200, json=[])
+        )
+        for n in names
+    }
+    commits = {
+        n: respx.get(url__startswith=f"https://api.github.com/repos/octocat/{n}/commits").mock(
+            return_value=Response(200, json=[])
+        )
+        for n in names
+    }
+
+    async with GitHubClient(token="ghs_test") as gh:
+        profile = await ingest_profile("octocat", gh)
+
+    assert {n for n, route in contents.items() if route.called} == {f"r{i}" for i in range(5, 25)}
+    assert {n for n, route in commits.items() if route.called} == {f"r{i}" for i in range(20, 25)}
+    assert [r.name for r in profile.repos if r.root_inspected] == [f"r{i}" for i in range(5, 25)]
+    assert profile.commit_sample_repo_count == 5
+
+
+@pytest.mark.asyncio
+@respx.mock
 async def test_an_untouched_starter_profile_readme_counts_as_almost_empty() -> None:
     """GitHub creates the profile README from a template that is nearly all
     HTML comment. Only text a visitor can see counts toward its length."""
@@ -663,6 +904,7 @@ async def test_ingest_profile_keeps_pr_count_when_review_query_hits_resource_lim
         side_effect=graphql_router(
             {
                 "PinnedRepos": _pinned_payload(),
+                "CommitActivity": _activity_payload(),
                 "ExternalPRs": _external_prs_payload(
                     external_prs=137, sponsors=True, star=True, dev_program=False
                 ),
@@ -699,6 +941,7 @@ async def test_ingest_profile_keeps_review_count_when_pr_query_fails() -> None:
         side_effect=graphql_router(
             {
                 "PinnedRepos": _pinned_payload(),
+                "CommitActivity": _activity_payload(),
                 "ExternalPRs": _RESOURCE_LIMIT_ERROR,
                 "ExternalReviewCount": _review_count_payload(9),
             }
@@ -773,7 +1016,9 @@ _DMCA_BLOCKED = Response(
 )
 
 
-def _two_repo_profile() -> list[dict[str, object]]:
+def _two_repo_profile(
+    commit_activity: dict[str, object] | None = None,
+) -> list[dict[str, object]]:
     repos_payload = [
         _fake_repo("healthy", language="Python"),
         _fake_repo("taken-down", language="Go"),
@@ -782,7 +1027,7 @@ def _two_repo_profile() -> list[dict[str, object]]:
     _mock_repos(repos_payload)
     _mock_profile_readme()
     _mock_contents(repos_payload)
-    _mock_graphql()
+    _mock_graphql(commit_activity=commit_activity)
     return repos_payload
 
 
@@ -807,7 +1052,7 @@ async def test_one_unavailable_repo_does_not_sink_the_languages() -> None:
 @pytest.mark.asyncio
 @respx.mock
 async def test_one_unavailable_repo_does_not_sink_the_commit_history() -> None:
-    repos_payload = _two_repo_profile()
+    repos_payload = _two_repo_profile(commit_activity=_ACTIVITY_UNAVAILABLE)
     _mock_languages(repos_payload)
     respx.get(url__startswith="https://api.github.com/repos/octocat/healthy/commits").mock(
         return_value=Response(200, json=[{"commit": {"author": {"date": "2026-10-01T10:00:00Z"}}}])
@@ -865,7 +1110,8 @@ _GRAPHQL_SECONDARY_LIMIT = Response(
 @pytest.mark.asyncio
 @respx.mock
 @pytest.mark.parametrize(
-    "operation", ["PinnedRepos", "ExternalPRs", "ExternalReviewCount", "WorkflowFiles"]
+    "operation",
+    ["PinnedRepos", "ExternalPRs", "ExternalReviewCount", "WorkflowFiles", "CommitActivity"],
 )
 @pytest.mark.parametrize(
     "limit", [_GRAPHQL_PRIMARY_LIMIT, _GRAPHQL_SECONDARY_LIMIT], ids=["primary", "secondary"]
@@ -879,6 +1125,7 @@ async def test_a_rate_limited_graphql_query_fails_the_ingest(
     _one_repo_with_root(".github")
     responses: dict[str, object] = {
         "PinnedRepos": _pinned_payload(),
+        "CommitActivity": _activity_payload(),
         "ExternalPRs": _external_prs_payload(external_prs=40),
         "ExternalReviewCount": _review_count_payload(4),
         "WorkflowFiles": _workflow_files_payload({"r0": {"github": [("ci.yml", "blob")]}}),
@@ -893,7 +1140,7 @@ async def test_a_rate_limited_graphql_query_fails_the_ingest(
 
 @pytest.mark.asyncio
 @respx.mock
-@pytest.mark.parametrize("operation", ["ExternalPRs", "ExternalReviewCount"])
+@pytest.mark.parametrize("operation", ["ExternalPRs", "ExternalReviewCount", "CommitActivity"])
 async def test_the_call_cap_stops_an_ingest_inside_a_fail_soft_read(
     operation: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -904,6 +1151,7 @@ async def test_the_call_cap_stops_an_ingest_inside_a_fail_soft_read(
         side_effect=graphql_router(
             {
                 "PinnedRepos": _pinned_payload(),
+                "CommitActivity": _activity_payload(),
                 "ExternalPRs": _external_prs_payload(external_prs=40),
                 "ExternalReviewCount": _review_count_payload(4),
                 "WorkflowFiles": _workflow_files_payload({"r0": {"github": [("ci.yml", "blob")]}}),
@@ -936,207 +1184,37 @@ def _commit(day: datetime, *, committed: datetime | None = None) -> dict[str, ob
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_a_full_commit_page_marks_where_the_history_is_complete() -> None:
-    """Each repo contributes at most one page of 100 commits. When a page comes
-    back full, older commits exist that ingestion never saw, so the scorer
-    must not read the stretch before them as silence."""
-    repos_payload = [_fake_repo("busy", language="Python"), _fake_repo("quiet", language="Go")]
-    _mock_user()
-    _mock_repos(repos_payload)
-    _mock_languages(repos_payload)
-    _mock_contents(repos_payload)
-    _mock_profile_readme()
-    _mock_graphql()
-    today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
-    respx.get(url__startswith="https://api.github.com/repos/octocat/busy/commits").mock(
-        return_value=Response(200, json=[_commit(today - timedelta(days=i)) for i in range(100)])
-    )
-    respx.get(url__startswith="https://api.github.com/repos/octocat/quiet/commits").mock(
-        return_value=Response(200, json=[_commit(today - timedelta(days=300))])
-    )
-
-    async with GitHubClient(token="ghs_test") as gh:
-        profile = await ingest_profile("octocat", gh)
-
-    assert profile.commit_history_complete_since == today - timedelta(days=99)
-
-
-def _busy_repo_commits(prior_year_day: datetime | None) -> Callable[[httpx.Request], Response]:
-    """A repo whose page of 100 commits falls inside the last year. Asked for
-    the year before (`until`), it answers with `prior_year_day` if given."""
-    today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
-
-    def _answer(request: httpx.Request) -> Response:
-        if "until" in request.url.params:
-            return Response(200, json=[_commit(prior_year_day)] if prior_year_day else [])
-        return Response(200, json=[_commit(today - timedelta(days=i)) for i in range(100)])
-
-    return _answer
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_a_full_page_inside_the_last_year_is_checked_for_older_commits() -> None:
-    """Learning Trajectory credits commits in each of the last two years. When
-    a repo's 100 commits all fall inside the last year, its older ones went
-    unseen, so ingestion asks GitHub for one commit from the year before."""
-    repos_payload = [_fake_repo("busy", language="Python")]
-    _mock_user()
-    _mock_repos(repos_payload)
-    _mock_languages(repos_payload)
-    _mock_contents(repos_payload)
-    _mock_profile_readme()
-    _mock_graphql()
-    prior_year_day = datetime.now(UTC).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    ) - timedelta(days=500)
-    respx.get(url__startswith="https://api.github.com/repos/octocat/busy/commits").mock(
-        side_effect=_busy_repo_commits(prior_year_day)
-    )
-
-    async with GitHubClient(token="ghs_test") as gh:
-        profile = await ingest_profile("octocat", gh)
-
-    assert prior_year_day in profile.commit_dates
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_the_older_commit_check_covers_the_whole_day_a_year_ago(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Commit days count whole, so the day exactly a year ago belongs to the
-    year before. The check for an older commit must reach the end of that day,
-    not stop at its start."""
-    repos_payload = [_fake_repo("busy", language="Python")]
-    _mock_user()
-    _mock_repos(repos_payload)
-    _mock_languages(repos_payload)
-    _mock_contents(repos_payload)
-    _mock_profile_readme()
-    _mock_graphql()
-    now = datetime.now(UTC).replace(hour=13, minute=0, second=0, microsecond=0)
-    monkeypatch.setattr(profile_module, "datetime", frozen_at(now))
-    year_ago = (now - timedelta(days=365)).replace(hour=0)
-    committed = year_ago.replace(hour=12)  # _commit's time of day
-
-    def _answer(request: httpx.Request) -> Response:
-        until = request.url.params.get("until")
-        if until is None:
-            return Response(200, json=[_commit(now - timedelta(days=i)) for i in range(100)])
-        # GitHub lists the commits committed at or before `until`.
-        older = committed <= datetime.fromisoformat(until)
-        return Response(200, json=[_commit(year_ago)] if older else [])
-
-    respx.get(url__startswith="https://api.github.com/repos/octocat/busy/commits").mock(
-        side_effect=_answer
-    )
-
-    async with GitHubClient(token="ghs_test") as gh:
-        profile = await ingest_profile("octocat", gh)
-
-    assert year_ago in profile.commit_dates
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_no_older_commit_check_when_the_year_before_is_already_visible() -> None:
-    repos_payload = [_fake_repo("busy", language="Python"), _fake_repo("quiet", language="Go")]
-    _mock_user()
-    _mock_repos(repos_payload)
-    _mock_languages(repos_payload)
-    _mock_contents(repos_payload)
-    _mock_profile_readme()
-    _mock_graphql()
-    busy = respx.get(url__startswith="https://api.github.com/repos/octocat/busy/commits").mock(
-        side_effect=_busy_repo_commits(None)
-    )
-    today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
-    respx.get(url__startswith="https://api.github.com/repos/octocat/quiet/commits").mock(
-        return_value=Response(200, json=[_commit(today - timedelta(days=400))])
-    )
-
-    async with GitHubClient(token="ghs_test") as gh:
-        await ingest_profile("octocat", gh)
-
-    assert [call.request.url.params.get("until") for call in busy.calls] == [None]
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_the_history_boundary_follows_committer_dates() -> None:
-    """GitHub filters and orders a commit list by committer date. A rebased
-    commit keeps its old author date, so taking the boundary from author dates
-    would claim the history complete further back than the page reaches."""
-    repos_payload = [_fake_repo("busy", language="Python")]
-    _mock_user()
-    _mock_repos(repos_payload)
-    _mock_languages(repos_payload)
-    _mock_contents(repos_payload)
-    _mock_profile_readme()
-    _mock_graphql()
-    today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
-    page = [_commit(today - timedelta(days=i)) for i in range(99)]
-    page.append(_commit(today - timedelta(days=300), committed=today - timedelta(days=10)))
-    respx.get(url__startswith="https://api.github.com/repos/octocat/busy/commits").mock(
-        return_value=Response(200, json=page)
-    )
-
-    async with GitHubClient(token="ghs_test") as gh:
-        profile = await ingest_profile("octocat", gh)
-
-    assert profile.commit_history_complete_since == today - timedelta(days=98)
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_short_commit_pages_mean_the_history_is_complete() -> None:
-    repos_payload = [_fake_repo("quiet", language="Go")]
-    _mock_user()
-    _mock_repos(repos_payload)
-    _mock_languages(repos_payload)
-    _mock_contents(repos_payload)
-    _mock_profile_readme()
-    _mock_graphql()
-    today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
-    respx.get(url__startswith="https://api.github.com/repos/octocat/quiet/commits").mock(
-        return_value=Response(200, json=[_commit(today - timedelta(days=i)) for i in range(99)])
-    )
-
-    async with GitHubClient(token="ghs_test") as gh:
-        profile = await ingest_profile("octocat", gh)
-
-    assert profile.commit_history_complete_since is None
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_repeating_an_analysis_the_same_day_reuses_the_cached_commit_pages(
+async def test_repeating_an_analysis_the_same_day_is_answered_from_cache(
     fake_cache, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Commit lists are the most numerous GitHub reads. Their windows start at
-    a UTC midnight, so the same analysis repeated later that day (a retry after
-    a timeout, say) asks the same questions and the cache answers them.
-    Microsecond bounds made every request new, so the cache never did."""
+    """The contributions query and the commit sample ask for whole UTC days,
+    so the same analysis repeated later that day (a retry after a timeout, say)
+    is answered from the cache."""
     repos_payload = [_fake_repo("busy", language="Python")]
     _mock_user()
     _mock_repos(repos_payload)
     _mock_languages(repos_payload)
     _mock_contents(repos_payload)
     _mock_profile_readme()
-    _mock_graphql()
-    morning = datetime.now(UTC).replace(hour=8, minute=15, second=42, microsecond=123456)
+    graphql = _mock_graphql(commit_activity=_activity_payload("2026-09-03"))
     commits = respx.get(url__startswith="https://api.github.com/repos/octocat/busy/commits").mock(
-        side_effect=_busy_repo_commits(morning - timedelta(days=500))
+        return_value=Response(200, json=[])
     )
+    morning = datetime.now(UTC).replace(hour=8, minute=15, second=42, microsecond=123456)
 
-    for moment in (morning, morning.replace(hour=19, minute=3, second=7, microsecond=654321)):
+    async def analyse_at(moment: datetime) -> None:
         monkeypatch.setattr(profile_module, "datetime", frozen_at(moment))
         async with GitHubClient(token="ghs_test", cache=fake_cache) as gh:
             await ingest_profile("octocat", gh)
 
-    # The page and the check for older commits, each asked once.
-    assert commits.call_count == 2
+    await analyse_at(morning)
+    graphql_calls = graphql.call_count
+    await analyse_at(morning.replace(hour=19, minute=3, second=7, microsecond=654321))
+
+    asked = [c for c in graphql.calls if b"query CommitActivity(" in c.request.content]
+    assert len(asked) == 1
+    assert graphql.call_count == graphql_calls
+    assert commits.call_count == 1
 
 
 @pytest.mark.asyncio
@@ -1338,6 +1416,7 @@ async def test_per_repo_phases_overlap() -> None:
 
     assert fake.ran_together("get_repo_root_contents", "list_languages")
     assert fake.ran_together("list_languages", "list_commits")
+    assert fake.ran_together("list_languages", "graphql:CommitActivity")
 
 
 @pytest.mark.asyncio

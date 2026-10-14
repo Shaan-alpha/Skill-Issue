@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from typing import TYPE_CHECKING, Any, NamedTuple, Self
 
@@ -437,46 +437,6 @@ class GitHubClient:
         if not bodies:
             return None
         return sum(len(b) for b in bodies) // len(bodies)
-
-    async def get_contribution_repo_count(self, username: str, *, min_commits: int = 10) -> int:
-        """Return the number of repos the user contributed >= min_commits to in the last year.
-
-        Bonus depth signal — degrades to 0 rather than failing the analysis when
-        GitHub can't resolve this `contributionsCollection` query (the same
-        RESOURCE_LIMITS_EXCEEDED rejection hyper-active accounts trigger). A rate
-        limit or the call cap still fails the analysis.
-
-        The year is the 365 UTC days up to tonight's midnight. Whole days keep
-        the query, and so its cache key, the same all day.
-        """
-        from app.github.queries import CONTRIBUTION_REPOS
-
-        today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
-        midnight = today + timedelta(days=1)
-        try:
-            data = await self.graphql(
-                CONTRIBUTION_REPOS,
-                {
-                    "login": username,
-                    "from": (midnight - timedelta(days=365)).isoformat(),
-                    "to": midnight.isoformat(),
-                },
-            )
-        except (GitHubRateLimited, GitHubCallCapExceeded):
-            raise
-        except Exception:
-            logger.warning(
-                "Contribution-repo-count query failed for %s; defaulting to 0",
-                username,
-                exc_info=True,
-            )
-            return 0
-        user = data.get("user") or {}
-        contributions = user.get("contributionsCollection") or {}
-        repos = contributions.get("commitContributionsByRepository") or []
-        return sum(
-            1 for r in repos if (r.get("contributions") or {}).get("totalCount", 0) >= min_commits
-        )
 
     async def get_profile_readme(self, username: str) -> str | None:
         resp = await self._request("GET", f"{API_BASE}/repos/{username}/{username}/readme")

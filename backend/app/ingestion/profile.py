@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 import httpx
@@ -16,6 +16,15 @@ from app.github.queries import (
     WORKFLOW_FORGES,
     external_merged_prs_query,
     workflow_files_query,
+)
+from app.ingestion.activity import (
+    COMMITS_PER_REPO,
+    activity_windows,
+    commit_subjects,
+    contribution_activity,
+    prior_year_days,
+    record_activity_fallback,
+    sample_activity,
 )
 from app.models import Profile, Repo
 
@@ -33,16 +42,23 @@ class NotAnIndividualError(Exception):
     so the frontend can render a specific message."""
 
 
-# Commit messages are attacker-influenced; only a bounded prefix is examined.
-_COMMIT_SUBJECT_MAX = 500
-# One page of the user's commits per repo. A full page means older ones
-# exist that ingestion never saw.
-_COMMITS_PER_REPO = 100
-
 # How many repos to inspect for README / tests / CI / deployment signals.
 # Matches the cap used for language aggregation. Beyond this, signals are
 # diminishing and the API cost is real.
 ROOT_CONTENT_LIMIT = 20
+
+# Repos whose own commits are sampled for commit-message evidence, and for
+# commit days when GitHub can't report contribution data.
+COMMIT_SAMPLE_REPOS = 5
+
+
+def _by_push(repos: list[Repo]) -> list[Repo]:
+    """Most recently pushed first. The repo list comes ordered by updated_at,
+    which stars move too; pushes are the work. Ties keep list order, and repos
+    never pushed come last."""
+    never = datetime.min.replace(tzinfo=UTC)
+    return sorted(repos, key=lambda r: r.last_commit_at or never, reverse=True)
+
 
 # Root-listing heuristics. Names are compared lowercased. The sets follow the
 # 2026-10-13 research (each tool's own docs) and favour precision: names that
@@ -310,15 +326,6 @@ def _visible_chars(markdown: str | None) -> int:
     return len(_HTML_COMMENT.sub("", markdown or "").strip())
 
 
-def _commit_day(commit: dict[str, Any], role: str = "author") -> datetime | None:
-    """The commit's author (or committer) date as a UTC-aware day, so date
-    math stays safe."""
-    date_str = (commit.get(role) or {}).get("date")
-    if not date_str:
-        return None
-    return datetime.strptime(date_str[:10], "%Y-%m-%d").replace(tzinfo=UTC)
-
-
 def _parse_dt(value: str | None) -> datetime | None:
     if not value:
         return None
@@ -531,91 +538,45 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
     pinned_count = ((pinned.get("user") or {}).get("pinnedItems") or {}).get("totalCount") or 0
 
     # Root contents (README / tests / CI / deployment) and languages for the
-    # first ROOT_CONTENT_LIMIT repos, plus two years of commit days from the
-    # ten most recently updated (Consistency reads the last year, Learning
-    # Trajectory compares it with the one before). All three run together.
-    inspected = repos[:ROOT_CONTENT_LIMIT]
-    top_repos = [r for r in repos_raw if not r.get("fork")][:10]
-    now = datetime.now(UTC)
-    one_year_ago = now - timedelta(days=365)
-    two_years_ago = now - timedelta(days=730)
-    # Requests ask for whole UTC days, so an analysis repeated the same day
-    # asks the same questions and the cache can answer them; the scorers apply
-    # the exact windows. Commit days count whole, so the day exactly a year ago
-    # belongs to the year before: the older-commit check below runs to the end
-    # of that day, and never returns a commit from the last year.
-    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    commits_since = (today - timedelta(days=730)).isoformat()
-    workflow_counts, language_maps, commit_lists = await gather_all(
+    # most recently pushed repos, a commit sample from fewer of them, and the
+    # user's public commit days across every repository. All run together.
+    by_push = _by_push(repos)
+    inspected = by_push[:ROOT_CONTENT_LIMIT]
+    sampled = by_push[:COMMIT_SAMPLE_REPOS]
+    windows = activity_windows(datetime.now(UTC))
+    workflow_counts, language_maps, commit_pages, activity = await gather_all(
         _inspect_repo_roots(inspected, gh),
         gather_all(*(gh.list_languages(*r.full_name.split("/", 1)) for r in inspected)),
         gather_all(
             *(
                 gh.list_commits(
-                    r["owner"]["login"],
-                    r["name"],
+                    *r.full_name.split("/", 1),
                     username,
-                    commits_since,
-                    per_page=_COMMITS_PER_REPO,
+                    windows["priorFrom"],
+                    per_page=COMMITS_PER_REPO,
                 )
-                for r in top_repos
+                for r in sampled
             )
         ),
+        contribution_activity(username, gh, windows),
     )
+    sample = sample_activity(commit_pages)
+    if activity is not None and not activity.days and sample.days:
+        # GitHub reported no public commit days, yet the user's own repos hold
+        # commits it would count: the contribution data is hidden (a private
+        # profile, say), not empty.
+        record_activity_fallback(username, "hidden")
+        activity = None
+    if activity is None:
+        older = await prior_year_days(
+            username, gh, [r.full_name for r in sampled], commit_pages, windows
+        )
+        activity = sample._replace(days=sample.days | older)
 
     languages: dict[str, int] = {}
     for repo_languages in language_maps:
         for language, bytes_count in repo_languages.items():
             languages[language] = languages.get(language, 0) + bytes_count
-
-    commit_dates_set: set[datetime] = set()
-    commit_subjects: list[str] = []
-    complete_since: datetime | None = None
-    # Repos whose full page fits inside the last year: the year before is unseen.
-    cut_within_year: list[dict[str, Any]] = []
-    for raw, repo_commits in zip(top_repos, commit_lists, strict=True):
-        committed_days: list[datetime] = []
-        for c in repo_commits:
-            commit = c.get("commit") or {}
-            day = _commit_day(commit)
-            if day is not None:
-                commit_dates_set.add(day)
-            if (committed := _commit_day(commit, "committer") or day) is not None:
-                committed_days.append(committed)
-            # Commit messages are untrusted text: keep a bounded first line.
-            subject = str(commit.get("message") or "")[:_COMMIT_SUBJECT_MAX].splitlines()
-            if subject and subject[0].strip():
-                commit_subjects.append(subject[0].strip())
-        # GitHub filters and orders the list by committer date, so a full
-        # page's coverage ends at its oldest committer date. A rebased commit
-        # keeps an older author date, which would claim coverage further back.
-        if len(repo_commits) >= _COMMITS_PER_REPO and committed_days:
-            oldest = min(committed_days)
-            complete_since = oldest if complete_since is None else max(complete_since, oldest)
-            if oldest > one_year_ago:
-                cut_within_year.append(raw)
-
-    # Learning Trajectory credits commits in each of the last two years. When
-    # the year before is invisible only because pages were cut off inside the
-    # last year, ask those repos for one commit from it.
-    if cut_within_year and not any(two_years_ago < d <= one_year_ago for d in commit_dates_set):
-        older_pages = await gather_all(
-            *(
-                gh.list_commits(
-                    raw["owner"]["login"],
-                    raw["name"],
-                    username,
-                    commits_since,
-                    per_page=1,
-                    until=(today - timedelta(days=364, seconds=1)).isoformat(),
-                )
-                for raw in cut_within_year
-            )
-        )
-        for page in older_pages:
-            for c in page:
-                if (day := _commit_day(c.get("commit") or {})) is not None:
-                    commit_dates_set.add(day)
 
     return Profile(
         username=user["login"],
@@ -629,9 +590,12 @@ async def ingest_profile(username: str, gh: GitHubClient) -> Profile:
         external_prs_merged=external_signals["external_prs_merged"],
         external_reviews=external_signals["external_reviews"],
         external_orgs=external_signals["external_orgs"],
-        commit_dates=sorted(commit_dates_set),
-        commit_subjects=commit_subjects,
-        commit_history_complete_since=complete_since,
+        commit_dates=sorted(activity.days),
+        commit_subjects=commit_subjects(commit_pages),
+        commit_history_complete_since=activity.complete_since,
+        commit_activity_scope=activity.scope,
+        commit_sample_repo_count=len(sampled),
+        substantial_repo_count=activity.substantial_repo_count,
         repo_list_capped=len(repos_raw) >= REPO_LIST_PAGE_SIZE,
         workflow_counts=workflow_counts,
         account_created_at=_parse_dt(user["created_at"]) or datetime.now(UTC),

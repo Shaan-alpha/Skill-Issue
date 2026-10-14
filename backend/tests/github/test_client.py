@@ -1,6 +1,5 @@
 import asyncio
 import json
-from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -8,9 +7,7 @@ import pytest
 import respx
 from httpx import Response
 
-from app.github import client as client_module
 from app.github.client import GitHubClient, GitHubRateLimited, RootEntry
-from tests.clock import frozen_at
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "github_responses"
 
@@ -301,75 +298,6 @@ async def test_get_review_depth_returns_none_for_no_reviews() -> None:
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_get_contribution_repos_filters_low_volume() -> None:
-    respx.post("https://api.github.com/graphql").mock(
-        return_value=Response(
-            200,
-            json={
-                "data": {
-                    "user": {
-                        "contributionsCollection": {
-                            "commitContributionsByRepository": [
-                                {
-                                    "repository": {"nameWithOwner": "alice/big"},
-                                    "contributions": {"totalCount": 50},
-                                },
-                                {
-                                    "repository": {"nameWithOwner": "alice/medium"},
-                                    "contributions": {"totalCount": 15},
-                                },
-                                {
-                                    "repository": {"nameWithOwner": "alice/small"},
-                                    "contributions": {"totalCount": 3},
-                                },
-                            ]
-                        }
-                    }
-                }
-            },
-        )
-    )
-    async with GitHubClient(token="ghs_test") as gh:
-        count = await gh.get_contribution_repo_count("alice", min_commits=10)
-    assert count == 2
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_contribution_count_asks_for_whole_utc_days(
-    fake_cache, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The window is the 365 UTC days up to tonight's midnight. In whole days
-    the query, and so its cache key, stays the same all day; microsecond
-    bounds made every request new, so the cache never answered one."""
-    route = respx.post("https://api.github.com/graphql").mock(
-        return_value=Response(
-            200,
-            json={
-                "data": {
-                    "user": {"contributionsCollection": {"commitContributionsByRepository": []}}
-                }
-            },
-        )
-    )
-    morning = datetime.now(UTC).replace(hour=8, minute=15, second=42, microsecond=123456)
-
-    for moment in (morning, morning.replace(hour=19, minute=3, second=7, microsecond=654321)):
-        monkeypatch.setattr(client_module, "datetime", frozen_at(moment))
-        async with GitHubClient(token="ghs_test", cache=fake_cache) as gh:
-            await gh.get_contribution_repo_count("alice", min_commits=10)
-
-    assert route.call_count == 1
-    midnight = morning.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
-    variables = json.loads(route.calls[0].request.content)["variables"]
-    assert (variables["from"], variables["to"]) == (
-        (midnight - timedelta(days=365)).isoformat(),
-        midnight.isoformat(),
-    )
-
-
-@pytest.mark.asyncio
-@respx.mock
 async def test_graphql_returns_partial_data_when_errors_present() -> None:
     """GitHub returns partial `data` alongside `errors` when one expensive field
     trips RESOURCE_LIMITS_EXCEEDED (e.g. hyper-active accounts). We must surface
@@ -489,20 +417,9 @@ async def test_review_depth_lets_a_rate_limit_fail_the_analysis() -> None:
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_contribution_count_lets_a_rate_limit_fail_the_analysis() -> None:
-    respx.post("https://api.github.com/graphql").mock(return_value=_PRIMARY_LIMIT_200)
-
-    async with GitHubClient(token="ghs_test") as gh:
-        with pytest.raises(GitHubRateLimited):
-            await gh.get_contribution_repo_count("antfu", min_commits=10)
-
-
-@pytest.mark.asyncio
-@respx.mock
-@pytest.mark.parametrize("read", ["review_depth", "contribution_count"])
-async def test_depth_reads_let_the_call_cap_stop_the_analysis(read: str) -> None:
-    """These reads degrade when GitHub can't resolve them, but an analysis past
-    its call cap must stop with a 503, not finish scored without them and keep
+async def test_review_depth_lets_the_call_cap_stop_the_analysis() -> None:
+    """Review depth degrades when GitHub can't resolve it, but an analysis past
+    its call cap must stop with a 503, not finish scored without it and keep
     that report cached for six hours."""
     from app.github.client import GitHubCallCapExceeded
 
@@ -512,10 +429,7 @@ async def test_depth_reads_let_the_call_cap_stop_the_analysis(read: str) -> None
 
     async with GitHubClient(token="ghs_test", max_calls=0) as gh:
         with pytest.raises(GitHubCallCapExceeded):
-            if read == "review_depth":
-                await gh.get_review_depth("antfu")
-            else:
-                await gh.get_contribution_repo_count("antfu", min_commits=10)
+            await gh.get_review_depth("antfu")
 
 
 @pytest.mark.asyncio
@@ -575,34 +489,6 @@ async def test_get_review_depth_returns_none_on_fatal_error() -> None:
     )
     async with GitHubClient(token="ghs_test") as gh:
         assert await gh.get_review_depth("antfu") is None
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_get_contribution_repo_count_returns_zero_on_partial_null() -> None:
-    """Partial data with a null contributions collection must return 0."""
-    respx.post("https://api.github.com/graphql").mock(
-        return_value=Response(
-            200,
-            json={
-                "data": {"user": {"contributionsCollection": None}},
-                "errors": [{"type": "RESOURCE_LIMITS_EXCEEDED", "message": "exceeded"}],
-            },
-        )
-    )
-    async with GitHubClient(token="ghs_test") as gh:
-        assert await gh.get_contribution_repo_count("antfu", min_commits=10) == 0
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_get_contribution_repo_count_returns_zero_on_fatal_error() -> None:
-    """A fully fatal GraphQL rejection (no data) degrades to 0."""
-    respx.post("https://api.github.com/graphql").mock(
-        return_value=Response(200, json={"data": None, "errors": [{"message": "nope"}]})
-    )
-    async with GitHubClient(token="ghs_test") as gh:
-        assert await gh.get_contribution_repo_count("antfu", min_commits=10) == 0
 
 
 @pytest.mark.asyncio

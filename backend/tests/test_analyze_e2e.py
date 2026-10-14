@@ -65,6 +65,40 @@ def _commit_payload(days_ago: int) -> dict[str, Any]:
     return {"commit": {"author": {"date": when}}}
 
 
+def _activity_from(commits_by_repo: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
+    """The CommitActivity answer for the same commits, split into the last
+    year and the year before: commit days now come from contribution data."""
+    year_ago = datetime.now(UTC) - timedelta(days=365)
+
+    def repo(days: set[str]) -> dict[str, Any]:
+        return {
+            "repository": {"isPrivate": False},
+            "contributions": {
+                "totalCount": len(days),
+                "pageInfo": {"hasNextPage": False},
+                "nodes": [{"occurredAt": f"{d}T07:00:00Z"} for d in sorted(days, reverse=True)],
+            },
+        }
+
+    last_year: list[dict[str, Any]] = []
+    prior_year: list[dict[str, Any]] = []
+    for commits in commits_by_repo.values():
+        days = {str(c["commit"]["author"]["date"])[:10] for c in commits}
+        recent = {d for d in days if datetime.fromisoformat(d).replace(tzinfo=UTC) > year_ago}
+        if recent:
+            last_year.append(repo(recent))
+        if days - recent:
+            prior_year.append(repo(days - recent))
+    return {
+        "data": {
+            "user": {
+                "lastYear": {"commitContributionsByRepository": last_year},
+                "priorYear": {"commitContributionsByRepository": prior_year},
+            }
+        }
+    }
+
+
 def _mock_github_for_testuser(
     repos: list[dict[str, Any]],
     commits_by_repo: dict[str, list[dict[str, Any]]],
@@ -149,11 +183,7 @@ def _mock_github_for_testuser(
                         for i in range(3)
                     }
                 },
-                "ContributionRepos": {
-                    "data": {
-                        "user": {"contributionsCollection": {"commitContributionsByRepository": []}}
-                    }
-                },
+                "CommitActivity": _activity_from(commits_by_repo),
                 **(graphql_overrides or {}),
             }
         )
@@ -218,6 +248,12 @@ async def test_analyze_returns_complete_report(
     # The headline number must be the literal sum of the buckets. No fudge.
     assert body["total"] == sum(b["points"] for b in breakdown.values())
     assert 0 <= body["total"] <= 100
+
+    # Commit days came from contribution data, not the fallback sample.
+    volume = [
+        e["detail"] for e in breakdown["consistency"]["evidence"] if e["signal"] == "high_volume"
+    ]
+    assert volume == ["Committed on 35 days in the last year across public repositories"]
 
     # Regression guard for the two bugs we shipped in v0.1.0:
     # - consistency.score crashed on strptime(datetime, ...)

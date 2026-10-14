@@ -15,6 +15,11 @@ TierName = Literal[
     "Principal Engineer",
 ]
 
+# Where Profile.commit_dates came from: every public repository the user
+# committed to, or, when GitHub couldn't report that, a sample of their own
+# most recently pushed repositories.
+CommitActivityScope = Literal["all_public_repos", "own_recent_repos"]
+
 
 class TierInfo(BaseModel):
     name: TierName
@@ -86,11 +91,16 @@ class Profile(BaseModel):
     external_reviews: int
     external_orgs: set[str] = Field(default_factory=set)
     commit_dates: list[datetime]
-    # First lines of the user's own commits (the same fetch as commit_dates).
+    # First lines of the user's own commits, from the commit sample.
     commit_subjects: list[str] = Field(default_factory=list)
     # Set when a repo's commit page came back full: its older commits went
     # unseen, so the history is complete only from this day on.
     commit_history_complete_since: datetime | None = None
+    commit_activity_scope: CommitActivityScope = "all_public_repos"
+    # Own repos whose commits were sampled, the most recently pushed first.
+    commit_sample_repo_count: int = 0
+    # Public repos with 10+ commits in the last year; None when unknown.
+    substantial_repo_count: int | None = None
     # True when the repo list came back as a full page: `repos` is then the
     # most recently updated slice of the account, not all of it.
     repo_list_capped: bool = False

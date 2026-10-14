@@ -92,13 +92,28 @@ query ReviewDepth($login: String!) {
 }
 """
 
-CONTRIBUTION_REPOS = """
-query ContributionRepos($login: String!, $from: DateTime!, $to: DateTime!) {
+
+# Public commit days across every repository the user committed to: the last
+# year for Consistency, one day per repository from the year before for
+# Learning Trajectory. Nodes are one per day, newest first; a repository's
+# `totalCount` is its commit count.
+COMMIT_ACTIVITY = """
+query CommitActivity($login: String!, $from: DateTime!, $to: DateTime!, $priorFrom: DateTime!) {
   user(login: $login) {
-    contributionsCollection(from: $from, to: $to) {
+    lastYear: contributionsCollection(from: $from, to: $to) {
       commitContributionsByRepository(maxRepositories: 100) {
-        repository { nameWithOwner }
-        contributions { totalCount }
+        repository { isPrivate }
+        contributions(first: 100) {
+          totalCount
+          pageInfo { hasNextPage }
+          nodes { occurredAt }
+        }
+      }
+    }
+    priorYear: contributionsCollection(from: $priorFrom, to: $from) {
+      commitContributionsByRepository(maxRepositories: 100) {
+        repository { isPrivate }
+        contributions(first: 1) { nodes { occurredAt } }
       }
     }
   }

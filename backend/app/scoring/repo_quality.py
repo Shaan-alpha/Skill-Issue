@@ -18,11 +18,16 @@ def score(profile: Profile) -> ScoreResult:
     if inspected:
         readme_ratio = sum(1 for repo in inspected if repo.has_readme) / len(inspected)
         if readme_ratio >= 0.5:
-            scope = (
-                "non-fork repos"
-                if len(inspected) == len(non_fork) and not profile.repo_list_capped
-                else f"the {len(inspected)} most recently updated non-fork repos"
-            )
+            if profile.repo_list_capped:
+                # Pushed first among the listed repos, not across the account.
+                scope = (
+                    f"the {len(inspected)} most recently pushed of the most recently "
+                    "updated non-fork repos"
+                )
+            elif len(inspected) < len(non_fork):
+                scope = f"the {len(inspected)} most recently pushed non-fork repos"
+            else:
+                scope = "non-fork repos"
             evidence.append(
                 Evidence(
                     signal="readme_majority",

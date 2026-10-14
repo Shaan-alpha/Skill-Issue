@@ -61,8 +61,32 @@ def _dry_spell_evidence(
     )
 
 
+def _fallback_note(profile: Profile) -> str:
+    """Where the commit days came from when GitHub's contribution data didn't
+    answer: the commit sample of the most recently pushed own repositories."""
+    reason = "GitHub didn't return activity across all repositories"
+    sampled = profile.commit_sample_repo_count
+    own = sum(1 for repo in profile.repos if not repo.is_fork)
+    if sampled == 0:
+        return f"No own repositories to count commits from: {reason}"
+    if profile.repo_list_capped:
+        # The repo list holds only the most recently updated repos.
+        which = f"the {sampled} most recently pushed of the most recently updated own repositories"
+    elif sampled < own:
+        which = f"the {sampled} most recently pushed own repositories"
+    elif sampled == 1:
+        which = "the one own repository"
+    else:
+        which = f"all {sampled} own repositories"
+    return f"Counted from {which} only: {reason}"
+
+
 def score(profile: Profile) -> ScoreResult:
     evidence: list[Evidence] = []
+    if profile.commit_activity_scope == "own_recent_repos":
+        evidence.append(
+            Evidence(signal="commit_activity_scope", detail=_fallback_note(profile), weight=0)
+        )
     points = 0
 
     now = datetime.now(UTC)
@@ -72,7 +96,7 @@ def score(profile: Profile) -> ScoreResult:
     year_ago = now - ONE_YEAR
     dates = sorted(d for d in map(_aware, profile.commit_dates) if d > year_ago)
     if not dates:
-        return make_result(points=0, max_points=MAX_POINTS, evidence=[])
+        return make_result(points=0, max_points=MAX_POINTS, evidence=evidence)
 
     # 1. At least one commit in each of last 3 calendar months -> 4 pts
     last_3_months: list[tuple[int, int]] = []
@@ -103,10 +127,20 @@ def score(profile: Profile) -> ScoreResult:
 
     # 3. >= 30 commit days over the last 12 months -> 3 pts
     if len(dates) >= 30:
+        where = (
+            " across public repositories"
+            if profile.commit_activity_scope == "all_public_repos"
+            else ""
+        )
+        # Days before a cut-off page's oldest went unread: the count is a floor.
+        complete_since = profile.commit_history_complete_since
+        floor = (
+            "at least " if complete_since is not None and _aware(complete_since) > year_ago else ""
+        )
         evidence.append(
             Evidence(
                 signal="high_volume",
-                detail=f"Committed on {len(dates)} days in the last year",
+                detail=f"Committed on {floor}{len(dates)} days in the last year{where}",
                 weight=3,
             )
         )
