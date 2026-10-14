@@ -10,7 +10,16 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ## [Unreleased]
 
-### Changed
+## [1.0.15] — 2026-10-14
+
+A release that reads your commit activity across every public repository you commit to. **Consistency scores change**, most of all for developers whose work lives in their organisations' repositories.
+
+### Changed: how scores are calculated
+- **Consistency now sees the commits you make anywhere public.** Your organisations' and other people's repositories count, not just ten of your own, and private repositories never do. If GitHub can't report that activity, the score falls back to your own most recently pushed repositories and says so.
+- **The repositories you work on get inspected first.** README, tests and CI are read from your 20 most recently pushed repositories, rather than the ones that most recently gained stars.
+
+### Changed: reliability and operations
+- **Analyses make about 15 fewer GitHub requests.**
 - **Dependencies refreshed within their current major versions:** Next.js 16.4, FastAPI 0.143, Pydantic 2.14, Starlette 1.8, both Sentry SDKs and others. Link prefetching keeps its current behaviour.
 
 ## [1.0.14] — 2026-10-13

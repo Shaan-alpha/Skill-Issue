@@ -29,7 +29,8 @@ NAMESPACE_RATE_LIMIT = "rate_limit"
 # Only the report namespace gets versioned today — GH responses are GitHub's
 # contract, narrative/lock/budget/rate_limit are scalars or opaque text.
 # v2 (v1.0.14): scoring corrections changed reports — retire every cached v1.
-REPORT_SCHEMA_VERSION = 2
+# v3 (v1.0.15): commit activity now spans every public repository.
+REPORT_SCHEMA_VERSION = 3
 
 # --- TTLs (seconds) ---
 
