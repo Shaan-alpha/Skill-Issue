@@ -193,22 +193,31 @@ replay:
 
 ## PII contract
 
-These fields must never reach Sentry or PostHog. Code that handles them is
-the only legitimate boundary that touches them; everywhere else, they
-should already be scrubbed by the time an event body is composed:
+No cookie, session id, token, app secret, IP address, geolocation header, OAuth value or request body may reach Sentry, from errors or transactions. PostHog stores no IP address and records no sessions. Since v1.0.16 this is enforced in both apps, tested end to end, and backed by provider settings.
 
-- `access_token`, `access_token_ct`
-- `oauth_state`, `oauth_code`
-- `session_id` (raw — SHA256 is fine if needed for correlation)
-- `Cookie` / `Set-Cookie` / `Authorization` headers
-- `x-vercel-id` header
-- `email`
+**The contract** (identical lists in [`backend/app/observability/sentry.py`](../backend/app/observability/sentry.py) and [`frontend/src/observability/scrub.ts`](../frontend/src/observability/scrub.ts); `backend/tests/observability/test_scrub_drift.py` fails if they diverge):
 
-Scrub points:
-- Backend: [`backend/app/observability/sentry.py`](../backend/app/observability/sentry.py) `scrub_event`.
-- Frontend: [`frontend/src/observability/scrub.ts`](../frontend/src/observability/scrub.ts) (consumed by both `sentry.client.ts` and `sentry.server.ts` `beforeSend`).
+- **Request headers:** an allow-list (`user-agent`, `referer`, `content-type`, `accept`, `host`); everything else is dropped. The `referer` value's query goes through the rule below.
+- **Cookies, request bodies, `request.env`, `user.ip_address`, `user.email`:** deleted.
+- **Query values:** a parameter whose name contains `code`, `state`, `token`, `key`, `secret`, `session`, `sid`, `passw`, `pwd`, `credential`, `csrf`, `xsrf`, `jwt` or `bearer` keeps its name, and its value becomes `[Filtered]`. This applies in the query string, URLs, `contexts.nextjs.request_path`, the URL keys of trace and span data (`http.target`, `http.url`, `url.full`, `url.query`, `http.query`) and breadcrumb URLs.
+- **Span header attributes** (`http.request.header.*`): only the allow-listed names survive, and cookie and body attributes are dropped.
+- **`extra` and `contexts`:** `access_token`, `access_token_ct`, `oauth_state`, `oauth_code`, `session_id` and `email` are removed.
+- **Stack-frame variables:** never sent. The backend sets `include_local_variables=False`, and the frontend's server SDK sends none.
+- **Failure mode:** each scrubber fails closed. A part it can't read is dropped, and the hook never raises; a raising hook makes either SDK drop the whole event, alert events included.
 
-If a new sensitive field is added to the data model, update BOTH scrubbers and the test suite for each.
+**Scrub points:**
+- **At the source.**
+  - Frontend: `SENTRY_DATA_COLLECTION` in every `Sentry.init`, and on the Node server `httpIntegration({ maxIncomingRequestBodySize: "none" })`.
+  - Backend: `include_local_variables=False` and `max_request_body_size="never"`. It never passes `send_default_pii` or `data_collection`, because in sentry-sdk 2.72 the latter switches on permissive defaults.
+- **After collection:** `scrubEvent` (frontend) and `scrub_event` (backend), wired as both `beforeSend`/`before_send` and `beforeSendTransaction`/`before_send_transaction`.
+- **SQL:** the engine sets `hide_parameters=True`, so database errors carry no bound values.
+- **Provider settings** (a backstop, not the contract):
+  - Sentry projects: Data Scrubber, Use Default Scrubbers and Prevent Storing of IP Addresses on, with `si_session`, `session_id`, `oidc` and `key` as Additional Sensitive Fields.
+  - PostHog: Discard client IP data on and GeoIP enrichment off. Session recording is also disabled in code.
+
+**Proof:** `backend/tests/observability/test_sentry_canary.py` drives a failing signed-in request through the real app and finds no canary in any captured error or transaction. `frontend/src/observability/scrub.test.ts` runs the SDK's own request pipeline and then `scrubEvent`. `backend/tools/sentry_envelope_listener.py` repeats the check against real servers.
+
+**Changing the contract:** change both lists and both scrubbers, and add a canary for the new field. Sentry 11 (v1.0.18) copies more request data onto spans by default, so re-run the envelope smoke on that upgrade.
 
 ## Deferred (re-enable in a v0.8.x patch)
 

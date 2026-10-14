@@ -104,8 +104,8 @@
 
 | Tool | Role | Slice |
 | --- | --- | --- |
-| **Sentry (`@sentry/nextjs` + `sentry-sdk[fastapi]`)** | Error tracking (frontend + backend). Permanent free tier — 5K errors/mo + 50 replays/mo. PII scrubbed via `before_send` hook (GitHub tokens, OAuth secrets, encrypted session bytes, Cookie/Authorization headers). | v0.8.0 |
-| **PostHog (`posthog-js` + `posthog-python` if needed)** | Product analytics + real-user web vitals (LCP / CLS / INP capture via SDK autocapture). Permanent free tier — 1M events/mo + 5K replays/mo + 12-month retention. Picked over Vercel Speed Insights specifically for the 12-month retention. | v0.8.0 |
+| **Sentry (`@sentry/nextjs` + `sentry-sdk[fastapi]`)** | Error tracking (frontend + backend). Permanent free tier — 5K errors/mo + 50 replays/mo. PII contract enforced at the source (`dataCollection`, no frame locals, no bodies) and by a scrub on every error and transaction; see `docs/OBSERVABILITY.md` (v1.0.16). | v0.8.0 |
+| **PostHog (`posthog-js` + `posthog-python` if needed)** | Product analytics + real-user web vitals (LCP / CLS / INP capture via SDK autocapture). Session recording off in code; client IPs discarded and GeoIP off in the project (v1.0.16). Permanent free tier — 1M events/mo + 5K replays/mo + 12-month retention. Picked over Vercel Speed Insights specifically for the 12-month retention. | v0.8.0 |
 | **structlog** | Backend JSON logging with `request_id` contextvar binding. Pairs with Sentry's logging integration to tag every event with the same `request_id` that appears in the structured log. | v0.8.0 |
 | **`@axe-core/cli`** | Accessibility audit baseline + regression tool. Run against the deployed preview URL. Free OSS. | v0.8.0 |
 | Sentry alert rules | Triggered alerting on critical error rate. Deferred to a v0.8.x patch once a week of real-error baselines exist. | v0.8.x |

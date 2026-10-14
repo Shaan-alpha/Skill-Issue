@@ -63,7 +63,9 @@
 | **v1.0.13** | Audit remediation + dependency refresh — two critical Next.js advisories, commit-before-response, singleflight coalescing, fresh force refresh, cron classification, honest share/delete UI, structured logs; `requirements.txt` generated in CI | ✅ shipped |
 | **v1.0.14** | Deep audit — external-PR and consistency scoring corrected, CI/test/deploy/language detection brought up to date, Recruiter Signal rebalanced, licence and README checks fixed for large portfolios, evidence on every score card, parallel ingestion (cold analyses ~2x faster), rate limits fail loudly | ✅ shipped |
 | **v1.0.15** | Commit activity from contribution data — public commit days across every repository; repos inspected by push recency | ✅ shipped |
-| **v1.0.16** | Toolchain majors — TypeScript 6, Vitest 5, jest-dom 7, Sentry SDK 11, framer-motion 13, openai 3, SQLAlchemy 2.1, each proven alone | 📋 proposed |
+| **v1.0.16** | Privacy patch — Sentry receives no cookies, tokens, secrets, IPs, OAuth values or bodies from errors or transactions; PostHog stores no IP; shadcn CLI removed | 🔄 in PR |
+| **v1.0.17** | Test toolchain — TypeScript 6, Vitest 5 (+ @vitest/ui), jest-dom 7, happy-dom 21 | 📋 proposed |
+| **v1.0.18** | Runtime majors — Sentry SDK 11, framer-motion 14, openai 3, SQLAlchemy 2.1, each verified on its own path | 📋 proposed |
 
 ---
 
@@ -1111,20 +1113,45 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 ---
 
-## v1.0.16 — Toolchain majors (proposed)
+## v1.0.16 — Privacy patch (Sentry and PostHog)
 
-**Goal:** Take the major upgrades v1.0.13 deferred, one package per commit, each proven locally before it lands.
+**Goal:** Make the PII contract and the privacy page true on the SDKs already running. Spec: [`2026-10-14-v1.0.16-sentry-privacy-design.md`](docs/superpowers/specs/2026-10-14-v1.0.16-sentry-privacy-design.md); plan: [`2026-10-14-v1.0.16-sentry-privacy.md`](docs/superpowers/plans/2026-10-14-v1.0.16-sentry-privacy.md).
 
-**Candidates:** TypeScript 6.0 (typescript-eslint supports < 6.1), Vitest 5 + `@vitest/ui` 5, `@testing-library/jest-dom` 7, `@sentry/nextjs` 11 (read the migration guide against `src/observability`), framer-motion 13 (visual check at 360/768/1024), openai-python 3 (the narrator's client), SQLAlchemy 2.1 (asyncpg + PgBouncer). Still blocked upstream: ESLint 10 (eslint-plugin-react) and TypeScript 7 (typescript-eslint). Open Dependabot PRs #116–#119 cover four of them.
-
-**Watch for (found during the October refresh):**
-- **The Sentry 11 SDKs drop `sendDefaultPii`.** Their `dataCollection` defaults collect user info, cookies, headers and request bodies, so the migration has to set opt-outs explicitly, for `@sentry/nextjs` 11 and for sentry-python 3 alike. Passing a `data_collection` dict already opts into those defaults today.
-- **Partial Prefetching.** Next 16.4 asks Cache Components apps to choose; the app sets `partialPrefetching: false`, keeping the prefetch behaviour it was verified on. Adopting it, which Next 17 will force, needs back/forward checks in Chrome. No link sets `prefetch` explicitly.
+**Why:** research for the toolchain majors found frontend server errors and transactions carrying the raw session cookie, Vercel's location and OIDC headers and raw query strings. Backend frame locals carried request headers, tokens and the session key, and PostHog stored visitor IPs. The Sentry 11 upgrade would have made it worse.
 
 **Exit criteria:**
-- [ ] Each major lands in its own commit with the full suite green.
-- [ ] Dependabot ignore rules removed for each major taken.
-- [ ] `CHANGELOG.md` `[1.0.16]`; tag `v1.0.16`.
+- [ ] Every change test-first; the backend suite is green against a real Postgres, the frontend suite, tsc, lint and build green.
+- [ ] The backend canary test and the frontend SDK-pipeline test pass; the local envelope smoke finds no canary from either server.
+- [ ] Privacy page checked in Chrome at 1440/1024/768/390.
+- [ ] Operator settings in Sentry and PostHog on (spec §4.4).
+- [ ] PR checks green and merged; prod smoke: `/health` 1.0.16, fresh events inspected by key, narrator streams, alerts #83/#84 closed.
+- [ ] Exposure response done (spec §6): sessions deleted, OAuth tokens revoked, four secrets rotated, three Sentry issues deleted.
+- [ ] `CHANGELOG.md` `[1.0.16]`; tag `v1.0.16`; GitHub Release published by `release.yml`.
+
+---
+
+## v1.0.17 — Test toolchain (proposed)
+
+**Goal:** TypeScript 6.0, Vitest 5 with `@vitest/ui` 5 (one install, since they pin each other), jest-dom 7 and happy-dom 21, one package per commit, with no runtime effect.
+
+**Known from the v1.0.16 research (2026-10-14):**
+- **TypeScript 6.0.3:** type-checks the frontend with 0 errors and no config change.
+- **Vitest 5.0.4:** passes all 125 tests. Dependabot's #116/#117 failed only because they bumped the two packages separately. Watch jest-dom#738, the matcher typings on Vitest 5's `Assertion<R, T>`, because a typing break now fails `next build` too.
+- **Cleanup:** add a `vitest` Dependabot group, and decide on `clearMocks` (now `true` by default) and whether to keep `@vitest/ui`.
+- **Still blocked:** TypeScript 7 (typescript-eslint needs TS's JS API, < 6.1) and ESLint 10 (eslint-plugin-react).
+
+---
+
+## v1.0.18 — Runtime majors (proposed)
+
+**Goal:** `@sentry/nextjs` 11.7+, framer-motion 14, openai-python 3 and SQLAlchemy 2.1.4+, each verified on its own path before production.
+
+**Known from the v1.0.16 research (2026-10-14):**
+- **Sentry 11:** `sendDefaultPii` is gone, and an unset `dataCollection` collects everything. v1.0.16's `SENTRY_DATA_COLLECTION` carries over, plus `queues: false`. Span streaming becomes the default, so re-run the envelope smoke.
+- **framer-motion 14.2:** moves x/y/scale onto a WAAPI compositor path, so it needs a Chrome visual check.
+- **openai 3:** the transport becomes httpx2. That means an `httpx2.Timeout`, a rewritten outage test (respx can't see httpx2), the `httpx2`/`httpcore2` log filters, and a TLS check on Linux.
+- **SQLAlchemy 2.1:** no code change, but CI never goes through Neon's pooler, so prove it against a Neon branch.
+- **Previews:** they are off for every branch, so plan a one-off preview or a Neon-branch run first.
 
 ---
 
