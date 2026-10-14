@@ -119,10 +119,15 @@ def score(profile: Profile) -> ScoreResult:
             if profile.commit_activity_scope == "all_public_repos"
             else ""
         )
+        # Days before a cut-off page's oldest went unread: the count is a floor.
+        complete_since = profile.commit_history_complete_since
+        floor = (
+            "at least " if complete_since is not None and _aware(complete_since) > year_ago else ""
+        )
         evidence.append(
             Evidence(
                 signal="high_volume",
-                detail=f"Committed on {len(dates)} days in the last year{where}",
+                detail=f"Committed on {floor}{len(dates)} days in the last year{where}",
                 weight=3,
             )
         )

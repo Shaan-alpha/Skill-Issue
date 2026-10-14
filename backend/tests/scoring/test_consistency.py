@@ -217,6 +217,30 @@ def test_volume_evidence_names_public_repositories() -> None:
     )
 
 
+def test_volume_is_a_floor_when_older_days_were_cut_off() -> None:
+    """A repository's page of days was cut off inside the year: days before
+    it went unread, so the count is a lower bound."""
+    profile = _every_fifth_day(_load("profile_senior.json"))
+    profile.commit_history_complete_since = datetime.now(UTC) - timedelta(days=100)
+
+    details = {e.signal: e.detail for e in score(profile).evidence}
+
+    assert details["high_volume"] == (
+        "Committed on at least 73 days in the last year across public repositories"
+    )
+
+
+def test_volume_is_exact_when_the_cut_off_predates_the_year() -> None:
+    profile = _every_fifth_day(_load("profile_senior.json"))
+    profile.commit_history_complete_since = datetime.now(UTC) - timedelta(days=500)
+
+    details = {e.signal: e.detail for e in score(profile).evidence}
+
+    assert (
+        details["high_volume"] == "Committed on 73 days in the last year across public repositories"
+    )
+
+
 def test_a_fallback_sample_says_what_it_counted() -> None:
     profile = _every_fifth_day(_load("profile_senior.json"))
     profile.commit_activity_scope = "own_recent_repos"
