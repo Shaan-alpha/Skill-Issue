@@ -19,6 +19,35 @@ Format:
 
 ---
 
+## 2026-10-14 — Claude (Opus 5.5) with Shaan — v1.0.15 released
+
+**Slice:** v1.0.15 closeout.
+
+**Done:**
+- **Merged and deployed.** PR #129 merged as `598adf7`, with all five checks green, after the six review minors were fixed in it (spec §9).
+- **Production verified:**
+  - `/health` returns `{"status":"ok","version":"1.0.15","db":"up","cache":"up"}`, about a minute after the merge.
+  - Live `/u/gaearon`: 76, Senior, Consistency 3, with "Committed on 69 days in the last year across public repositories" and "90% of the 20 most recently pushed of the most recently updated non-fork repos have READMEs".
+  - Live `/u/torvalds`: 73, Senior, Consistency 10, with "Committed on at least 160 days in the last year across public repositories". Both totals match the approved §6 table.
+  - Both roasts streamed in full (894 and 974 characters) with no fallback.
+  - Chrome at 1440/1024/768/390: no page or row overflow, the UI badge reads 1.0.15, and the console holds only the expected `/me` 401.
+  - 0 Vercel runtime errors and 0 Sentry issues in the hour after the deploy.
+- **Released:** tagged `v1.0.15` on `598adf7`, and the GitHub Release is published from `CHANGELOG [1.0.15]`.
+
+**Decisions (Shaan, 2026-10-14):** approve the §6 impact table, fix the six review minors before the merge, then tag and release.
+
+**Learned / surprises:**
+- **Pushing the tag is the whole release step.** `release.yml` publishes the GitHub Release from the CHANGELOG section. I also ran `gh release create` by hand, which won the race, so the workflow's run on the tag failed with "tag_name already exists". The published release has the same title and notes the workflow would have produced, so only the red run is left.
+
+**Blocked / open:**
+- The failed `Release` run on `v1.0.15` (cosmetic). If the workflow should own the release, delete it (keeping the tag) and re-run the workflow.
+- O2 (the double `/me` session request) and U5 (the tier bar's "N/100" sub-rank label).
+- Operator items carried over: the Sentry alert rule (now also for the `commit-activity-fallback` fingerprint) and source-map upload.
+
+**Next:** v1.0.16, the toolchain majors. See PLAN's notes on the Sentry 11 data-collection defaults and Partial Prefetching.
+
+---
+
 ## 2026-10-14 — Claude (Opus 5.5) with Shaan — v1.0.15: commit activity from GitHub's contribution data
 
 **Slice:** v1.0.15, with spec [`2026-10-14-v1.0.15-commit-activity-design.md`](./superpowers/specs/2026-10-14-v1.0.15-commit-activity-design.md) and plan [`2026-10-14-v1.0.15-commit-activity.md`](./superpowers/plans/2026-10-14-v1.0.15-commit-activity.md). It fixes S18 from the v1.0.14 audit.
