@@ -12,15 +12,19 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ## [1.0.15] — 2026-10-14
 
-A release that reads your commit activity across every public repository you commit to. **Consistency scores change**, most of all for developers whose work lives in their organisations' repositories.
+A release that reads your commit activity from GitHub's contribution data, across your organisations' and other people's repositories as well as your own. **Some scores change**: Consistency most of all, and a few badges move.
 
 ### Changed: how scores are calculated
-- **Consistency now sees the commits you make anywhere public.** Your organisations' and other people's repositories count, not just ten of your own, and private repositories never do. If GitHub can't report that activity, the score falls back to your own most recently pushed repositories and says so.
-- **The repositories you work on get inspected first.** README, tests and CI are read from your 20 most recently pushed repositories, rather than the ones that most recently gained stars.
+- **Consistency counts the public commits GitHub credits to you, wherever they land.** Commits in your organisations' and other people's repositories now count, not only those in ten of your own; private repositories never do. Learning Trajectory's two-year check and the Long-haul badge read the same activity. If GitHub can't report it, or reports none while your own repositories show commits, scoring falls back to your most recently pushed repositories (up to five) and says so.
+- **The repositories you work on get inspected first.** README, tests, CI, deployment files, dependency manifests and your languages come from your 20 most recently pushed repositories, rather than the ones most recently starred or otherwise updated. This is why the Polyglot badge can change.
 
 ### Changed: reliability and operations
-- **Analyses make fewer GitHub requests:** a few fewer for most profiles, and up to 15 fewer for very active ones.
+- **Fewer GitHub requests for larger accounts:** analyses of accounts with more than six repositories make a few fewer.
+- **A fallback in commit activity now raises an alert** instead of going unnoticed.
 - **Dependencies refreshed within their current major versions:** Next.js 16.4, FastAPI 0.143, Pydantic 2.14, Starlette 1.8, both Sentry SDKs and others. Link prefetching keeps its current behaviour.
+
+### Internal
+- The planned major upgrades (TypeScript 6, Vitest 5, jest-dom 7, Sentry SDK 11, framer-motion 13, openai 3, SQLAlchemy 2.1) move to v1.0.16.
 
 ## [1.0.14] — 2026-10-13
 
