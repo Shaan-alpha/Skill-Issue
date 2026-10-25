@@ -10,6 +10,20 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ## [Unreleased]
 
+## [1.0.17] — 2026-10-25
+
+A security release. New advisories against three of the libraries the site runs on, two of them rated critical, are patched. **No scores change.**
+
+### Security
+- **Next.js 16.4.3.** Next.js 16.4.0 had two critical advisories for remote code execution without authentication, one in image optimisation and one in cached functions, and a high-severity denial of service in server actions.
+- **DOMPurify 3.4.17.** It arrives with the analytics library, and its HTML sanitiser had a critical bypass, a high-severity flaw and a minor one.
+- **The backend's certificate bundle no longer trusts compromised certificates** (certifi 2026.10.23). The previous bundle trusted an emSign root under which eight intermediate certificates had compromised private keys, so someone holding one of those keys and sitting in the network path could have intercepted the backend's outgoing connections.
+- **fast-uri 3.1.9**, used only while the site is built, fixes four lower-severity flaws.
+
+### Internal
+- **Dev-only advisories patched within current versions:** zod 4.6.7, Vite 8.3.5 and Vitest 4.1.12, used only for linting and tests. happy-dom 20 still carries one dev-only advisory; it never ships, and the v1.0.18 upgrade to happy-dom 21 replaces it.
+- **The planned toolchain upgrades move to v1.0.18** (test toolchain) and **v1.0.19** (runtime majors).
+
 ## [1.0.16] — 2026-10-14
 
 A privacy release. Error and performance reports sent to Sentry could carry more than the privacy policy allows: the session cookie, Vercel's location headers, an internal secret, OAuth values, request bodies and, on the server, the values of variables at the point of an error. This release stops all of that, and makes PostHog stop storing visitor IPs. **No scores change.**

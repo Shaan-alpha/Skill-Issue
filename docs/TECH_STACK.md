@@ -8,7 +8,7 @@
 
 | Tool | Pinned (as of 2026-10-14) | Why |
 | --- | --- | --- |
-| **Next.js** | `16.4.0` | App Router, partial prerendering, streaming, Vercel-native. v16 dropped some conventions; check `frontend/AGENTS.md` before assuming v13/v14 patterns. |
+| **Next.js** | `16.4.3` | App Router, partial prerendering, streaming, Vercel-native. v16 dropped some conventions; check `frontend/AGENTS.md` before assuming v13/v14 patterns. |
 | **Cache Components** | enabled v0.8.6 (`cacheComponents: true` in `next.config.ts`); `partialPrefetching: false` since Next 16.4 | Powers `/share/[slug]` PPR via `'use cache'` + `cacheTag('share:<slug>')` + `cacheLife({ revalidate: 3600 })`. Incompatible with `export const dynamic = "force-dynamic"` (had to be dropped from `/me` and `/u/[username]/card`). Helpers from `next/cache`: `cacheTag`, `cacheLife`, `revalidateTag(tag, { expire: 0 })`. Stubbed in vitest setup since they throw outside the Next runtime. |
 | **React** | `19.3.0` | Server Components, Actions, the modern data flow |
 | **TypeScript** | `^5` | Sane component contracts |
@@ -24,7 +24,7 @@
 
 **Bundler:** Turbopack (Next.js default in 16+).
 
-**Linting / formatting:** **ESLint** via `eslint-config-next` 16.4.0. Decision logged 2026-05-15 — chosen because the Next.js codemods and recommended rules ship through this config. Decision kept through v0.8.0; revisit Biome at v0.9.0 or v1.0 if perf/DX warrants.
+**Linting / formatting:** **ESLint** via `eslint-config-next` 16.4.3. Decision logged 2026-05-15 — chosen because the Next.js codemods and recommended rules ship through this config. Decision kept through v0.8.0; revisit Biome at v0.9.0 or v1.0 if perf/DX warrants.
 
 ---
 

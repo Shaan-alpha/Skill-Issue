@@ -64,8 +64,9 @@
 | **v1.0.14** | Deep audit — external-PR and consistency scoring corrected, CI/test/deploy/language detection brought up to date, Recruiter Signal rebalanced, licence and README checks fixed for large portfolios, evidence on every score card, parallel ingestion (cold analyses ~2x faster), rate limits fail loudly | ✅ shipped |
 | **v1.0.15** | Commit activity from contribution data — public commit days across every repository; repos inspected by push recency | ✅ shipped |
 | **v1.0.16** | Privacy patch — Sentry receives no cookies, tokens, secrets, IPs, OAuth values or bodies from errors or transactions; PostHog stores no IP; shadcn CLI removed | 🔄 in PR |
-| **v1.0.17** | Test toolchain — TypeScript 6, Vitest 5 (+ @vitest/ui), jest-dom 7, happy-dom 21 | 📋 proposed |
-| **v1.0.18** | Runtime majors — Sentry SDK 11, framer-motion 14, openai 3, SQLAlchemy 2.1, each verified on its own path | 📋 proposed |
+| **v1.0.17** | Dependency advisories — Next.js 16.4.3 (two critical remote-code-execution advisories), DOMPurify 3.4.17, certifi 2026.10.23; no score changes | 🔄 in PR |
+| **v1.0.18** | Test toolchain — TypeScript 6, Vitest 5 (+ @vitest/ui), jest-dom 7, happy-dom 21 | 📋 proposed |
+| **v1.0.19** | Runtime majors — Sentry SDK 11, framer-motion 14, openai 3, SQLAlchemy 2.1, each verified on its own path | 📋 proposed |
 
 ---
 
@@ -1130,9 +1131,25 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 ---
 
-## v1.0.17 — Test toolchain (proposed)
+## v1.0.17 — Dependency advisories
+
+**Goal:** Patch the advisories published against the shipped dependencies since v1.0.16, with no change to features or scores.
+
+**Why:** on 2026-10-25 both audit gates failed on every pull request. `npm audit --omit=dev` found Next.js 16.4.0 under two critical remote-code-execution advisories, GHSA-2464-fhr4-w9xw (image optimisation with SVGs) and GHSA-673q-mjm6-r5xr (`use cache` functions returning typed arrays; the app uses `use cache` for `/share/[slug]`), plus GHSA-p3m5-59mp-jv5r (a Server Actions denial of service). DOMPurify 3.4.16, loaded by `posthog-js`, had GHSA-cg2g-xh64-v4q7 (critical), GHSA-mrv2-3pqr-j5jr (high) and GHSA-c6gr-qvv4-5v3f (low). `pip-audit` found certifi 2026.7.22 still trusting the emSign ECC Root CA - G3, under which eight eMudhra intermediates have compromised keys (PYSEC-2026-4320, GHSA-6q48-6c7w-9gw2). The full npm tree also had dev-only advisories in zod, Vite and Vitest, all fixable within their current versions, and one in happy-dom 20 that needs a major.
+
+**Exit criteria:**
+- [x] Next.js and eslint-config-next 16.4.3, DOMPurify 3.4.17, fast-uri 3.1.9 and certifi 2026.10.23; in the dev tree, zod 4.6.7, Vite 8.3.5 and Vitest with `@vitest/ui` 4.1.12, all within their current versions.
+- [x] Both audit gates clean. Locally green: the backend suite (845 passed; the DB fixtures run in CI against Postgres), frontend tests, tsc, lint, build and the `vercel.ts` typecheck.
+- [ ] PR checks green and merged; prod smoke: `/health` 1.0.17.
+- [ ] `CHANGELOG.md` `[1.0.17]`; tag `v1.0.17`; GitHub Release published by `release.yml`.
+
+---
+
+## v1.0.18 — Test toolchain (proposed)
 
 **Goal:** TypeScript 6.0, Vitest 5 with `@vitest/ui` 5 (one install, since they pin each other), jest-dom 7 and happy-dom 21, one package per commit, with no runtime effect.
+
+**Known from v1.0.17 (2026-10-25):** happy-dom must land at 21.0.4 or later, which also clears the one dev-only advisory v1.0.17 left, GHSA-834v-8h66-3h79. Vitest 4.1.12 already fixed the `@vitest/mocker` advisories, so the move to Vitest 5 is not needed for security.
 
 **Known from the v1.0.16 research (2026-10-14):**
 - **TypeScript 6.0.3:** type-checks the frontend with 0 errors and no config change.
@@ -1142,7 +1159,7 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 ---
 
-## v1.0.18 — Runtime majors (proposed)
+## v1.0.19 — Runtime majors (proposed)
 
 **Goal:** `@sentry/nextjs` 11.7+, framer-motion 14, openai-python 3 and SQLAlchemy 2.1.4+, each verified on its own path before production.
 
