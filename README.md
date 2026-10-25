@@ -25,6 +25,10 @@ If it's useful, a ⭐ helps other devs find it.
 
 </div>
 
+<p align="center">
+  <img src="docs/screenshots/report.webp" alt="Skill Issue report for a public GitHub profile: a 73 of 100 aggregate score at the Senior Engineer tier, with the badges it earned" width="900">
+</p>
+
 ---
 
 Drop in a username. Skill Issue analyzes repositories, engineering maturity, OSS contributions, coding discipline, and growth trajectory, then turns it into actionable feedback, a 100-point engineering score, and a shareable "GitHub Receipt."
@@ -56,6 +60,12 @@ Drop in a username. Skill Issue analyzes repositories, engineering maturity, OSS
 | Recruiter Signal | 15 | What a hiring manager sees first: profile README, pins, bio, links, stars |
 | Consistency | 10 | Commit rhythm over months: momentum, not a single sprint |
 | Learning Trajectory | 10 | Staying power: account age, new projects this year, activity year over year |
+
+The same six signals on a live report, each card with its own "Why" breakdown:
+
+<p align="center">
+  <img src="docs/screenshots/scoring-matrix.webp" alt="The scoring matrix on a live report: six signal cards showing points out of each maximum, with a Why breakdown under each" width="900">
+</p>
 
 ---
 
