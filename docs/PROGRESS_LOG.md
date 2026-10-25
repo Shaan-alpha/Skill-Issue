@@ -19,6 +19,32 @@ Format:
 
 ---
 
+## 2026-10-25 — Claude (Opus 5.5) with Shaan — v1.0.17 released
+
+**Slice:** v1.0.17 closeout.
+
+**Done:**
+- **Merged and deployed.** PR #141 merged as `aa96444` at 12:55Z with all five checks green. Vercel's production deployment of it was ready within about two minutes.
+- **Production verified:**
+  - `/health` returns `{"status":"ok","version":"1.0.17","db":"up","cache":"up"}`.
+  - `/`, `/privacy` and `/u/octocat` return 200, and the landing page reads 1.0.17.
+  - The OG images render on Next 16.4.3: `/opengraph-image` and `/u/octocat/opengraph-image` return PNGs.
+  - 0 Vercel runtime errors since the merge.
+- **Released:** tagged `v1.0.17` on `aa96444`, and `release.yml` published the GitHub Release from `CHANGELOG [1.0.17]`.
+- **PR #140 (README screenshots)** rebased onto the release, passed all six checks and merged as `6047a24`.
+- **The v1.0.16 close-out caught up with main.** Its branch now sits on `6047a24`, with the close-out still uncommitted on top. Merging hit three conflicts, not the two the v1.0.17 entry expected: `PLAN.md`'s version map, the top of this log and `TECH_STACK.md`'s Next.js row. Each kept both sides, and the close-out's references to the old slice numbers now point at v1.0.18 and v1.0.19.
+- **Fixed a pointer v1.0.17 missed.** `backend/pyproject.toml`'s openai comment still said "evaluated in v1.0.16". It moves with the runtime-majors slice (it said v1.0.14, then v1.0.15, then v1.0.16), so it now says v1.0.19, like the sentry-sdk comment two lines below.
+
+**Blocked / open:**
+- Not checked for this release: Sentry, a cold analysis and a share link in production.
+- Still open in PLAN under v1.0.16: the production-verification findings, the 9 deferred review minors and two follow-ups. The two that matter most: the frontend server sends Sentry nothing, and the share page's cache never hits.
+- Carried over: O2 and U5.
+- The v1.0.16 ledger (`.superpowers/sdd/2026-10-14-v1.0.16-sentry-privacy/`) isn't deleted yet.
+
+**Next:** commit the v1.0.16 and v1.0.17 close-outs and open their PR, then v1.0.18, the test toolchain.
+
+---
+
 ## 2026-10-25 — Claude (Opus 5.5) with Shaan — v1.0.17: dependency advisories
 
 **Slice:** v1.0.17, proposed and shipped in one pass because both audit gates were blocking every pull request.

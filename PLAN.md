@@ -64,7 +64,7 @@
 | **v1.0.14** | Deep audit — external-PR and consistency scoring corrected, CI/test/deploy/language detection brought up to date, Recruiter Signal rebalanced, licence and README checks fixed for large portfolios, evidence on every score card, parallel ingestion (cold analyses ~2x faster), rate limits fail loudly | ✅ shipped |
 | **v1.0.15** | Commit activity from contribution data — public commit days across every repository; repos inspected by push recency | ✅ shipped |
 | **v1.0.16** | Privacy patch — Sentry receives no cookies, tokens, secrets, IPs, OAuth values or bodies from errors or transactions; PostHog stores no IP; shadcn CLI removed | ✅ shipped |
-| **v1.0.17** | Dependency advisories — Next.js 16.4.3 (two critical remote-code-execution advisories), DOMPurify 3.4.17, certifi 2026.10.23; no score changes | 🔄 in PR |
+| **v1.0.17** | Dependency advisories — Next.js 16.4.3 (two critical remote-code-execution advisories), DOMPurify 3.4.17, certifi 2026.10.23; no score changes | ✅ shipped |
 | **v1.0.18** | Test toolchain — TypeScript 6, Vitest 5 (+ @vitest/ui), jest-dom 7, happy-dom 21 | 📋 proposed |
 | **v1.0.19** | Runtime majors — Sentry SDK 11, framer-motion 14, openai 3, SQLAlchemy 2.1, each verified on its own path | 📋 proposed |
 
@@ -1151,8 +1151,8 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 **Exit criteria:**
 - [x] Next.js and eslint-config-next 16.4.3, DOMPurify 3.4.17, fast-uri 3.1.9 and certifi 2026.10.23; in the dev tree, zod 4.6.7, Vite 8.3.5 and Vitest with `@vitest/ui` 4.1.12, all within their current versions.
 - [x] Both audit gates clean. Locally green: the backend suite (845 passed; the DB fixtures run in CI against Postgres), frontend tests, tsc, lint, build and the `vercel.ts` typecheck.
-- [ ] PR checks green and merged; prod smoke: `/health` 1.0.17.
-- [ ] `CHANGELOG.md` `[1.0.17]`; tag `v1.0.17`; GitHub Release published by `release.yml`.
+- [x] PR checks green and merged (#141 as `aa96444`). Prod smoke: `/health` 1.0.17 with the database and cache up; `/`, `/privacy` and `/u/octocat` answer 200; the OG images render; Vercel shows no runtime errors since the merge.
+- [x] `CHANGELOG.md` `[1.0.17]`; tag `v1.0.17`; GitHub Release published by `release.yml`.
 
 ---
 
