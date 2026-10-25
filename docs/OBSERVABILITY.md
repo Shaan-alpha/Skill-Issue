@@ -217,7 +217,7 @@ No cookie, session id, token, app secret, IP address, geolocation header, OAuth 
 
 **Proof:** `backend/tests/observability/test_sentry_canary.py` drives a failing signed-in request through the real app and finds no canary in any captured error or transaction. `frontend/src/observability/scrub.test.ts` runs the SDK's own request pipeline and then `scrubEvent`. `backend/tools/sentry_envelope_listener.py` repeats the check against real servers.
 
-**Changing the contract:** change both lists and both scrubbers, and add a canary for the new field. Sentry 11 (v1.0.18) copies more request data onto spans by default, so re-run the envelope smoke on that upgrade.
+**Changing the contract:** change both lists and both scrubbers, and add a canary for the new field. Sentry 11 (v1.0.19) copies more request data onto spans by default, so re-run the envelope smoke on that upgrade.
 
 ## Deferred (re-enable in a v0.8.x patch)
 

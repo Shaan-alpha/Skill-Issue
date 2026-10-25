@@ -19,6 +19,33 @@ Format:
 
 ---
 
+## 2026-10-25 — Claude (Opus 5.5) with Shaan — v1.0.17: dependency advisories
+
+**Slice:** v1.0.17, proposed and shipped in one pass because both audit gates were blocking every pull request.
+
+**Done:**
+- **Found while adding README screenshots (PR #140).** Its Backend and Frontend checks failed on `pip-audit` and `npm audit`, although the PR only added two screenshots to the README. The advisories were new; the PR did not cause them.
+- **Patched the shipped dependencies:**
+  - Next.js and eslint-config-next 16.4.3: GHSA-2464-fhr4-w9xw and GHSA-673q-mjm6-r5xr, both critical remote code execution without authentication (the second in `use cache` functions, which `/share/[slug]` uses), and GHSA-p3m5-59mp-jv5r, a Server Actions denial of service.
+  - DOMPurify 3.4.17, through `posthog-js`: GHSA-cg2g-xh64-v4q7 (critical), GHSA-mrv2-3pqr-j5jr (high) and GHSA-c6gr-qvv4-5v3f (low).
+  - certifi 2026.10.23: PYSEC-2026-4320 (GHSA-6q48-6c7w-9gw2), the emSign ECC Root CA - G3 with eight compromised eMudhra intermediates under it.
+  - fast-uri 3.1.9, build-time only, through the Sentry bundler plugin: four moderate and low advisories.
+- **Dev-only, within current versions:** zod 4.6.7 (GHSA-mrhx-c7xc-m3w5), Vite 8.3.5 (six advisories, three of them through `launch-editor`) and Vitest with `@vitest/ui` 4.1.12 (GHSA-qxg6-89mg-rqv8 and GHSA-xp26-3454-mjgp, in `@vitest/mocker`). The lockfile also took in-range patches of nanoid, chai, fastq, rolldown and postcss.
+- **Verification, local:** both audit gates clean; backend 845 passed with the DB fixtures skipped (CI runs them against Postgres); frontend 153 tests, tsc, lint, the Next 16.4.3 build and the `vercel.ts` typecheck green.
+
+**Decisions:**
+- **A slice of its own, not folded into the test toolchain.** A security patch should ship by itself, so v1.0.17 is this release. The proposed slices move to v1.0.18 (test toolchain) and v1.0.19 (runtime majors), along with their references in `dependabot.yml`, `pyproject.toml`, `DEPLOY.md` and `OBSERVABILITY.md`.
+- **Stayed on Next 16.4.** 16.4.3 is the latest patch on the current minor; no minor or major moves.
+- **Left for v1.0.18:** happy-dom 20's advisory (GHSA-834v-8h66-3h79) is fixed only in happy-dom 21, a major that slice already plans.
+
+**Learned / surprises:** the `braces` note in `DEPLOY.md` no longer matched the audit, which has stopped flagging it, so the known-limits list now names what is actually left. The `@vitest/mocker` fix was backported to Vitest 4.1.12, so it did not have to wait for Vitest 5.
+
+**Blocked / open:** a local v1.0.16 closeout branch edits `PLAN.md`'s version map and the top of this log, so expect two small merge conflicts when it lands. Keep both sides.
+
+**Next:** merge, check that `/health` reports 1.0.17 in production, then tag `v1.0.17`. After that, v1.0.18: the test toolchain.
+
+---
+
 ## 2026-10-14 — Claude (Opus 5.5) with Shaan — v1.0.16: the privacy patch (Sentry and PostHog)
 
 **Slice:** v1.0.16, with spec [`2026-10-14-v1.0.16-sentry-privacy-design.md`](./superpowers/specs/2026-10-14-v1.0.16-sentry-privacy-design.md) and plan [`2026-10-14-v1.0.16-sentry-privacy.md`](./superpowers/plans/2026-10-14-v1.0.16-sentry-privacy.md). It began as the toolchain-majors slice and became a privacy patch when the research found the PII contract broken.

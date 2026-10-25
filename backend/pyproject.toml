@@ -1,6 +1,6 @@
 [project]
 name = "skill-issue-backend"
-version = "1.0.16"
+version = "1.0.17"
 description = "Skill Issue backend — FastAPI service that ingests a GitHub profile and returns a deterministic engineering report."
 readme = "README.md"
 authors = [
@@ -19,7 +19,7 @@ dependencies = [
     "openai>=2.49,<3",  # v3 is a major API change; evaluated in v1.0.16
     "pydantic>=2",
     "pydantic-settings>=2.14.2",  # GHSA-4xgf-cpjx-pc3j
-    "sentry-sdk[fastapi]>=2.66.0,<3",  # 3.x defaults collect PII; v1.0.18 evaluates it
+    "sentry-sdk[fastapi]>=2.66.0,<3",  # 3.x defaults collect PII; v1.0.19 evaluates it
     "sqlalchemy[asyncio]>=2.0.51,<2.1",
     "starlette>=1.3.1",  # directly imported in main.py; PYSEC-2026-248/249, CVE-2026-48817/48818
     "structlog>=24.0",

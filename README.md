@@ -7,7 +7,7 @@
 [![Version](https://img.shields.io/github/v/release/Shaan-alpha/Skill-Issue?style=for-the-badge&label=release&color=10b981)](https://github.com/Shaan-alpha/Skill-Issue/releases)
 [![License](https://img.shields.io/github/license/Shaan-alpha/Skill-Issue?style=for-the-badge&color=475569)](./LICENSE)
 [![Live](https://img.shields.io/badge/live-skillissue.tech-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://skillissue.tech)
-[![Status](https://img.shields.io/badge/status-v1.0.16%20·%20live-10b981?style=for-the-badge)](https://skillissue.tech)
+[![Status](https://img.shields.io/badge/status-v1.0.17%20·%20live-10b981?style=for-the-badge)](https://skillissue.tech)
 
 [![Next.js](https://img.shields.io/badge/Next.js%2016-000000?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React%2019-149eca?style=for-the-badge&logo=react&logoColor=white)](https://react.dev/)
@@ -111,12 +111,13 @@ Green is the part that must be right, and is pure: same GitHub data in, same sco
 
 ## Status
 
-**v1.0.16: live** at [skillissue.tech](https://skillissue.tech), with GitHub OAuth sign-in, Neon Postgres persistence, `/me` history, and opt-in `/share/[slug]` public links.
+**v1.0.17: live** at [skillissue.tech](https://skillissue.tech), with GitHub OAuth sign-in, Neon Postgres persistence, `/me` history, and opt-in `/share/[slug]` public links.
 
-Following the v1.0.0 stable launch, a security-hardening line ran from a full internal audit through v1.0.8, and CI-integrity work through v1.0.10. v1.0.11 closed a navigation-state bug sweep that traced four separate reports back to one root cause. v1.0.14 reworked scoring after a full audit against how developers work in 2026, and v1.0.15 reads commit activity from GitHub's contribution data, so work in organisations' and other people's repositories counts. v1.0.16 made the privacy contract hold: no cookie, token, secret or IP reaches Sentry, and PostHog stores no IP.
+Following the v1.0.0 stable launch, a security-hardening line ran from a full internal audit through v1.0.8, and CI-integrity work through v1.0.10. v1.0.11 closed a navigation-state bug sweep that traced four separate reports back to one root cause. v1.0.14 reworked scoring after a full audit against how developers work in 2026, and v1.0.15 reads commit activity from GitHub's contribution data, so work in organisations' and other people's repositories counts. v1.0.16 made the privacy contract hold: no cookie, token, secret or IP reaches Sentry, and PostHog stores no IP. v1.0.17 patched two critical Next.js advisories for remote code execution, along with DOMPurify and the backend's certificate bundle.
 
 | Release | What shipped |
 | --- | --- |
+| **v1.0.17** | Dependency advisories: Next.js 16.4.3 closes two critical remote-code-execution advisories; DOMPurify 3.4.17 and certifi 2026.10.23 are patched alongside, with no score changes |
 | **v1.0.16** | Privacy patch: Sentry receives no cookies, tokens, secrets, IPs, OAuth values or request bodies from errors or transactions, PostHog stores no IP and records no sessions, and the shadcn CLI behind two dev alerts is gone |
 | **v1.0.15** | Commit activity from GitHub's contribution data: public commits in organisations' and other people's repos count toward Consistency, the repos you push to get inspected first, and a fallback that says what it counted |
 | **v1.0.14** | Scoring audit: open-source credit only for PRs merged into other people's repos, a rebuilt Recruiter Signal, licence and README checks that no longer penalise large portfolios, evidence on every score card, fresh analyses in about half the time |
@@ -200,7 +201,7 @@ Verify:
 
 ```bash
 curl http://localhost:8000/health
-# {"status":"ok","version":"1.0.16","db":"up","cache":"unconfigured"}
+# {"status":"ok","version":"1.0.17","db":"up","cache":"unconfigured"}
 
 curl http://localhost:8000/analyze/octocat
 ```
