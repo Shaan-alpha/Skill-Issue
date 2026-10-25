@@ -9,7 +9,7 @@
 | Tool | Pinned (as of 2026-10-14) | Why |
 | --- | --- | --- |
 | **Next.js** | `16.4.3` | App Router, partial prerendering, streaming, Vercel-native. v16 dropped some conventions; check `frontend/AGENTS.md` before assuming v13/v14 patterns. |
-| **Cache Components** | enabled v0.8.6 (`cacheComponents: true` in `next.config.ts`); `partialPrefetching: false` since Next 16.4 | Powers `/share/[slug]` PPR via `'use cache'` + `cacheTag('share:<slug>')` + `cacheLife({ revalidate: 3600 })`. Incompatible with `export const dynamic = "force-dynamic"` (had to be dropped from `/me` and `/u/[username]/card`). Helpers from `next/cache`: `cacheTag`, `cacheLife`, `revalidateTag(tag, { expire: 0 })`. Stubbed in vitest setup since they throw outside the Next runtime. |
+| **Cache Components** | enabled v0.8.6 (`cacheComponents: true` in `next.config.ts`); `partialPrefetching: false` since Next 16.4 | Powers `/share/[slug]` PPR via `'use cache'` + `cacheTag('share:<slug>')` + `cacheLife({ revalidate: 3600 })`; in production that cache doesn't hit (checked 2026-10-14, open in PLAN under v1.0.16). Incompatible with `export const dynamic = "force-dynamic"` (had to be dropped from `/me` and `/u/[username]/card`). Helpers from `next/cache`: `cacheTag`, `cacheLife`, `revalidateTag(tag, { expire: 0 })`. Stubbed in vitest setup since they throw outside the Next runtime. |
 | **React** | `19.3.0` | Server Components, Actions, the modern data flow |
 | **TypeScript** | `^5` | Sane component contracts |
 | **TailwindCSS** | `^4` | Utility-first; `@tailwindcss/postcss` is the v4 pipeline. No tailwind.config — config lives in `globals.css` via `@theme`. |
