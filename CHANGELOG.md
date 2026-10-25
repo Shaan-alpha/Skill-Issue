@@ -10,6 +10,9 @@ Every version listed here must correspond to a slice in [`PLAN.md`](./PLAN.md) w
 
 ## [Unreleased]
 
+### Changed
+- **Dependencies refreshed within their current major versions:** FastAPI 0.159, Starlette 1.9, SQLAlchemy 2.0.55, the backend's Sentry SDK, PostHog's browser SDK, React 19.3.1 and others.
+
 ## [1.0.17] — 2026-10-25
 
 A security release. New advisories against three of the libraries the site runs on, two of them rated critical, are patched. **No scores change.**

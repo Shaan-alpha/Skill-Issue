@@ -1162,6 +1162,12 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 
 **Known from v1.0.17 (2026-10-25):** happy-dom must land at 21.0.4 or later, which also clears the one dev-only advisory v1.0.17 left, GHSA-834v-8h66-3h79. Vitest 4.1.12 already fixed the `@vitest/mocker` advisories, so the move to Vitest 5 is not needed for security.
 
+**Watch for (found during the late-October refresh, 2026-10-25):**
+- **PostHog campaign parameters.** Since posthog-js 1.438.10 the SDK also captures the `bfcid` ad click ID from URLs, on events and as `$initial_bfcid`, next to the 18 ad click IDs it already captured (gclid, fbclid, msclkid and others). The PII contract still holds (no IPs, no recordings), so this is Shaan's call: `mask_personal_data_properties: true` in `posthog.init` would mask all of them.
+- **authlib is still listed, unused.** The v0.5.0 design kept it as optional and planned to trim it by v0.7.0 if no slice used it (PROGRESS_LOG, 2026-05-16). None did, and no backend file has ever imported it: OAuth is hand-rolled over httpx in `app/auth/oauth.py`. The v1.0.16 spec also pointed at a PLAN entry for its removal that didn't exist until now. Dropping it, and joserfc with it (listed only as a security floor for authlib), would retire two packages and their advisories; authlib 1.9.1 fixed two high-severity ones.
+- **Held back.** Starlette 1.10, jiter 0.18 and posthog-js 1.438.20+ came out after the refresh's cutoff (the end of 2026-10-22 UTC), and FastAPI stays at 0.159.1, the last release the refresh's review covered (0.160.0–0.161.1 came out on 2026-10-22, 0.162.0 on 2026-10-23). Dependabot already waits three days before offering a release, so it will propose them on its own.
+- **The root dev tree** reports path-to-regexp 6.1.0 (GHSA-9wv6-86v2-598j) and zod 3.25.76 (GHSA-mrhx-c7xc-m3w5), both under @vercel/config, on main as well. No @vercel/config release fixes them, they never ship, and CI's npm audit gate covers only the frontend.
+
 **Known from the v1.0.16 research (2026-10-14):**
 - **TypeScript 6.0.3:** type-checks the frontend with 0 errors and no config change.
 - **Vitest 5.0.4:** passes all 125 tests. Dependabot's #116/#117 failed only because they bumped the two packages separately. Watch jest-dom#738, the matcher typings on Vitest 5's `Assertion<R, T>`, because a typing break now fails `next build` too.
