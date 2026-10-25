@@ -19,6 +19,35 @@ Format:
 
 ---
 
+## 2026-10-25 — Claude (Opus 5.5) with Shaan — late-October dependency refresh
+
+**Slice:** none. A minor and patch refresh between v1.0.17 and v1.0.18, as PR #128 was in October; it ships with v1.0.18.
+
+**Done:**
+- **Applied Dependabot's #142, #143, #144 and #146 as hand-made commits**, plus the other in-range updates published by the end of 2026-10-22 UTC, FastAPI excepted (see Decisions):
+  - Backend: FastAPI 0.159.1, Starlette 1.9.0, SQLAlchemy 2.0.55, sentry-sdk 2.73.0, alembic 1.20.1, authlib 1.9.1, joserfc 1.7.7, pydantic-settings 2.16.1, websockets 17.3, pycparser 3.12, ruff 0.17.2 and pluggy 1.7.0.
+  - Frontend: React and React DOM 19.3.1, lucide-react 1.61.0 and posthog-js 1.438.19, with @posthog/core 1.60.0 and @posthog/browser-common 0.9.9.
+  - Root: @vercel/config 0.13.0. CI: setup-uv 10.3.2, and the Node 24 comment in `ci.yml` now names the pins it describes.
+- **Reviewed first**, by four read-only researchers: FastAPI's 32 releases from 0.143.1 to 0.159.1 against every route (their breaking changes remove or deprecate some `FastAPI()` arguments, stop validating the defaults of omitted parameters and change how bodies, forms and parameter models are handled; none affects this API, and the OpenAPI document and the 422/404/405, CORS and cookie responses come out byte-identical); the other backend packages; the frontend against the PII contract; @vercel/config (type changes only, and `vercel.ts` evaluates to the same config) and setup-uv (the pinned SHA is the v10.3.2 tag).
+- **Verification:** the backend passed 929 against Postgres in CI, and 845 with the 84 DB fixtures skipped locally, with no new warnings; ruff, format, `uv lock --check` and the pip-audit gate are clean. Frontend: ESLint, tsc, 153 tests and the build pass, and the npm audit gate is clean. The `vercel.ts` typecheck passes. A second round of three reviewers checked the PR's diff, every claim and the PII contract, diffing the published packages and running both PostHog builds with the app's config.
+
+**Decisions:**
+- **A 2026-10-22 cutoff, with FastAPI held at #146's target.** In-range releases published after the end of 2026-10-22 UTC were held (Starlette 1.10, jiter 0.18, posthog-js 1.438.20+). FastAPI stays at 0.159.1, the last release the review covered, although 0.160.0–0.161.1 came out on 2026-10-22. npm's `--before` kept posthog-js's own packages at the versions 1.438.19 was released with.
+- **Targeted frontend updates, not `npm update`.** A blanket update touches about 140 lock entries and pulls `@babel/runtime` 8 in as a transitive major; the four direct updates change 6.
+- **No version bump.** As with #128, the refresh sits in `[Unreleased]` and ships with v1.0.18.
+- **posthog-js init unchanged.** Its new `bfcid` capture is noted in PLAN for Shaan to decide.
+- **#145 (happy-dom 21) stays open** for v1.0.18.
+
+**Learned / surprises:** Dependabot already waits three days before offering a release (GitHub's default cooldown), which is why #144 and #146 stopped at posthog-js 1.438.15 and FastAPI 0.159.1. posthog-js now also flushes web-vitals events when a page is hidden or closed, with the same fields. The authlib trim planned at v0.5.0 never happened, so PLAN now carries it under v1.0.18.
+
+**Blocked / open:**
+- PLAN's "Watch for" list under v1.0.18.
+- Still open from earlier: the v1.0.16 production findings in PLAN, O2 and U5, and the v1.0.16 ledger.
+
+**Next:** merge, check production, and close #142–#144 and #146 as superseded. Then v1.0.18, the test toolchain.
+
+---
+
 ## 2026-10-25 — Claude (Opus 5.5) with Shaan — v1.0.17 released
 
 **Slice:** v1.0.17 closeout.
