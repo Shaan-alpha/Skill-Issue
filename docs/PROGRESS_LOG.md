@@ -19,6 +19,32 @@ Format:
 
 ---
 
+## 2026-10-25 — Claude (Opus 5.5) with Shaan — v1.0.17 released
+
+**Slice:** v1.0.17 closeout.
+
+**Done:**
+- **Merged and deployed.** PR #141 merged as `aa96444` at 12:55Z with all five checks green. Vercel's production deployment of it was ready within about two minutes.
+- **Production verified:**
+  - `/health` returns `{"status":"ok","version":"1.0.17","db":"up","cache":"up"}`.
+  - `/`, `/privacy` and `/u/octocat` return 200, and the landing page reads 1.0.17.
+  - The OG images render on Next 16.4.3: `/opengraph-image` and `/u/octocat/opengraph-image` return PNGs.
+  - 0 Vercel runtime errors since the merge.
+- **Released:** tagged `v1.0.17` on `aa96444`, and `release.yml` published the GitHub Release from `CHANGELOG [1.0.17]`.
+- **PR #140 (README screenshots)** rebased onto the release, passed all six checks and merged as `6047a24`.
+- **The v1.0.16 close-out caught up with main.** Its branch now sits on `6047a24`, with the close-out still uncommitted on top. Merging hit three conflicts, not the two the v1.0.17 entry expected: `PLAN.md`'s version map, the top of this log and `TECH_STACK.md`'s Next.js row. Each kept both sides, and the close-out's references to the old slice numbers now point at v1.0.18 and v1.0.19.
+- **Fixed a pointer v1.0.17 missed.** `backend/pyproject.toml`'s openai comment still said "evaluated in v1.0.16". It moves with the runtime-majors slice (it said v1.0.14, then v1.0.15, then v1.0.16), so it now says v1.0.19, like the sentry-sdk comment two lines below.
+
+**Blocked / open:**
+- Not checked for this release: Sentry, a cold analysis and a share link in production.
+- Still open in PLAN under v1.0.16: the production-verification findings, the 9 deferred review minors and two follow-ups. The two that matter most: the frontend server sends Sentry nothing, and the share page's cache never hits.
+- Carried over: O2 and U5.
+- The v1.0.16 ledger (`.superpowers/sdd/2026-10-14-v1.0.16-sentry-privacy/`) isn't deleted yet.
+
+**Next:** commit the v1.0.16 and v1.0.17 close-outs and open their PR, then v1.0.18, the test toolchain.
+
+---
+
 ## 2026-10-25 — Claude (Opus 5.5) with Shaan — v1.0.17: dependency advisories
 
 **Slice:** v1.0.17, proposed and shipped in one pass because both audit gates were blocking every pull request.
@@ -43,6 +69,45 @@ Format:
 **Blocked / open:** a local v1.0.16 closeout branch edits `PLAN.md`'s version map and the top of this log, so expect two small merge conflicts when it lands. Keep both sides.
 
 **Next:** merge, check that `/health` reports 1.0.17 in production, then tag `v1.0.17`. After that, v1.0.18: the test toolchain.
+
+---
+
+## 2026-10-14 — Claude (Opus 5.5) with Shaan — v1.0.16 released
+
+**Slice:** v1.0.16 closeout.
+
+**Done:**
+- **Merged and deployed.** PR #133 merged as `4aba1e7` at 19:38Z with all five checks green, once the GitGuardian incident on the fake canary was properly ignored (see Learned).
+- **Production verified:**
+  - `/health` returns `{"status":"ok","version":"1.0.16","db":"up","cache":"up"}`.
+  - Live analyses (octocat 24 from cache, mojombo 55 as a cold ingest) and a live roast (983 characters, no fallback).
+  - Chrome at 1440/1024/768/390 on `/`, `/u/octocat` and `/privacy`: no overflow, the version reads 1.0.16, the privacy page shows the PostHog cookie and "Last updated 2026-10-14", and PostHog never loaded its session recorder.
+  - 0 Vercel runtime errors and 0 new Sentry issues.
+  - Sentry checked by counts only, with no payload read: a force-sampled backend `/analyze` transaction carrying fake canary cookies, headers and query values kept `code=[Filtered]` and `mode`, and held no canary and no IP.
+  - Dependabot: alerts #83 and #84 closed as fixed, security updates turned on, and Dependabot closed #131 (Sentry 11) itself under the new ignore.
+- **Exposure response (spec §6).** Shaan acted in each dashboard, and I checked every step that can be checked from outside:
+  - Sessions: the only row (his own; 12 saved analyses, 1 owner) deleted.
+  - GitHub OAuth App: all user tokens revoked (0 users).
+  - `INTERNAL_PROXY_SECRET`, `REVALIDATE_SECRET`, `CRON_SECRET` and `GITHUB_TOKEN` (now a classic PAT with no scopes) rotated and redeployed with the CLI. Then verified live: cold analyses ingested fresh with GraphQL contribution data; the backend trusted the frontend's forwarded visitor IP, so the proxy secrets match; the cron answered 401 to a wrong bearer and 200 to `vercel crons run`; the revalidate webhook returned 204 on both toggles once `FRONTEND_BASE_URL` was fixed. Shaan revoked the old token, and a cold analysis afterwards passed on the new one alone.
+  - Sentry: SKILL-ISSUE-BACKEND-4 deleted. Shaan kept -5 and -6 until retention removes their events; the credentials the spec expected in them (request headers with the session cookie, an OAuth token, the app's secrets) are revoked or rotated.
+- **Fixed in config:** `FRONTEND_BASE_URL` is now `https://skillissue.tech`. It pointed at a host that redirects, so after the 2026-07-11 domain cutover the share-revalidate webhook couldn't reach the frontend while the backend logged success.
+- **Released:** tagged `v1.0.16` on `4aba1e7`, and `release.yml` published the GitHub Release from `CHANGELOG [1.0.16]`.
+
+**Decisions (Shaan, 2026-10-14):** clear GitGuardian by ignoring the incident, not by rewriting history; keep SKILL-ISSUE-BACKEND-5 and -6; a no-scope classic PAT; fix `FRONTEND_BASE_URL` now, through the CLI; keep the new profile share link.
+
+**Learned / surprises:**
+- **GitGuardian:** the false-positive feedback and tags change no status. Only **Ignore** with a reason closes an incident, and the PR check reads that status when it scans. The scan covers every commit in the PR, so a later commit can't clear a finding. This workspace hides the check's Skip buttons, and the check isn't required on `main`.
+- **A webhook that counts any status below 400 as success hides a misconfigured host.** Six toggles logged `share.revalidate_succeeded` while no request reached the frontend; only the request log showed it, by the absence of any `POST /api/revalidate`.
+- **A reminder, not a surprise: status codes can't see a revocation on a streamed page.** The share page sends its static shell with a 200 before it looks the slug up, so a revoked link renders "isn't live" under a 200 (the v0.8.6 trade-off ARCHITECTURE documents). Check the body, or the backend's `/share/<slug>`, instead.
+- **Re-sharing mints a new slug, so revoking a public link is permanent.** Shaan's `BZXbTaMyxFau` link ended that way during testing; his profile is now shared as `NS1dncwejJR6`.
+- **Tooling:** the Vercel CLI is installed (`vercel@55`) though the session hook reports it missing. In Git Bash, arguments that start with `/` need `MSYS_NO_PATHCONV=1`. `vercel crons run <path> --project <name>` triggers the deployed cron without linking. `vercel env` has no `--project` flag: run it inside the checkout (`.vercel/repo.json` links it) or set `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`. Elsewhere a hand-written `.vercel/project.json` with the two IDs works and, unlike `vercel link`, writes nothing to `.env.local`.
+
+**Blocked / open:**
+- In PLAN under v1.0.16: the findings from production verification, the 9 deferred review minors and two follow-ups. The two that matter most: the frontend server sends Sentry nothing, and the share page's cache never hits.
+- Carried over: O2 and U5.
+- Paused at Shaan's request (2026-10-15) with this close-out uncommitted on `docs/v1.0.16-release-closeout`. The plan's gitignored ledger (`.superpowers/sdd/2026-10-14-v1.0.16-sentry-privacy/`) isn't deleted yet; its rulings and deferred minors are carried into PLAN and this log.
+
+**Next:** commit this close-out and open its PR, then v1.0.18, the test toolchain.
 
 ---
 
@@ -108,7 +173,7 @@ Format:
 **Blocked / open:**
 - §4.4 provider settings (Sentry and PostHog) to confirm before the merge, recording whether Use Default Scrubbers was already on.
 - The exposure response after the deploy.
-- 10 deferred review minors (ledger), among them hardening for wrong-typed values and an ARCHITECTURE `request_id` sentence.
+- 9 deferred review minors (ledger), among them hardening for wrong-typed values and an ARCHITECTURE `request_id` sentence.
 - Follow-ups to raise: historical PostHog IPs until retention, and the privacy page's wording on replay and identified profiles.
 - Carried over: O2 and U5.
 

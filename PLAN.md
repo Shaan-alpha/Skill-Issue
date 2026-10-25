@@ -63,8 +63,8 @@
 | **v1.0.13** | Audit remediation + dependency refresh — two critical Next.js advisories, commit-before-response, singleflight coalescing, fresh force refresh, cron classification, honest share/delete UI, structured logs; `requirements.txt` generated in CI | ✅ shipped |
 | **v1.0.14** | Deep audit — external-PR and consistency scoring corrected, CI/test/deploy/language detection brought up to date, Recruiter Signal rebalanced, licence and README checks fixed for large portfolios, evidence on every score card, parallel ingestion (cold analyses ~2x faster), rate limits fail loudly | ✅ shipped |
 | **v1.0.15** | Commit activity from contribution data — public commit days across every repository; repos inspected by push recency | ✅ shipped |
-| **v1.0.16** | Privacy patch — Sentry receives no cookies, tokens, secrets, IPs, OAuth values or bodies from errors or transactions; PostHog stores no IP; shadcn CLI removed | 🔄 in PR |
-| **v1.0.17** | Dependency advisories — Next.js 16.4.3 (two critical remote-code-execution advisories), DOMPurify 3.4.17, certifi 2026.10.23; no score changes | 🔄 in PR |
+| **v1.0.16** | Privacy patch — Sentry receives no cookies, tokens, secrets, IPs, OAuth values or bodies from errors or transactions; PostHog stores no IP; shadcn CLI removed | ✅ shipped |
+| **v1.0.17** | Dependency advisories — Next.js 16.4.3 (two critical remote-code-execution advisories), DOMPurify 3.4.17, certifi 2026.10.23; no score changes | ✅ shipped |
 | **v1.0.18** | Test toolchain — TypeScript 6, Vitest 5 (+ @vitest/ui), jest-dom 7, happy-dom 21 | 📋 proposed |
 | **v1.0.19** | Runtime majors — Sentry SDK 11, framer-motion 14, openai 3, SQLAlchemy 2.1, each verified on its own path | 📋 proposed |
 
@@ -1121,13 +1121,24 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 **Why:** research for the toolchain majors found frontend server errors and transactions carrying the raw session cookie, Vercel's location and OIDC headers and raw query strings. Backend frame locals carried request headers, tokens and the session key, and PostHog stored visitor IPs. The Sentry 11 upgrade would have made it worse.
 
 **Exit criteria:**
-- [ ] Every change test-first; the backend suite is green against a real Postgres, the frontend suite, tsc, lint and build green.
-- [ ] The backend canary test and the frontend SDK-pipeline test pass; the local envelope smoke finds no canary from either server.
-- [ ] Privacy page checked in Chrome at 1440/1024/768/390.
-- [ ] Operator settings in Sentry and PostHog on (spec §4.4).
-- [ ] PR checks green and merged; prod smoke: `/health` 1.0.16, fresh events inspected by key, narrator streams, alerts #83/#84 closed.
-- [ ] Exposure response done (spec §6): sessions deleted, OAuth tokens revoked, four secrets rotated, three Sentry issues deleted.
-- [ ] `CHANGELOG.md` `[1.0.16]`; tag `v1.0.16`; GitHub Release published by `release.yml`.
+- [x] Every change test-first; the backend suite is green against a real Postgres (929 passed, 0 skipped), the frontend suite (153), tsc, lint and build green.
+- [x] The backend canary test and the frontend SDK-pipeline test pass; the local envelope smoke finds no canary from either server.
+- [x] Privacy page checked in Chrome at 1440/1024/768/390, locally and in production.
+- [x] Operator settings in Sentry and PostHog on (spec §4.4); whether Use Default Scrubbers was already on is unknown.
+- [x] PR checks green and merged (#133 as `4aba1e7`). Prod smoke: `/health` 1.0.16, analyses and the narrator live, alerts #83/#84 closed as fixed. Fresh events checked by counts only: a force-sampled backend transaction kept `code=[Filtered]` and carried no canary and no IP. The frontend server sends Sentry nothing at all (see below), so there was no frontend transaction to inspect.
+- [x] Exposure response done (spec §6): 1 session deleted (the only one), OAuth user tokens revoked (0 users), four secrets rotated with a redeploy and verified live, and the old GitHub token revoked by Shaan, after which a cold analysis passed on the new one alone. Of the three Sentry issues only SKILL-ISSUE-BACKEND-4 was deleted. Shaan kept -5 and -6 until retention removes their events; the credentials the spec expected in them (request headers with the session cookie, an OAuth token, the app's secrets) are revoked or rotated.
+- [x] `CHANGELOG.md` `[1.0.16]`; tag `v1.0.16`; GitHub Release published by `release.yml`.
+
+**Found in production verification (2026-10-14), each older than v1.0.16, not yet slotted:**
+- **The frontend server sends Sentry nothing.** No server-side span or event in 14 days, only browser pageloads; force-sampled requests produced nothing. Server-side frontend errors go unmonitored. Find out why (`SENTRY_DSN` at runtime, `instrumentation.ts`) before v1.0.19's Sentry 11 work, which relies on it.
+- **The share-revalidate webhook counted redirects as success.** `FRONTEND_BASE_URL` pointed at a host that redirects to the apex, httpx doesn't follow redirects, and `webhook.py` treats any status below 400 as success. So after the 2026-07-11 domain cutover the webhook could not reach the frontend (inferred from the config: request logs are kept an hour, and none arrived in the window observed). Fixed in config on 2026-10-14 (`https://skillissue.tech`; both toggles then returned 204). Still to do in code, test-first: require a 2xx.
+- **The share page's cache never hits.** In the request logs for 21:09–21:41Z, 79 of 79 `/share/<slug>` requests fetched from the backend, including 69 repeat 404s for one revoked slug, so the `share:<slug>` cache and its slug-enumeration defence aren't working.
+- **A cron run leaves no log line when nothing fails.** Only failures are logged. The `cron.refresh_started`, `_succeeded` and `_chunk_complete` rows in `docs/OBSERVABILITY.md` and the comment in `routers/cron.py` describe logging that doesn't exist, so a run's counts are visible only in its HTTP response.
+- **Smaller:** Engineering Maturity's "1 workflows" wording; the report-only CSP would block Sentry Replay's `blob:` worker and the landing page's `github.com` avatars if enforced; the comment in `share/[slug]/page.tsx` says a revoked slug 404s, when it renders the not-found page under a 200. (A revoked share link answering 200 is ARCHITECTURE's documented PPR trade-off, not a finding, but it means only the page body shows a revocation.)
+
+**Deferred from the final review (minor):** an encoded `&` inside a sensitive value splits it on the backend; wrong-typed values in allowed slots pass both scrubbers; the canary test's breadth (no referer canary, little asserted about what survives); the envelope listener passes an empty directory and drops undecodable bodies; ARCHITECTURE's `request_id` sentence; the sentry-python 3 comment against PLAN v1.0.19; the frontend doesn't filter breadcrumb `http.query` after collection; OBSERVABILITY doesn't say the SDK also filters `auth`; test guards (`httpIntegration` replacing the default, `mode=roast` in the pipeline fixture, the `ph_` cookie name, the undeclared `@sentry/core`).
+
+**Follow-ups to decide:** historical PostHog events keep `$ip`/`$geoip` until retention; the privacy page doesn't mention Sentry Replay or identified PostHog profiles.
 
 ---
 
@@ -1140,8 +1151,8 @@ The narrative-mode CHECK constraint was a third drift in the same family — the
 **Exit criteria:**
 - [x] Next.js and eslint-config-next 16.4.3, DOMPurify 3.4.17, fast-uri 3.1.9 and certifi 2026.10.23; in the dev tree, zod 4.6.7, Vite 8.3.5 and Vitest with `@vitest/ui` 4.1.12, all within their current versions.
 - [x] Both audit gates clean. Locally green: the backend suite (845 passed; the DB fixtures run in CI against Postgres), frontend tests, tsc, lint, build and the `vercel.ts` typecheck.
-- [ ] PR checks green and merged; prod smoke: `/health` 1.0.17.
-- [ ] `CHANGELOG.md` `[1.0.17]`; tag `v1.0.17`; GitHub Release published by `release.yml`.
+- [x] PR checks green and merged (#141 as `aa96444`). Prod smoke: `/health` 1.0.17 with the database and cache up; `/`, `/privacy` and `/u/octocat` answer 200; the OG images render; Vercel shows no runtime errors since the merge.
+- [x] `CHANGELOG.md` `[1.0.17]`; tag `v1.0.17`; GitHub Release published by `release.yml`.
 
 ---
 

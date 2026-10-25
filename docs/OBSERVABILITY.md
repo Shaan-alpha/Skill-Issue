@@ -108,11 +108,20 @@ we capture".
 ### Cron event taxonomy (v0.8.1)
 
 Cron emits structured logs (no PostHog wiring — server-only, no user
-context). Sentry breadcrumbs on every attempt; Sentry capture on the
-rate-limit cliff or DB error. Names in the table below are the conceptual
+context). Sentry breadcrumbs only for the rows it logs (skips and failures);
+Sentry capture on the rate-limit cliff or a `record_run` failure. Names in the table below are the conceptual
 labels — the orchestrator currently emits English-prose `logger.warning` /
 `logger.error` lines that the structlog → Sentry integration converts into
 breadcrumbs/events.
+
+**Only the failure rows exist today** (checked 2026-10-14): `cron refresh
+skipped target=… status=…` (warning), `cron rate_limit_cliff after N analyses`
+(error), and the cache-set and `record_run` failure lines. Nothing is logged
+for `refresh_started`, `refresh_succeeded` or `refresh_chunk_complete`, so a
+run where nothing fails leaves no cron log line (only Vercel's request record
+of the call), and its counts appear only in the HTTP response. Open in PLAN
+(found in v1.0.16's production verification, not yet slotted): add these
+lines or trim this table.
 
 | Event | Level | Sentry | Fired when |
 | --- | --- | --- | --- |
@@ -129,8 +138,8 @@ Backend → frontend webhook for busting `/share/[slug]` cache tags after a shar
 | Event | Level | Sentry | Fired when |
 | --- | --- | --- | --- |
 | `share.revalidate_skipped` | warn | breadcrumb | `FRONTEND_BASE_URL` or `REVALIDATE_SECRET` unset — fallback is the 3600s `cacheLife` |
-| `share.revalidate_succeeded` | info | breadcrumb | Frontend returned 2xx within the 5s timeout |
-| `share.revalidate_failed` | warn | breadcrumb | 4xx response, network error, or timeout. Includes status/body excerpt for 4xx |
+| `share.revalidate_succeeded` | info | breadcrumb | Any status below 400 within the 5s timeout, **3xx included**: a redirecting `FRONTEND_BASE_URL` logs success though nothing reached the frontend (see DEPLOY). Requiring 2xx is open in PLAN |
+| `share.revalidate_failed` | warn | breadcrumb | Status 400 or above (4xx or 5xx), network error, or timeout. Includes a status/body excerpt for HTTP failures |
 
 ### Rate-limit taxonomy (v0.9.2, extended v1.0.4)
 
